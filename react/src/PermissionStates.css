@@ -1,0 +1,2 @@
+.task-page.no-assign .task-heading>.primary-btn,.task-page.no-assign [title="Xóa"]{display:none}.task-page.no-update [title="Tiến độ"]{display:none}.auth-loading{min-height:100vh;display:flex;align-items:center;justify-content:center;gap:12px;color:#654ad8;background:#f6f7fb;font-size:13px}.logout-button{padding:5px 8px;border:0;border-radius:6px;color:#715bd1;background:#f1eeff;font-size:10px;cursor:pointer}
+.document-page.read-only [title="Sửa"],.document-page.read-only [title="Xóa"]{display:none}

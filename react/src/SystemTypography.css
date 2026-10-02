@@ -1,0 +1,52 @@
+/* Cỡ chữ đọc được thống nhất trên toàn bộ hệ thống: nội dung nhỏ nhất 12px. */
+.app-shell,
+.auth-loading,
+.login-page {
+  font-size: 12px;
+}
+
+.app-shell :is(p, small, em, label, input, select, textarea, button, td, th, dt, dd, code),
+.modal-backdrop :is(p, small, em, label, input, select, textarea, button, td, th, dt, dd, code) {
+  font-size: 12px !important;
+}
+
+.app-shell :is(.nav-list span, .status-chip, .publication, .task-status, .priority, .assignee-count),
+.modal-backdrop :is(.user-chip, .assignee-chip, .publication, .task-status, .priority) {
+  font-size: 12px !important;
+}
+
+.task-detail {
+  font-size: 12px;
+}
+
+.task-detail :is(p, small, span, b, strong, em, dt, dd, button) {
+  font-size: 12px !important;
+  line-height: 1.5;
+}
+
+.task-detail > .modal-head h3 {
+  font-size: 18px;
+}
+
+.task-detail-body > h2 {
+  font-size: 20px;
+}
+
+.task-detail section > b,
+.linked-detail-head h3 {
+  font-size: 14px !important;
+}
+
+.task-detail dl div,
+.rich-description,
+.linked-documents article,
+.detail-attachments article {
+  line-height: 1.5;
+}
+
+@media (max-width: 680px) {
+  .app-shell,
+  .modal-backdrop {
+    font-size: 12px;
+  }
+}

@@ -1,0 +1,30 @@
+.task-type-summary{min-height:76px;padding:10px;display:grid;grid-template-columns:1fr 70px 90px;gap:7px;align-items:stretch;border:1px solid #ddd8f8;border-radius:10px;background:#f8f6ff}.task-type-summary span{padding:4px;display:flex;flex-direction:column;justify-content:center;border-radius:7px;background:#fff}.task-type-summary small{color:#8a92a7;font-size:9px}.task-type-summary b{margin-top:5px;color:#5942d0;font-size:12px}.compact-assignees{position:relative}.assignee-chip-list{display:flex;flex-wrap:wrap;gap:7px}.assignee-chip-list button{min-height:32px;padding:4px 9px;display:inline-flex;align-items:center;gap:6px;border:1px solid #e1e4ec;border-radius:7px;background:#f7f8fb;color:#4f5972;font-size:10px;cursor:pointer}.assignee-chip-list .add-assignee{border-color:transparent;background:transparent;color:#3d6f9d;font-weight:700}.assignee-chip i,.compact-picker i{width:21px;height:21px;display:inline-grid;place-items:center;border-radius:50%;color:#fff;background:linear-gradient(145deg,#7b68df,#5541c8);font-size:9px;font-style:normal;font-weight:700}.assignee-chip.department{color:#34705e;background:#edf8f4}.compact-picker{margin-top:9px;padding:8px;border:1px solid #dfe3ec;border-radius:10px;background:#fff;box-shadow:0 10px 28px rgba(31,42,86,.12)}.compact-picker>label{height:36px;padding:0 9px;display:flex;align-items:center;gap:7px;border:1px solid #dfe3ec;border-radius:8px;color:#858da2}.compact-picker>label input{width:100%;border:0;outline:0;font-size:11px}.compact-picker>div{max-height:180px;margin-top:7px;overflow-y:auto;display:grid;grid-template-columns:1fr 1fr;gap:5px}.compact-picker>div>button{min-height:38px;padding:5px 8px;display:flex;align-items:center;gap:7px;border:0;border-radius:7px;background:transparent;font-size:10px;text-align:left}.compact-picker>div>button span{flex:1}.compact-picker>div>button small{display:block;margin-top:2px;color:#9299aa;font-size:8px}.compact-picker>div>button:hover,.compact-picker>div>button.selected{color:#5d46d8;background:#f0edff}.task-create-actions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:9px}.personal-task-btn{min-height:38px;padding:0 14px;display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid #6b55d7;border-radius:8px;color:#624aca;background:#f5f2ff;font-size:11px;font-weight:700;cursor:pointer}.personal-task-btn:hover{background:#ece7ff}.personal-assignee-card{min-height:54px;padding:10px 13px;display:flex;align-items:center;gap:10px;border:1px solid #cfe9dc;border-radius:9px;color:#287554;background:#f1fbf6}.personal-assignee-card>div{display:flex;flex-direction:column;gap:3px}.personal-assignee-card b{font-size:11px}.personal-assignee-card small{color:#6f8c7f;font-size:9px}@media(max-width:680px){.task-type-summary{grid-template-columns:1fr}.compact-picker>div{grid-template-columns:1fr}.task-create-actions{width:100%;justify-content:stretch}.task-create-actions>button{flex:1}}
+.task-assignee-reminder {
+  display: flex !important;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.group-reminder-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #d8dce8;
+  border-radius: 999px;
+  background: #fff;
+  color: #5b3fc4;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.group-reminder-button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.group-reminder-button em {
+  font-style: normal;
+}

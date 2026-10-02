@@ -1,0 +1,26 @@
+.penalty-chip {
+  display: inline-grid;
+  place-items: center;
+  min-width: 48px;
+  height: 25px;
+  padding: 0 7px;
+  border-radius: 7px;
+  color: #b42335;
+  background: #fff0f2;
+  font-weight: 700;
+}
+
+.empty-config {
+  text-align: center;
+  color: #8991a5;
+}
+
+.config-form-note {
+  margin: 12px 0 0;
+  padding: 10px;
+  border-radius: 8px;
+  color: #68738e;
+  background: #f7f8fb;
+  font-size: 10px;
+  line-height: 1.5;
+}

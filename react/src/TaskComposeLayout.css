@@ -1,0 +1,135 @@
+.task-modal form:has(.task-compose-body) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: auto;
+}
+.task-compose-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(340px, 1fr);
+  flex: 1;
+  align-items: stretch;
+}
+.task-compose-main {
+  min-width: 0;
+  border-right: 1px solid #eceef3;
+  display: flex;
+  flex-direction: column;
+}
+.task-compose-aside {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.task-modal .task-compose-body .task-form-section {
+  grid-column: auto;
+  grid-row: auto;
+  border-right: 0;
+  padding: 20px 22px;
+  margin: 0;
+}
+.task-compose-main .content-section {
+  flex: 1;
+}
+.task-modal .task-compose-body .task-form-grid {
+  grid-template-columns: 1fr;
+  gap: 13px;
+}
+.task-compose-body .wide {
+  grid-column: auto;
+}
+.task-compose-body .rich-content {
+  min-height: 190px;
+  max-height: 280px;
+}
+.task-compose-aside .reviewer-picker {
+  margin-top: 16px;
+}
+.task-compose-aside .type-section {
+  flex: 1;
+}
+.task-compose-body .support-label {
+  display: block;
+  font-size: 11px;
+  color: #4b5671;
+  margin: 14px 0 9px;
+}
+.task-compose-body .documents-section .document-picker {
+  max-height: 145px;
+}
+.task-modal form:has(.task-compose-body) > .modal-actions {
+  flex: none;
+  grid-row: auto;
+  justify-content: center;
+  gap: 16px;
+  position: sticky;
+  bottom: 0;
+}
+.task-compose-body .task-type-summary {
+  flex-wrap: wrap;
+}
+.task-compose-body .task-type-summary span {
+  min-width: 0;
+}
+.task-compose-body .file-attachment-picker {
+  margin-top: 8px;
+}
+@media (max-width: 760px) {
+  .task-compose-body {
+    grid-template-columns: 1fr;
+  }
+  .task-compose-main {
+    border-right: 0;
+  }
+  .task-modal .task-compose-body .task-form-section {
+    padding: 17px;
+  }
+  .task-compose-body .rich-content {
+    min-height: 150px;
+  }
+  .task-compose-main {
+    display: contents;
+  }
+  .task-compose-aside {
+    display: contents;
+  }
+  .task-compose-body .content-section {
+    order: 1;
+  }
+  .task-compose-body .assignment-section {
+    order: 2;
+  }
+  .task-compose-body .timing-section {
+    order: 3;
+  }
+  .task-compose-body .type-section {
+    order: 4;
+  }
+  .task-compose-body .documents-section {
+    order: 5;
+  }
+  .task-modal form:has(.task-compose-body) > .modal-actions {
+    justify-content: flex-end;
+  }
+}
+.task-modal .reviewer-picker {
+  min-width: 0;
+  position: relative;
+}
+.task-modal .reviewer-picker > .compact-picker {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  min-width: 0;
+  width: auto;
+  box-sizing: border-box;
+  z-index: 20;
+}
+.task-modal .reviewer-picker > .compact-picker > div:not(.department-picker-tabs) {
+  grid-template-columns: minmax(0, 1fr);
+  max-height: 160px;
+}
+.task-modal .reviewer-picker .compact-picker > label input {
+  min-width: 0;
+}

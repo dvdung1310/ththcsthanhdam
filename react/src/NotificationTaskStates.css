@@ -1,0 +1,15 @@
+.notification-item.notification-approved{border-bottom-color:#c9ead8;background:#eaf8f0}
+.notification-item.notification-approved:hover,.notification-item.notification-approved.unread{background:#ddf5e8}
+.notification-item.notification-approved .notification-icon{color:#078651;background:#ccefdc}
+.notification-item.notification-approved>i{background:#15945d}
+.notification-item.notification-revision{border-bottom-color:#f2c9ce;background:#fff0f1}
+.notification-item.notification-revision:hover,.notification-item.notification-revision.unread{background:#ffe3e6}
+.notification-item.notification-revision .notification-icon{color:#c43b49;background:#ffd5da}
+.notification-item.notification-revision>i{background:#d94352}
+.realtime-toast.notification-approved{border-color:#bfe6d1;background:#eaf8f0}
+.realtime-toast.notification-approved>span{background:#15945d}
+.realtime-toast.notification-revision{border-color:#f0bcc3;background:#fff0f1}
+.realtime-toast.notification-revision>span{background:#d94352}
+.task-table-card tbody tr.notification-active-task td{background:#f0edff;border-top:1px solid #8b74ed;border-bottom:1px solid #8b74ed}
+.task-table-card tbody tr.notification-active-task td:first-child{box-shadow:inset 4px 0 #654be0}
+.task-table-card tbody tr.notification-active-task .task-name b{color:#573dce}

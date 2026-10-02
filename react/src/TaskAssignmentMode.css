@@ -1,0 +1,38 @@
+.assignment-mode-picker {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+  margin-bottom: 11px;
+  padding: 4px;
+  border-radius: 10px;
+  background: #f1f3f8;
+}
+
+.assignment-mode-picker button {
+  min-height: 36px;
+  padding: 6px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #727b91;
+  background: transparent;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.assignment-mode-picker button.active {
+  border-color: #d7d0fa;
+  color: #6048d2;
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(45, 35, 105, 0.09);
+}
+
+@media (max-width: 680px) {
+  .assignment-mode-picker {
+    grid-template-columns: 1fr;
+  }
+}

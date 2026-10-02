@@ -1,0 +1,5 @@
+.role-filters { display:flex; align-items:center; gap:8px; }
+.role-heading .role-filters label { width:245px; }
+.role-heading .role-filters select { width:100%; border:0; outline:0; color:#4d5872; background:#fff; font-size:11px; }
+.role-empty { padding:28px!important; color:#8991a5; text-align:center; }
+@media(max-width:760px){.role-filters{width:100%;flex-direction:column}.role-heading .role-filters label{width:100%}}

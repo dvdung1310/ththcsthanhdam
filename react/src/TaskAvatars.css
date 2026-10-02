@@ -1,0 +1,58 @@
+.assignee-chip > img,
+.compact-picker button > img,
+.people-chips img,
+.personal-assignee-card > img {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  object-fit: cover;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 2px 7px rgba(42, 49, 78, 0.16);
+}
+
+.people-chips > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.people-chips i {
+  width: 23px;
+  height: 23px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: #6950d9;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.personal-assignee-card > img { width: 34px; height: 34px; }
+
+.submission-list article > header { align-items: center; }
+.submission-avatar,
+.submission-avatar-fallback {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  object-fit: cover;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: #7259dc;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.comment-item > .comment-avatar {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  object-fit: cover;
+  border-radius: 50%;
+}

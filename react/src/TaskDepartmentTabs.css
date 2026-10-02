@@ -1,0 +1,42 @@
+.compact-picker > .department-picker-tabs {
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: nowrap;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+  scrollbar-width: thin;
+  max-height: none;
+  margin: 9px 0 2px;
+  padding-bottom: 7px;
+  display: flex;
+  grid-template-columns: none;
+  gap: 6px;
+  overflow-x: auto;
+  border-bottom: 1px solid #eceef3;
+}
+
+.compact-picker > .department-picker-tabs > button {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: max-content;
+  min-height: 30px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #dfe3ec;
+  border-radius: 16px;
+  color: #69738c;
+  background: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.compact-picker > .department-picker-tabs > button:hover,
+.compact-picker > .department-picker-tabs > button.active {
+  border-color: #6e55df;
+  color: #fff;
+  background: #6e55df;
+}
