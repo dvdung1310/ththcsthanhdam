@@ -45,7 +45,6 @@ import "./TaskFormGridFix.css";
 import "./TaskComposeLayout.css";
 import "./TaskAttachmentPicker.css";
 import "./RichEditorToolbar.css";
-import "./TaskDepartmentTabs.css";
 import "./TaskDetailRedesign.css";
 import "./TaskDetailHighlights.css";
 import "./TaskAttachmentViewer.css";
@@ -57,6 +56,7 @@ import "./TaskDetailSidebar.css";
 import "./TaskAvatars.css";
 import { apiFetch } from "./api";
 import { ColumnPicker, NameStack, useScrollEdges, useTaskColumns } from "./TaskTable";
+import PeoplePicker, { roleChips, useOutsideClose } from "./PeoplePicker";
 import { useConfirm } from "./ConfirmDialog";
 
 const labels = {
@@ -912,7 +912,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                     )}
                     <ReviewerPicker
                       reviewers={refs.reviewers}
-                      departments={refs.departments}
+                      units={refs.units || []}
                       value={editing.reviewer_id || ""}
                       onChange={(reviewer_id) =>
                         setEditing({ ...editing, reviewer_id })
@@ -1456,150 +1456,42 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
 }
 
 function CompactAssignees({ editing, refs, toggle }) {
-  const [picker, setPicker] = useState("");
-  const [search, setSearch] = useState("");
-  const [teacherDepartment, setTeacherDepartment] = useState("");
-  const pickerRef = useRef(null);
-  useEffect(() => {
-    if (!picker) return undefined;
-    const closeOnOutside = (event) => {
-      if (!pickerRef.current?.contains(event.target)) setPicker("");
-    };
-    const closeOnEscape = (event) => {
-      if (event.key === "Escape") setPicker("");
-    };
-    document.addEventListener("mousedown", closeOnOutside);
-    document.addEventListener("focusin", closeOnOutside);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("mousedown", closeOnOutside);
-      document.removeEventListener("focusin", closeOnOutside);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [picker]);
-  const teachers = refs.teachers.filter((item) =>
-    editing.teacher_ids.includes(item.id),
-  );
-  const departments = refs.departments.filter((item) =>
-    editing.department_ids.includes(item.id),
-  );
-  const options = picker === "teachers" ? refs.teachers : refs.departments;
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  const ref = useOutsideClose(open, close);
+  const teachers = refs.teachers.filter((item) => editing.teacher_ids.includes(item.id));
+  const departments = refs.departments.filter((item) => editing.department_ids.includes(item.id));
   return (
-    <div className="compact-assignees" ref={pickerRef}>
+    <div className="compact-assignees" ref={ref}>
       <div className="assignee-chip-list">
-        <button
-          type="button"
-          className="add-assignee"
-          onClick={() => {
-            setPicker(picker === "teachers" ? "" : "teachers");
-            setSearch("");
-            setTeacherDepartment("");
-          }}
-        >
-          <Plus size={16} /> Thêm giáo viên
+        <button type="button" className="add-assignee" aria-expanded={open} onClick={() => setOpen(!open)}>
+          <Plus size={16} /> Chọn tổ / nhóm / cá nhân
         </button>
-        <button
-          type="button"
-          className="add-assignee"
-          onClick={() => {
-            setPicker(picker === "departments" ? "" : "departments");
-            setSearch("");
-          }}
-        >
-          <Plus size={16} /> Thêm tổ chuyên môn
-        </button>
-        {teachers.map((item) => (
-          <button
-            type="button"
-            className="assignee-chip"
-            key={`t-${item.id}`}
-            onClick={() => toggle("teacher_ids", item.id)}
-            title="Bấm để bỏ chọn"
-          >
-            {item.avatar_url ? (
-              <img src={item.avatar_url} alt={`Ảnh của ${item.name}`} />
-            ) : (
-              <i>{item.name.charAt(0)}</i>
-            )}
-            {item.name}
+        {departments.map((item) => (
+          <button type="button" className="assignee-chip department" key={`d-${item.id}`} onClick={() => toggle("department_ids", item.id)} title={`${item.name} — bấm để bỏ chọn`}>
+            <Users size={14} />
+            {item.short_name || item.name}
             <X size={12} />
           </button>
         ))}
-        {departments.map((item) => (
-          <button
-            type="button"
-            className="assignee-chip department"
-            key={`d-${item.id}`}
-            onClick={() => toggle("department_ids", item.id)}
-            title="Bấm để bỏ chọn"
-          >
-            <Users size={14} />
+        {teachers.map((item) => (
+          <button type="button" className="assignee-chip" key={`t-${item.id}`} onClick={() => toggle("teacher_ids", item.id)} title="Bấm để bỏ chọn">
+            {item.avatar_url ? <img src={item.avatar_url} alt={`Ảnh của ${item.name}`} /> : <i>{item.name.charAt(0)}</i>}
             {item.name}
             <X size={12} />
           </button>
         ))}
       </div>
-      {picker && (
-        <div className="compact-picker">
-          <label>
-            <Search size={15} />
-            <input
-              autoFocus
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder={
-                picker === "teachers"
-                  ? "Tìm giáo viên..."
-                  : "Tìm tổ chuyên môn..."
-              }
-            />
-          </label>
-          {picker === "teachers" && (
-            <DepartmentTabs
-              departments={refs.departments}
-              value={teacherDepartment}
-              onChange={setTeacherDepartment}
-            />
-          )}
-          <div>
-            {options
-              .filter(
-                (item) =>
-                  picker !== "teachers" ||
-                  !teacherDepartment ||
-                  item.department_ids?.includes(Number(teacherDepartment)),
-              )
-              .filter((item) =>
-                `${item.name} ${item.code || ""}`
-                  .toLowerCase()
-                  .includes(search.toLowerCase()),
-              )
-              .map((item) => {
-                const field =
-                  picker === "teachers" ? "teacher_ids" : "department_ids";
-                const selected = editing[field].includes(item.id);
-                return (
-                  <button
-                    type="button"
-                    className={selected ? "selected" : ""}
-                    key={item.id}
-                    onClick={() => toggle(field, item.id)}
-                  >
-                    {item.avatar_url ? (
-                      <img src={item.avatar_url} alt={`Ảnh của ${item.name}`} />
-                    ) : (
-                      <i>{item.name.charAt(0)}</i>
-                    )}
-                    <span>
-                      {item.name}
-                      <small>{item.code}</small>
-                    </span>
-                    {selected && <CheckCircle2 size={15} />}
-                  </button>
-                );
-              })}
-          </div>
-        </div>
+      {open && (
+        <PeoplePicker
+          title="Chọn người thực hiện"
+          people={refs.teachers}
+          units={refs.departments}
+          selectedPeople={editing.teacher_ids}
+          selectedUnits={editing.department_ids}
+          onTogglePerson={(id) => toggle("teacher_ids", id)}
+          onToggleUnit={(id) => toggle("department_ids", id)}
+        />
       )}
     </div>
   );
@@ -1666,132 +1558,42 @@ export function RichTextEditor({ value, onChange, placeholder = "Mô tả nội 
   );
 }
 
-function ReviewerPicker({ reviewers, departments, value, onChange }) {
+function ReviewerPicker({ reviewers, units, value, onChange }) {
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const [reviewerDepartment, setReviewerDepartment] = useState("");
-  const pickerRef = useRef(null);
-  const searchRef = useRef(null);
-  useEffect(() => {
-    if (!open) return undefined;
-    searchRef.current?.focus({ preventScroll: true });
-    const closeOnOutside = (event) => {
-      if (!pickerRef.current?.contains(event.target)) setOpen(false);
-    };
-    const closeOnEscape = (event) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", closeOnOutside);
-    document.addEventListener("focusin", closeOnOutside);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("mousedown", closeOnOutside);
-      document.removeEventListener("focusin", closeOnOutside);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [open]);
+  const close = useCallback(() => setOpen(false), []);
+  const ref = useOutsideClose(open, close);
   const selected = reviewers.find((item) => item.id === Number(value));
   return (
-    <div className="reviewer-picker wide" ref={pickerRef}>
+    <div className="reviewer-picker wide" ref={ref}>
       <b>Người duyệt</b>
       <input type="hidden" name="reviewer_id" value={value} />
       <div className="assignee-chip-list">
-        <button
-          type="button"
-          className="add-assignee"
-          aria-expanded={open}
-          onClick={() => setOpen(!open)}
-        >
-          <Plus size={16} /> {selected ? "Đổi người duyệt" : "Thêm người duyệt"}
+        <button type="button" className="add-assignee" aria-expanded={open} onClick={() => setOpen(!open)}>
+          <Plus size={16} /> {selected ? "Đổi người duyệt" : "Chọn người duyệt"}
         </button>
         {selected && (
-          <button
-            type="button"
-            className="assignee-chip"
-            onClick={() => onChange("")}
-          >
-            {selected.avatar_url ? (
-              <img src={selected.avatar_url} alt={`Ảnh của ${selected.name}`} />
-            ) : (
-              <i>{selected.name.charAt(0)}</i>
-            )}
+          <button type="button" className="assignee-chip" onClick={() => onChange("")} title="Bấm để bỏ chọn">
+            {selected.avatar_url ? <img src={selected.avatar_url} alt={`Ảnh của ${selected.name}`} /> : <i>{selected.name.charAt(0)}</i>}
             {selected.name}
+            {roleChips(selected, null, units).slice(0, 1).map((chip) => (
+              <small key={chip.label}>{chip.label}</small>
+            ))}
             <X size={12} />
           </button>
         )}
       </div>
       {open && (
-        <div className="compact-picker">
-          <label>
-            <Search size={15} />
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Tìm người duyệt..."
-              ref={searchRef}
-            />
-          </label>
-          <DepartmentTabs
-            departments={departments}
-            value={reviewerDepartment}
-            onChange={setReviewerDepartment}
-          />
-          <div>
-            {reviewers
-              .filter(
-                (item) =>
-                  !reviewerDepartment ||
-                  item.department_ids?.includes(Number(reviewerDepartment)),
-              )
-              .filter((item) =>
-                item.name.toLowerCase().includes(search.toLowerCase()),
-              )
-              .map((item) => (
-                <button
-                  type="button"
-                  className={item.id === Number(value) ? "selected" : ""}
-                  key={item.id}
-                  onClick={() => {
-                    onChange(item.id);
-                    setOpen(false);
-                  }}
-                >
-                  {item.avatar_url ? (
-                    <img src={item.avatar_url} alt={`Ảnh của ${item.name}`} />
-                  ) : (
-                    <i>{item.name.charAt(0)}</i>
-                  )}
-                  <span>{item.name}</span>
-                  {item.id === Number(value) && <CheckCircle2 size={15} />}
-                </button>
-              ))}
-          </div>
-        </div>
+        <PeoplePicker
+          title="Chọn người duyệt"
+          people={reviewers}
+          units={units}
+          selectedPeople={selected ? [selected.id] : []}
+          onTogglePerson={(id) => {
+            onChange(id === selected?.id ? "" : id);
+            setOpen(false);
+          }}
+        />
       )}
-    </div>
-  );
-}
-
-function DepartmentTabs({ departments, value, onChange }) {
-  return (
-    <div className="department-picker-tabs">
-      <button
-        type="button"
-        className={!value ? "active" : ""}
-        onClick={() => onChange("")}
-      >
-        Tất cả
-      </button>
-      {departments.map((department) => (
-        <button
-          type="button"
-          className={Number(value) === department.id ? "active" : ""}
-          key={department.id}
-          onClick={() => onChange(department.id)}
-        >
-          {department.name}
-        </button>
-      ))}
     </div>
   );
 }

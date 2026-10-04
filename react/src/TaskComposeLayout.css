@@ -116,20 +116,3 @@
   min-width: 0;
   position: relative;
 }
-.task-modal .reviewer-picker > .compact-picker {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  min-width: 0;
-  width: auto;
-  box-sizing: border-box;
-  z-index: 20;
-}
-.task-modal .reviewer-picker > .compact-picker > div:not(.department-picker-tabs) {
-  grid-template-columns: minmax(0, 1fr);
-  max-height: 160px;
-}
-.task-modal .reviewer-picker .compact-picker > label input {
-  min-width: 0;
-}
