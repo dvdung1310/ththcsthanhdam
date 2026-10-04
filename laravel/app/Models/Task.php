@@ -18,7 +18,7 @@ class Task extends Model
     public const OPEN = [self::NOT_STARTED, self::IN_PROGRESS, self::WAITING_APPROVAL];
     public const CLOSED = [self::COMPLETED, self::CANCELLED];
 
-    protected $fillable = ['category_id', 'created_by', 'reviewer_id', 'code', 'title', 'description', 'requirements', 'priority', 'status', 'starts_at', 'due_at', 'completed_at'];
+    protected $fillable = ['category_id', 'created_by', 'code', 'title', 'description', 'requirements', 'priority', 'status', 'starts_at', 'due_at', 'completed_at'];
 
     protected function casts(): array
     {
@@ -27,7 +27,7 @@ class Task extends Model
 
     public function category() { return $this->belongsTo(TaskCategory::class, 'category_id'); }
     public function creator() { return $this->belongsTo(User::class, 'created_by'); }
-    public function reviewer() { return $this->belongsTo(User::class, 'reviewer_id'); }
+    public function reviewers() { return $this->belongsToMany(User::class, 'task_reviewers')->withTimestamps(); }
     public function teachers() { return $this->belongsToMany(Teacher::class, 'task_teacher_assignees')->withPivot(['assigned_by', 'assigned_at'])->withTimestamps(); }
     public function departments() { return $this->belongsToMany(Department::class, 'task_department_assignees')->withTimestamps(); }
     public function documents() { return $this->belongsToMany(OfficialDocument::class, 'document_task'); }
