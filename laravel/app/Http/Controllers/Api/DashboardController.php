@@ -19,7 +19,6 @@ class DashboardController extends Controller
         $unitIds = $user->managedUnitIds();
         $scope = $unitIds === null ? 'school' : ($unitIds ? 'department' : 'self');
         $teachers = Teacher::with(['user:id,name', 'departments' => fn ($q) => $q->wherePivotNull('ends_on')])
-            ->where('employment_status', 'working')
             ->when($scope === 'department', fn ($q) => $q->inUnits($unitIds))
             ->when($scope === 'self', fn ($q) => $q->where('id', $user->teacher?->id ?? 0))->get();
         $teacherIds = $teachers->pluck('id');
@@ -51,7 +50,8 @@ class DashboardController extends Controller
         $assignees = function ($task) use ($teachers) {
             return $teachers->filter(fn ($teacher) => $task->teachers->contains('id', $teacher->id) || $task->departments->pluck('id')->intersect($teacher->unitIds())->isNotEmpty())->pluck('id');
         };
-        $activeTeachers = $currentTasks->flatMap($assignees)->unique()->count();
+        $working = $teachers->where('employment_status', 'working')->pluck('id');
+        $activeTeachers = $currentTasks->flatMap($assignees)->unique()->intersect($working)->count();
         $pending = $tasks->whereIn('status', Task::OPEN);
         $loads = $pending->flatMap($assignees)->countBy();
         $highLoad = $teachers->filter(fn ($t) => ($loads->get($t->id, 0)) >= 5)->map(fn ($t) => ['id' => $t->id, 'name' => $t->user?->name, 'count' => $loads->get($t->id)])->values();
@@ -76,7 +76,7 @@ class DashboardController extends Controller
 
         return response()->json([
             'scope' => $scope, 'period' => $start->format('m/Y'), 'current' => $current, 'previous' => $previous,
-            'resources' => ['active' => $activeTeachers, 'total' => $teachers->count()],
+            'resources' => ['active' => $activeTeachers, 'total' => $working->count()],
             'attention' => ['waiting' => $waiting->count(), 'soon' => $soon->count(), 'overdue' => $overdue->count(), 'high_load' => $highLoad, 'total' => $attentionTasks->count(), 'tasks' => $attentionTasks],
             'progress' => ['completed' => $currentTasks->where('status', Task::COMPLETED)->count(), 'waiting' => $currentTasks->where('status', Task::WAITING_APPROVAL)->count(), 'in_progress' => $currentTasks->where('status', Task::IN_PROGRESS)->count(), 'not_started' => $currentTasks->where('status', Task::NOT_STARTED)->count()],
             'departments' => $departments, 'personal' => $teachers->count() === 1 ? $memberStats($teachers->first()) : null,
