@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Task;
 use App\Models\Teacher;
+use App\Models\Department;
 use App\Models\OfficialDocument;
+use App\Models\Role;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -78,7 +80,7 @@ class AiAssistantController extends Controller
     private function schoolContext(): array
     {
         $recent = Task::with(['creator:id,name','reviewer:id,name','teachers'])->latest()->limit(20)->get()->map(fn($task)=>['code'=>$task->code,'title'=>$task->title,'status'=>$task->status,'review_status'=>$task->review_status,'progress'=>round((float)($task->teachers->avg(fn($teacher)=>(float)$teacher->pivot->progress_percent) ?? 0),1),'due_at'=>$task->due_at?->toIso8601String(),'creator'=>$task->creator?->name,'reviewer'=>$task->reviewer?->name]);
-        $teachers = Teacher::with(['user:id,name','departments'=>fn($q)=>$q->wherePivotNull('ends_on'),'positions'=>fn($q)=>$q->wherePivotNull('ends_on')])->where('employment_status','working')->get()->map(fn($teacher)=>['name'=>$teacher->user?->name,'department'=>$teacher->departments->first()?->name,'position'=>$teacher->positions->first()?->name]);
+        $teachers = Teacher::with(['user','departments'=>fn($q)=>$q->wherePivotNull('ends_on')])->where('employment_status','working')->get()->map(fn($teacher)=>['name'=>$teacher->user?->name,'department'=>$teacher->departments->map(fn($d)=>Department::pathLabel($d->id))->join(', '),'roles'=>$teacher->user?->roleLabels() ?? []]);
         $latestApproved = DB::table('task_evaluations')->where('status','approved')->selectRaw('MAX(id) as id')->groupBy('task_id','teacher_id');
         $kpi = DB::table('task_evaluations as e')->joinSub($latestApproved,'latest',fn($join)=>$join->on('latest.id','=','e.id'))->join('tasks as t','t.id','=','e.task_id')->leftJoin('task_catalog_items as ci','ci.id','=','t.task_catalog_item_id')->join('teachers as te','te.id','=','e.teacher_id')->join('users as u','u.id','=','te.user_id')->whereNull('t.deleted_at')->select('u.name',DB::raw('ROUND(LEAST(100, SUM(e.score) / NULLIF(SUM(COALESCE(ci.score, t.maximum_score)), 0) * 100), 2) as kpi_score'),DB::raw('COUNT(DISTINCT e.task_id) as evaluated_tasks'))->groupBy('u.id','u.name')->orderByDesc('kpi_score')->limit(20)->get();
         return ['generated_at'=>now()->toIso8601String(),'task_stats'=>['total'=>Task::count(),'in_progress'=>Task::where('status','in_progress')->count(),'completed'=>Task::where('status','completed')->count(),'waiting_approval'=>Task::where('review_status','waiting_approval')->count(),'overdue'=>Task::whereNotIn('status',['completed','cancelled'])->where('due_at','<',now())->count()],'recent_tasks'=>$recent,'working_teachers'=>$teachers,'teacher_count'=>$teachers->count(),'recent_kpi_summary'=>$kpi];
@@ -86,6 +88,6 @@ class AiAssistantController extends Controller
 
     private function ensurePrincipal(Request $request): void
     {
-        abort_unless($request->user()->isPrincipal(),403,'Trợ lý AI chỉ dành cho Hiệu trưởng.');
+        abort_unless($request->user()->hasRole(Role::HIEU_TRUONG),403,'Trợ lý AI chỉ dành cho Hiệu trưởng.');
     }
 }
