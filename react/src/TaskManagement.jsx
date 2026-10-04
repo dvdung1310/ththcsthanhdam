@@ -11,7 +11,6 @@ import {
   Eye,
   FileText,
   Filter,
-  MessageSquare,
   Paperclip,
   Pencil,
   Plus,
@@ -45,13 +44,12 @@ import "./TaskComposeLayout.css";
 import "./TaskAttachmentPicker.css";
 import "./RichEditorToolbar.css";
 import "./TaskDetailRedesign.css";
-import "./TaskDetailHighlights.css";
 import "./TaskAttachmentViewer.css";
 import "./TaskCompletionWorkflow.css";
 import "./ActionLoading.css";
 import "./TaskWorkflowPanel.css";
+import "./TaskDrawer.css";
 import "./TaskComments.css";
-import "./TaskDetailSidebar.css";
 import "./TaskAvatars.css";
 import { apiFetch } from "./api";
 import { ColumnPicker, NameStack, useScrollEdges, useTaskColumns } from "./TaskTable";
@@ -126,6 +124,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
   const [formBaseline, setFormBaseline] = useState(null);
   const [, setFormTick] = useState(0);
   const [viewDraft, setViewDraft] = useState(false);
+  const [commentDraft, setCommentDraft] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
   const [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
@@ -517,9 +516,11 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
     setEditing(null);
   };
   const requestCloseView = async () => {
-    if (viewDraft && !(await discardChanges("Kết quả, nhận xét hoặc trao đổi bạn đang nhập sẽ không được gửi."))) return;
+    if ((viewDraft || commentDraft) && !(await discardChanges("Kết quả, nhận xét hoặc trao đổi bạn đang nhập sẽ không được gửi."))) return false;
     setViewDraft(false);
+    setCommentDraft(false);
     setViewing(null);
+    return true;
   };
   const toggle = (field, id) =>
     setEditing((c) => {
@@ -1061,432 +1062,346 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
         </div>
       )}
       {viewing && (
-        <div className="modal-backdrop">
-          <div className="task-detail">
-            <div className="modal-head">
+        <div className="drawer-backdrop" onMouseDown={(event) => event.target === event.currentTarget && requestCloseView()}>
+          <aside className="task-drawer" role="dialog" aria-modal="true" aria-label={`Chi tiết ${viewing.code}`}>
+            <header className="task-drawer-head">
               <div>
-                <h3>Chi tiết công việc</h3>
-                <p>{viewing.code}</p>
+                <div className="task-drawer-tags">
+                  <code>{viewing.code}</code>
+                  <span className={`priority ${viewing.priority}`}>
+                    <i />
+                    {labels.priority[viewing.priority]}
+                  </span>
+                  <TaskStatusBadges task={viewing} />
+                </div>
+                <h2>{viewing.title}</h2>
               </div>
-              <button onClick={requestCloseView}>
-                <X size={20} />
-              </button>
-            </div>
-            <div className="task-detail-body">
-              <div className="task-detail-columns">
-                <main className="task-detail-main">
-                  <div className="detail-badges">
-                    <span className={`priority ${viewing.priority}`}>
-                      {labels.priority[viewing.priority]}
-                    </span>
-                    <TaskStatusBadges task={viewing} />
+              <div className="task-drawer-head-actions">
+                {(viewing.can_manage || viewing.can_edit_personal) && !["completed", "cancelled"].includes(viewing.status) && (
+                  <button type="button" title="Sửa" onClick={async () => { const task = viewing; if (await requestCloseView()) openEdit(task); }}>
+                    <Pencil size={17} />
+                  </button>
+                )}
+                <button type="button" title="Đóng" onClick={requestCloseView}>
+                  <X size={19} />
+                </button>
+              </div>
+            </header>
+            <div className="task-drawer-body">
+              <dl className="task-drawer-meta">
+                <div className={viewing.is_overdue ? "alert" : dueSoon(viewing) ? "warn" : ""}>
+                  <dt>Hạn hoàn thành</dt>
+                  <dd>{viewing.due_at ? new Date(viewing.due_at).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" }) : "Không thời hạn"}</dd>
+                </div>
+                <div>
+                  <dt>Bắt đầu</dt>
+                  <dd>{viewing.starts_at ? new Date(viewing.starts_at).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" }) : "—"}</dd>
+                </div>
+                <div>
+                  <dt>Người giao</dt>
+                  <dd>{viewing.creator || "Quản trị"}</dd>
+                </div>
+                <div>
+                  <dt>Người duyệt</dt>
+                  <dd>
+                    {viewing.reviewers?.length
+                      ? viewing.reviewers.map((r) => r.name).join(", ")
+                      : viewing.is_personal
+                        ? "Tự hoàn thành"
+                        : "Người giao việc"}
+                  </dd>
+                </div>
+                <div className="wide">
+                  <dt>Người thực hiện</dt>
+                  <dd>
+                    <NameStack
+                      max={4}
+                      empty="Chưa phân công"
+                      title={`Người thực hiện · ${viewing.assignee_count} người`}
+                      items={[
+                        ...(viewing.units || []).map((unit) => ({ key: `d-${unit.id}`, label: `${unit.short_name} · ${unit.members.length}`, kind: "unit" })),
+                        ...(viewing.assignees || []).filter((person) => person.direct).map((person) => ({ key: `p-${person.id}`, label: person.name })),
+                      ]}
+                      details={[
+                        ...(viewing.units || []).map((unit) => ({ key: `d-${unit.id}`, title: unit.name, names: unit.members.map((member) => member.name) })),
+                        ...((viewing.assignees || []).some((person) => person.direct)
+                          ? [{ key: "direct", title: "Cá nhân", names: viewing.assignees.filter((person) => person.direct).map((person) => person.name) }]
+                          : []),
+                      ]}
+                    />
+                  </dd>
+                </div>
+                {viewing.category && (
+                  <div className="wide">
+                    <dt>Loại nhiệm vụ</dt>
+                    <dd>{viewing.category}</dd>
                   </div>
-                  <h2>{viewing.title}</h2>
+                )}
+              </dl>
+              <TaskWorkflowPanel
+                task={viewing}
+                saving={workflowSaving}
+                error={workflowError}
+                onStart={startTask}
+                onSubmit={submitCompletion}
+                onReview={reviewCompletion}
+                onSelfComplete={selfComplete}
+                onDraftChange={setViewDraft}
+              />
+              {viewing.description && (
+                <section className="drawer-section">
+                  <h4>Mô tả</h4>
+                  <div
+                    className="rich-description"
+                    dangerouslySetInnerHTML={{
+                      __html: viewing.description,
+                    }}
+                  />
+                </section>
+              )}
+              {!!viewing.documents?.length && (
+                <section className="drawer-section">
+                  <h4>Văn bản liên quan <em>{viewing.documents.length}</em></h4>
+                  <div className="linked-documents">
+                    {viewing.documents.map((document) => (
+                      <article key={document.id}>
+                        <span>
+                          <FileText size={18} />
+                        </span>
+                        <div>
+                          <b>{document.document_number}</b>
+                          <strong>{document.title}</strong>
+                          <small>
+                            {document.type} · {document.issuer}
+                          </small>
+                        </div>
+                        <div className="linked-document-actions">
+                          <button
+                            className="document-detail-btn"
+                            onClick={() => showLinkedDocument(document)}
+                          >
+                            <Eye size={14} /> Chi tiết
+                          </button>
+                          {document.download_url && (
+                            <button onClick={() => downloadDocument(document)}>
+                              <Paperclip size={14} /> Tải file
+                            </button>
+                          )}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              )}
+              {viewingDocument && (
+                <section className="linked-document-detail">
+                  <div className="linked-detail-head">
+                    <div>
+                      <small>CHI TIẾT VĂN BẢN</small>
+                      <h3>{viewingDocument.title}</h3>
+                    </div>
+                    <button onClick={() => setViewingDocument(null)}>
+                      <X size={17} />
+                    </button>
+                  </div>
                   <dl>
                     <div>
-                      <dt>Loại nhiệm vụ</dt>
-                      <dd>{viewing.category || "Không phân loại"}</dd>
-                    </div>
-                    <div className="detail-highlight-assigner">
-                      <dt>Người giao</dt>
-                      <dd>{viewing.creator || "Quản trị"}</dd>
+                      <dt>Số hiệu</dt>
+                      <dd>{viewingDocument.document_number}</dd>
                     </div>
                     <div>
-                      <dt>Thời gian bắt đầu</dt>
+                      <dt>Loại văn bản</dt>
+                      <dd>{viewingDocument.document_type}</dd>
+                    </div>
+                    <div>
+                      <dt>Đơn vị ban hành</dt>
+                      <dd>{viewingDocument.issuer}</dd>
+                    </div>
+                    <div>
+                      <dt>Ngày ban hành</dt>
                       <dd>
-                        {viewing.starts_at
-                          ? new Date(viewing.starts_at).toLocaleString("vi-VN")
+                        {viewingDocument.issued_on
+                          ? new Date(viewingDocument.issued_on).toLocaleDateString("vi-VN")
                           : "—"}
                       </dd>
                     </div>
-                    <div className="detail-highlight-deadline">
-                      <dt>Hạn hoàn thành</dt>
+                    <div>
+                      <dt>Ngày hiệu lực</dt>
                       <dd>
-                        {viewing.due_at
-                          ? new Date(viewing.due_at).toLocaleString("vi-VN")
-                          : "Không thời hạn"}
+                        {viewingDocument.effective_on
+                          ? new Date(viewingDocument.effective_on).toLocaleDateString("vi-VN")
+                          : "—"}
                       </dd>
                     </div>
-                    <div className="detail-highlight-reviewer">
-                      <dt>Người duyệt</dt>
-                      <dd>
-                        {viewing.reviewers?.length
-                          ? viewing.reviewers.map((r) => r.name).join(", ")
-                          : viewing.is_personal
-                            ? "Không có — tự đánh dấu hoàn thành"
-                            : "Người giao việc"}
-                      </dd>
+                    <div>
+                      <dt>Trạng thái</dt>
+                      <dd>{viewingDocument.status}</dd>
                     </div>
-                    <div className="detail-highlight-role">
-                      <dt>Vai trò của bạn</dt>
-                      <dd>
-                        {viewing.is_reviewer
-                          ? "Người duyệt"
-                          : viewing.can_update_progress || viewing.can_self_complete
-                            ? "Người thực hiện"
-                            : viewing.can_manage
-                              ? "Người giao việc"
-                              : "Theo dõi"}
-                      </dd>
+                    <div>
+                      <dt>Chiều văn bản</dt>
+                      <dd>{viewingDocument.direction}</dd>
+                    </div>
+                    <div>
+                      <dt>Tệp đính kèm</dt>
+                      <dd>{viewingDocument.file_name || "Không có file"}</dd>
                     </div>
                   </dl>
-                  <section>
-                    <b>Mô tả</b>
-                    {viewing.description ? (
-                      <div
-                        className="rich-description"
-                        dangerouslySetInnerHTML={{
-                          __html: viewing.description,
-                        }}
-                      />
-                    ) : (
-                      <p>Chưa có mô tả.</p>
-                    )}
-                  </section>
-                  <section>
-                    <b>Văn bản liên quan ({viewing.documents?.length || 0})</b>
-                    {viewing.documents?.length ? (
-                      <div className="linked-documents">
-                        {viewing.documents.map((document) => (
-                          <article key={document.id}>
-                            <span>
-                              <FileText size={18} />
-                            </span>
-                            <div>
-                              <b>{document.document_number}</b>
-                              <strong>{document.title}</strong>
-                              <small>
-                                {document.type} · {document.issuer}
-                              </small>
-                            </div>
-                            <div className="linked-document-actions">
-                              <button
-                                className="document-detail-btn"
-                                onClick={() => showLinkedDocument(document)}
-                              >
-                                <Eye size={14} /> Chi tiết
-                              </button>
-                              {document.download_url ? (
-                                <button
-                                  onClick={() => downloadDocument(document)}
-                                >
-                                  <Paperclip size={14} /> Tải file
-                                </button>
-                              ) : (
-                                <em>Không có file</em>
-                              )}
-                            </div>
-                          </article>
-                        ))}
-                      </div>
-                    ) : (
-                      <p>Không có văn bản liên kết.</p>
-                    )}
-                  </section>
-                  {viewingDocument && (
-                    <section className="linked-document-detail">
-                      <div className="linked-detail-head">
-                        <div>
-                          <small>CHI TIẾT VĂN BẢN</small>
-                          <h3>{viewingDocument.title}</h3>
-                        </div>
-                        <button onClick={() => setViewingDocument(null)}>
-                          <X size={17} />
-                        </button>
-                      </div>
-                      <dl>
-                        <div>
-                          <dt>Số hiệu</dt>
-                          <dd>{viewingDocument.document_number}</dd>
-                        </div>
-                        <div>
-                          <dt>Loại văn bản</dt>
-                          <dd>{viewingDocument.document_type}</dd>
-                        </div>
-                        <div>
-                          <dt>Đơn vị ban hành</dt>
-                          <dd>{viewingDocument.issuer}</dd>
-                        </div>
-                        <div>
-                          <dt>Ngày ban hành</dt>
-                          <dd>
-                            {viewingDocument.issued_on
-                              ? new Date(
-                                  viewingDocument.issued_on,
-                                ).toLocaleDateString("vi-VN")
-                              : "—"}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Ngày hiệu lực</dt>
-                          <dd>
-                            {viewingDocument.effective_on
-                              ? new Date(
-                                  viewingDocument.effective_on,
-                                ).toLocaleDateString("vi-VN")
-                              : "—"}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Trạng thái</dt>
-                          <dd>{viewingDocument.status}</dd>
-                        </div>
-                        <div>
-                          <dt>Chiều văn bản</dt>
-                          <dd>{viewingDocument.direction}</dd>
-                        </div>
-                        <div>
-                          <dt>Tệp đính kèm</dt>
-                          <dd>
-                            {viewingDocument.file_name || "Không có file"}
-                          </dd>
-                        </div>
-                      </dl>
-                      <div className="document-summary">
-                        <b>Nội dung tóm tắt</b>
-                        <p>
-                          {viewingDocument.summary ||
-                            "Chưa có nội dung tóm tắt."}
-                        </p>
-                      </div>
-                      {viewingDocument.download_url && (
-                        <button
-                          className="primary-btn"
-                          onClick={() => downloadDocument(viewingDocument)}
-                        >
-                          <Paperclip size={15} /> Tải văn bản
-                        </button>
-                      )}
-                    </section>
+                  <div className="document-summary">
+                    <b>Nội dung tóm tắt</b>
+                    <p>{viewingDocument.summary || "Chưa có nội dung tóm tắt."}</p>
+                  </div>
+                  {viewingDocument.download_url && (
+                    <button
+                      className="primary-btn"
+                      onClick={() => downloadDocument(viewingDocument)}
+                    >
+                      <Paperclip size={15} /> Tải văn bản
+                    </button>
                   )}
-                  <section>
-                    <b>Người thực hiện</b>
-                    <div className="people-chips">
-                      {viewing.assignees.map((x) => (
-                        <span key={x.id}>
-                          {x.avatar_url ? (
-                            <img src={x.avatar_url} alt={`Ảnh của ${x.name}`} />
+                </section>
+              )}
+              {!!viewing.attachments?.length && (
+                <section className="drawer-section">
+                  <h4>File đính kèm <em>{viewing.attachments.length}</em></h4>
+                  <div className="detail-attachments">
+                    {viewing.attachments.map((file) => (
+                      <button
+                        type="button"
+                        key={file.id}
+                        onClick={() => viewTaskAttachment(file)}
+                        title="Mở file trong tab mới"
+                      >
+                        <i>
+                          <Paperclip size={16} />
+                        </i>
+                        <div>
+                          <b>{file.original_name}</b>
+                          <small>{formatFileSize(file.size)}</small>
+                        </div>
+                        <Eye size={16} />
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+              {!!viewing.submissions?.length && (
+                <section className="drawer-section teacher-submissions">
+                  <h4>Bài nộp <em>{viewing.submissions.length}</em></h4>
+                  <div className="submission-list">
+                    {viewing.submissions.map((submission) => (
+                      <article key={submission.id}>
+                        <header>
+                          {submission.submitter_avatar_url ? (
+                            <img
+                              className="submission-avatar"
+                              src={submission.submitter_avatar_url}
+                              alt={`Ảnh của ${submission.submitter}`}
+                            />
                           ) : (
-                            <i>{x.name?.charAt(0)}</i>
-                          )}
-                          {x.name}
-                        </span>
-                      ))}
-                      {viewing.departments.map((x) => (
-                        <span key={x}>{x}</span>
-                      ))}
-                    </div>
-                  </section>
-                  <section>
-                    <b>File đính kèm ({viewing.attachments?.length || 0})</b>
-                    {viewing.attachments?.length ? (
-                      <div className="detail-attachments">
-                        {viewing.attachments.map((file) => (
-                          <button
-                            type="button"
-                            key={file.id}
-                            onClick={() => viewTaskAttachment(file)}
-                            title="Mở file trong tab mới"
-                          >
-                            <i>
-                              <Paperclip size={16} />
+                            <i className="submission-avatar-fallback">
+                              {submission.submitter?.charAt(0)}
                             </i>
-                            <div>
-                              <b>{file.original_name}</b>
-                              <small>
-                                {formatFileSize(file.size)} · Bấm để xem
-                              </small>
-                            </div>
-                            <Eye size={16} />
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <p>Không có file đính kèm.</p>
-                    )}
-                  </section>
-                  <section className="teacher-submissions">
-                    <b>
-                      Bài nộp của giáo viên ({viewing.submissions?.length || 0})
-                    </b>
-                    {viewing.submissions?.length ? (
-                      <div className="submission-list">
-                        {viewing.submissions.map((submission) => (
-                          <article key={submission.id}>
-                            <header>
-                              {submission.submitter_avatar_url ? (
-                                <img
-                                  className="submission-avatar"
-                                  src={submission.submitter_avatar_url}
-                                  alt={`Ảnh của ${submission.submitter}`}
-                                />
-                              ) : (
-                                <i className="submission-avatar-fallback">
-                                  {submission.submitter?.charAt(0)}
-                                </i>
-                              )}
+                          )}
+                          <div>
+                            <strong>{submission.submitter}</strong>
+                            <span>Lần nộp {submission.version}</span>
+                          </div>
+                          <small>{new Date(submission.submitted_at).toLocaleString("vi-VN")}</small>
+                        </header>
+                        {submission.result_content && <p>{submission.result_content}</p>}
+                        {!!submission.files?.length && (
+                          <div className="submission-resources">
+                            {submission.files.map((file) => (
+                              <button
+                                type="button"
+                                key={file.id}
+                                onClick={() => viewSubmissionAttachment(submission, file)}
+                                title="Mở file bài nộp trong tab mới"
+                              >
+                                <Paperclip size={15} />
+                                <span>{file.original_name}</span>
+                                <small>{formatFileSize(file.size)}</small>
+                                <Eye size={15} />
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {!!submission.links?.length && (
+                          <div className="submission-links">
+                            {submission.links.map((link) => (
+                              <a key={link} href={link} target="_blank" rel="noopener noreferrer">
+                                <Link2 size={15} />
+                                <span>{link}</span>
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              )}
+              <section className="drawer-section comment-timeline">
+                <h4>Trao đổi {!!viewing.updates?.length && <em>{viewing.updates.length}</em>}</h4>
+                {!!viewing.updates?.length && (
+                  <div className="comment-list">
+                    {viewing.updates.map((comment) => (
+                      <article className={`comment-item ${comment.author_role}`} key={comment.id}>
+                        {comment.creator_avatar_url ? (
+                          <img className="comment-avatar" src={comment.creator_avatar_url} alt={`Ảnh của ${comment.creator_name}`} />
+                        ) : (
+                          <i>{comment.creator_name?.charAt(0) || "?"}</i>
+                        )}
+                        <div>
+                          <header>
+                            <span>
+                              <b>{comment.creator_name || "Người dùng"}</b>
+                              <em>
+                                {comment.author_role === "reviewer"
+                                  ? "Người duyệt"
+                                  : comment.author_role === "assigner"
+                                    ? "Người giao việc"
+                                    : "Người thực hiện"}
+                              </em>
+                            </span>
+                            <small>{new Date(comment.created_at).toLocaleString("vi-VN")}</small>
+                          </header>
+                          {editingComment?.id === comment.id ? (
+                            <form className="comment-edit-form" onSubmit={saveComment}>
+                              <textarea name="content" required defaultValue={comment.content} rows="3" autoFocus />
                               <div>
-                                <strong>{submission.submitter}</strong>
-                                <span>Lần nộp {submission.version}</span>
+                                <button type="button" className="secondary-btn" onClick={() => setEditingComment(null)}>
+                                  Hủy
+                                </button>
+                                <button className="primary-btn">Lưu nhận xét</button>
                               </div>
-                              <small>
-                                {new Date(
-                                  submission.submitted_at,
-                                ).toLocaleString("vi-VN")}
-                              </small>
-                            </header>
-                            {submission.result_content && (
-                              <p>{submission.result_content}</p>
-                            )}
-                            {!!submission.files?.length && (
-                              <div className="submission-resources">
-                                {submission.files.map((file) => (
-                                  <button
-                                    type="button"
-                                    key={file.id}
-                                    onClick={() =>
-                                      viewSubmissionAttachment(submission, file)
-                                    }
-                                    title="Mở file bài nộp trong tab mới"
-                                  >
-                                    <Paperclip size={15} />
-                                    <span>{file.original_name}</span>
-                                    <small>{formatFileSize(file.size)}</small>
-                                    <Eye size={15} />
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                            {!!submission.links?.length && (
-                              <div className="submission-links">
-                                {submission.links.map((link) => (
-                                  <a
-                                    key={link}
-                                    href={link}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                  >
-                                    <Link2 size={15} />
-                                    <span>{link}</span>
-                                  </a>
-                                ))}
-                              </div>
-                            )}
-                          </article>
-                        ))}
-                      </div>
-                    ) : (
-                      <p>Chưa có giáo viên nào nộp file hoặc đường link.</p>
-                    )}
-                  </section>
-                </main>
-                <aside className="task-detail-side">
-                  <TaskWorkflowPanel
-                    task={viewing}
-                    saving={workflowSaving}
-                    error={workflowError}
-                    onStart={startTask}
-                    onSubmit={submitCompletion}
-                    onReview={reviewCompletion}
-                    onSelfComplete={selfComplete}
-                    onCancel={cancelTask}
-                    onComment={postComment}
-                    onDraftChange={setViewDraft}
-                  />
-                  <section className="comment-timeline">
-                    <div className="comment-heading">
-                      <b>
-                        Trao đổi & nhận xét ({viewing.updates?.length || 0})
-                      </b>
-                      <small>
-                        Ý kiến của người nhận việc, người kiểm duyệt và người
-                        giao việc
-                      </small>
-                    </div>
-                    {viewing.updates?.length ? (
-                      <div className="comment-list">
-                        {viewing.updates.map((comment) => (
-                          <article
-                            className={`comment-item ${comment.author_role}`}
-                            key={comment.id}
-                          >
-                            {comment.creator_avatar_url ? (
-                              <img
-                                className="comment-avatar"
-                                src={comment.creator_avatar_url}
-                                alt={`Ảnh của ${comment.creator_name}`}
-                              />
-                            ) : (
-                              <i>{comment.creator_name?.charAt(0) || "?"}</i>
-                            )}
-                            <div>
-                              <header>
-                                <span>
-                                  <b>{comment.creator_name || "Người dùng"}</b>
-                                  <em>
-                                    {comment.author_role === "reviewer"
-                                      ? "Người kiểm duyệt"
-                                      : comment.author_role === "assigner"
-                                        ? "Người giao việc"
-                                        : "Người nhận việc"}
-                                  </em>
-                                </span>
-                                <small>
-                                  {new Date(comment.created_at).toLocaleString(
-                                    "vi-VN",
-                                  )}
-                                </small>
-                              </header>
-                              {editingComment?.id === comment.id ? (
-                                <form
-                                  className="comment-edit-form"
-                                  onSubmit={saveComment}
-                                >
-                                  <textarea
-                                    name="content"
-                                    required
-                                    defaultValue={comment.content}
-                                    rows="3"
-                                    autoFocus
-                                  />
-                                  <div>
-                                    <button
-                                      type="button"
-                                      className="secondary-btn"
-                                      onClick={() => setEditingComment(null)}
-                                    >
-                                      Hủy
-                                    </button>
-                                    <button className="primary-btn">
-                                      Lưu nhận xét
-                                    </button>
-                                  </div>
-                                </form>
-                              ) : (
-                                <>
-                                  <p>{comment.content}</p>
-                                  {comment.can_edit && (
-                                    <button
-                                      className="edit-comment-btn"
-                                      onClick={() => setEditingComment(comment)}
-                                    >
-                                      <Pencil size={14} /> Chỉnh sửa
-                                    </button>
-                                  )}
-                                </>
+                            </form>
+                          ) : (
+                            <>
+                              <p>{comment.content}</p>
+                              {comment.can_edit && (
+                                <button className="edit-comment-btn" onClick={() => setEditingComment(comment)}>
+                                  <Pencil size={14} /> Chỉnh sửa
+                                </button>
                               )}
-                            </div>
-                          </article>
-                        ))}
-                      </div>
-                    ) : (
-                      <p>Chưa có trao đổi hoặc nhận xét nào.</p>
-                    )}
-                  </section>
-                </aside>
-              </div>
+                            </>
+                          )}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+                <CommentComposer task={viewing} saving={workflowSaving} onComment={postComment} onDraftChange={setCommentDraft} />
+              </section>
             </div>
-          </div>
+            {viewing.can_cancel && (
+              <footer className="task-drawer-foot">
+                <button type="button" className="danger-link" disabled={workflowSaving} onClick={cancelTask}>
+                  <Trash2 size={15} /> Hủy công việc
+                </button>
+              </footer>
+            )}
+          </aside>
         </div>
       )}
       {deleting && (
@@ -1764,6 +1679,12 @@ function formatFileSize(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function dueSoon(task) {
+  if (!task.due_at || !["not_started", "in_progress"].includes(task.status)) return false;
+  const left = new Date(task.due_at).getTime() - Date.now();
+  return left > 0 && left <= 24 * 3600 * 1000;
+}
+
 function taskFormSnapshot(element, editing) {
   if (!element || !editing) return null;
   const values = [...new FormData(element).entries()].filter(([key, value]) => typeof value === "string" && !["description", "reviewer_ids", "teacher_ids", "department_ids", "document_ids"].includes(key.replace(/\[\]$/, "")));
@@ -1791,29 +1712,34 @@ function TaskStatusBadges({ task }) {
   );
 }
 
-function TaskWorkflowPanel({ task, saving, error, onStart, onSubmit, onReview, onSelfComplete, onCancel, onComment, onDraftChange }) {
+function useDraftTracker(resetKeys, onDraftChange) {
   const [drafts, setDrafts] = useState({});
-  useEffect(() => setDrafts({}), [task.id, task.status, task.submission_count]);
+  useEffect(() => setDrafts({}), resetKeys); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => onDraftChange?.(Object.values(drafts).some(Boolean)), [drafts, onDraftChange]);
   const track = (name) => ({
     onInput: (event) => {
       const filled = [...event.currentTarget.elements].some((el) => (el.type === "file" ? el.files?.length > 0 : el.tagName === "TEXTAREA" && el.value.trim() !== ""));
       setDrafts((current) => ({ ...current, [name]: filled }));
     },
+    onChange: (event) => {
+      const filled = [...event.currentTarget.elements].some((el) => (el.type === "file" ? el.files?.length > 0 : el.tagName === "TEXTAREA" && el.value.trim() !== ""));
+      setDrafts((current) => ({ ...current, [name]: filled }));
+    },
     onReset: () => setDrafts((current) => ({ ...current, [name]: false })),
   });
+  return [drafts, track];
+}
+
+function TaskWorkflowPanel({ task, saving, error, onStart, onSubmit, onReview, onSelfComplete, onDraftChange }) {
+  const [, track] = useDraftTracker([task.id, task.status, task.submission_count], onDraftChange);
+  const [submitOpen, setSubmitOpen] = useState(false);
+  useEffect(() => setSubmitOpen(false), [task.id, task.status]);
   const latest = task.latest_submission;
+  const hasAction = task.can_update_progress || task.can_submit_completion || task.can_review_completion || task.can_self_complete;
+  const waiting = task.status === "waiting_approval" && !task.can_review_completion;
+  if (!hasAction && !waiting && !task.needs_revision && !error && !task.can_cancel) return null;
   return (
-    <div className="detail-update-sidebar task-workflow-panel">
-      <div className="detail-update-title">
-        <span>
-          <Activity size={18} />
-        </span>
-        <div>
-          <b>Xử lý công việc</b>
-          <small>{labels.status[task.status]}</small>
-        </div>
-      </div>
+    <section className="drawer-actions">
       {error && (
         <div className="workflow-inline-error">
           <TriangleAlert size={17} />
@@ -1828,16 +1754,48 @@ function TaskWorkflowPanel({ task, saving, error, onStart, onSubmit, onReview, o
           </span>
         </div>
       )}
-      {task.can_update_progress && task.status === "not_started" && (
-        <button type="button" className="primary-btn workflow-btn" disabled={saving} onClick={onStart}>
-          <Activity size={15} /> Bắt đầu thực hiện
-        </button>
+      {waiting && (
+        <div className="workflow-note">
+          <Clock3 size={15} />
+          <span>Đang chờ {task.reviewers?.length ? task.reviewers.map((r) => r.name).join(" hoặc ") : task.creator || "người duyệt"} xác nhận.</span>
+        </div>
       )}
-      {task.can_submit_completion && (
-        <form className="workflow-form" onSubmit={onSubmit} onChange={track("submit").onInput} {...track("submit")}>
-          <b>Nộp kết quả & đề nghị duyệt</b>
+      {task.can_review_completion && (
+        <form className="workflow-form" onSubmit={onReview} {...track("review")}>
+          <textarea name="comment" rows="2" disabled={saving} placeholder="Nhận xét gửi người thực hiện (không bắt buộc)..." />
+          <div className="drawer-action-row">
+            <button name="decision" value="approved" className="approve-completion" disabled={saving}>
+              <CheckCircle2 size={16} /> Xác nhận hoàn thành
+            </button>
+            <button name="decision" value="revision_required" className="revision-completion" disabled={saving}>
+              <RotateCcw size={16} /> Yêu cầu chỉnh sửa
+            </button>
+          </div>
+        </form>
+      )}
+      {(task.can_update_progress && task.status === "not_started") || task.can_submit_completion || task.can_self_complete ? (
+        <div className="drawer-action-row">
+          {task.can_update_progress && task.status === "not_started" && (
+            <button type="button" className="secondary-btn" disabled={saving} onClick={onStart}>
+              <Activity size={15} /> Bắt đầu thực hiện
+            </button>
+          )}
+          {task.can_submit_completion && !submitOpen && (
+            <button type="button" className="primary-btn" disabled={saving} onClick={() => setSubmitOpen(true)}>
+              <Send size={15} /> Nộp kết quả
+            </button>
+          )}
+          {task.can_self_complete && (
+            <button type="button" className="approve-completion" disabled={saving} onClick={onSelfComplete}>
+              <CheckCircle2 size={16} /> Đánh dấu hoàn thành
+            </button>
+          )}
+        </div>
+      ) : null}
+      {task.can_submit_completion && submitOpen && (
+        <form className="workflow-form submit-form" onSubmit={onSubmit} {...track("submit")}>
           <label>
-            File kết quả (có thể chọn nhiều)
+            File kết quả
             <input
               name="submission_files[]"
               type="file"
@@ -1852,55 +1810,30 @@ function TaskWorkflowPanel({ task, saving, error, onStart, onSubmit, onReview, o
           </label>
           <label>
             Ghi chú
-            <textarea name="comment" rows="3" disabled={saving} placeholder="Mô tả kết quả đã làm..." />
+            <textarea name="comment" rows="2" disabled={saving} placeholder="Mô tả kết quả đã làm..." />
           </label>
-          <button className="primary-btn workflow-btn" disabled={saving}>
-            <Send size={15} /> Nộp & đề nghị duyệt
-          </button>
-        </form>
-      )}
-      {task.status === "waiting_approval" && !task.can_review_completion && (
-        <div className="workflow-note">
-          <Clock3 size={15} />
-          <span>Đang chờ {task.reviewers?.length ? task.reviewers.map((r) => r.name).join(" hoặc ") : task.creator || "người duyệt"} xác nhận.</span>
-        </div>
-      )}
-      {task.can_review_completion && (
-        <form className="workflow-form" onSubmit={onReview} {...track("review")}>
-          <b>Duyệt kết quả</b>
-          <label>
-            Nhận xét
-            <textarea name="comment" rows="3" disabled={saving} placeholder="Nhận xét gửi người thực hiện..." />
-          </label>
-          <div className="completion-actions">
-            <button name="decision" value="approved" className="approve-completion" disabled={saving}>
-              <CheckCircle2 size={16} /> Xác nhận hoàn thành
+          <div className="drawer-action-row end">
+            <button type="button" className="secondary-btn" disabled={saving} onClick={() => setSubmitOpen(false)}>
+              Hủy
             </button>
-            <button name="decision" value="revision_required" className="revision-completion" disabled={saving}>
-              <RotateCcw size={16} /> Yêu cầu chỉnh sửa
+            <button className="primary-btn" disabled={saving}>
+              <Send size={15} /> Gửi đề nghị duyệt
             </button>
           </div>
         </form>
       )}
-      {task.can_self_complete && (
-        <button type="button" className="approve-completion workflow-btn" disabled={saving} onClick={onSelfComplete}>
-          <CheckCircle2 size={16} /> Đánh dấu hoàn thành
-        </button>
-      )}
-      <form className="workflow-form comment-form" onSubmit={onComment} {...track("comment")}>
-        <label>
-          Trao đổi
-          <textarea name="content" rows="2" disabled={saving} placeholder="Gửi ý kiến tới những người liên quan..." />
-        </label>
-        <button className="secondary-btn workflow-btn" disabled={saving || !drafts.comment}>
-          <MessageSquare size={15} /> Gửi trao đổi
-        </button>
-      </form>
-      {task.can_cancel && (
-        <button type="button" className="danger-link workflow-cancel" disabled={saving} onClick={onCancel}>
-          <Trash2 size={15} /> Hủy công việc
-        </button>
-      )}
-    </div>
+    </section>
+  );
+}
+
+function CommentComposer({ task, saving, onComment, onDraftChange }) {
+  const [drafts, track] = useDraftTracker([task.id], onDraftChange);
+  return (
+    <form className="comment-composer" onSubmit={onComment} {...track("comment")}>
+      <textarea name="content" rows="2" disabled={saving} placeholder="Viết trao đổi tới những người liên quan..." />
+      <button className="primary-btn" disabled={saving || !drafts.comment} title="Gửi trao đổi">
+        <Send size={15} />
+      </button>
+    </form>
   );
 }
