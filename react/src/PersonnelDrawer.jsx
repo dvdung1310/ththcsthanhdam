@@ -300,10 +300,10 @@ export default function PersonnelDrawer({
             )}
 
           </div>
-          <footer>
+          <div className="drawer-footer">
             {!isNew && (
               <button type="button" className="danger-link" onClick={remove}>
-                <Trash2 size={15} /> Cho nghỉ & khóa
+                <Trash2 size={15} /> <span>Cho nghỉ & khóa</span>
               </button>
             )}
             <span />
@@ -313,7 +313,7 @@ export default function PersonnelDrawer({
             <button className="primary-btn" disabled={saving}>
               {saving ? "Đang lưu..." : isNew ? "Thêm nhân sự" : "Lưu thay đổi"}
             </button>
-          </footer>
+          </div>
         </form>
       </aside>
     </div>

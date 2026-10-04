@@ -268,7 +268,7 @@
   font-weight: 600;
 }
 
-.personnel-drawer footer {
+.drawer-footer {
   padding: 14px 24px;
   display: flex;
   align-items: center;
@@ -277,7 +277,7 @@
   background: #fbfbfd;
 }
 
-.personnel-drawer footer > span {
+.drawer-footer > span {
   flex: 1;
 }
 
@@ -294,6 +294,14 @@
 }
 
 @media (max-width: 640px) {
+  .drawer-footer {
+    padding: 12px 16px;
+  }
+
+  .danger-link span {
+    display: none;
+  }
+
   .drawer-grid,
   .role-picker {
     grid-template-columns: 1fr;
