@@ -77,23 +77,69 @@ export function ColumnPicker({ state }) {
   );
 }
 
-export function NameStack({ items, max = 2, empty = "—" }) {
+export function NameStack({ items, max = 2, empty = "—", details, title }) {
+  const [anchor, setAnchor] = useState(null);
+  const popoverRef = useRef(null);
+  useEffect(() => {
+    if (!anchor) return undefined;
+    const close = (event) => !popoverRef.current?.contains(event.target) && setAnchor(null);
+    const dismiss = (event) => !(event.target instanceof Node && popoverRef.current?.contains(event.target)) && setAnchor(null);
+    document.addEventListener("mousedown", close);
+    window.addEventListener("resize", dismiss);
+    document.addEventListener("scroll", dismiss, true);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      window.removeEventListener("resize", dismiss);
+      document.removeEventListener("scroll", dismiss, true);
+    };
+  }, [anchor]);
   if (!items.length) return <span className="name-stack-empty">{empty}</span>;
   const shown = items.slice(0, max);
-  const rest = items.slice(max);
-  return (
-    <div className="name-stack">
+  const rest = items.length - shown.length;
+  const chips = (
+    <>
       {shown.map((item) => (
-        <span key={item.key} className={`name-chip ${item.kind || ""}`} title={item.title || item.label}>
+        <span key={item.key} className={`name-chip ${item.kind || ""}`}>
           {item.label}
         </span>
       ))}
-      {rest.length > 0 && (
-        <span className="name-chip more" title={rest.map((item) => item.title || item.label).join("\n")}>
-          +{rest.length}
-        </span>
+      {rest > 0 && <span className="name-chip more">+{rest}</span>}
+    </>
+  );
+  if (!details) return <div className="name-stack">{chips}</div>;
+  const open = (event) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const top = rect.bottom + 6 + 320 > window.innerHeight ? Math.max(8, rect.top - 326) : rect.bottom + 6;
+    setAnchor({ top, left: Math.min(rect.left, window.innerWidth - 300) });
+  };
+  return (
+    <>
+      <button type="button" className="name-stack clickable" onClick={(event) => (anchor ? setAnchor(null) : open(event))} aria-expanded={!!anchor} title="Xem đầy đủ">
+        {chips}
+      </button>
+      {anchor && (
+        <div className="name-popover" ref={popoverRef} style={{ top: anchor.top, left: anchor.left }} role="dialog" aria-label={title}>
+          {title && <header>{title}</header>}
+          {details.map((group) => (
+            <section key={group.key}>
+              <b>
+                {group.title}
+                <small>{group.names.length} người</small>
+              </b>
+              {group.names.length ? (
+                <ul>
+                  {group.names.map((name, index) => (
+                    <li key={`${name}-${index}`}>{name}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p>Chưa có thành viên.</p>
+              )}
+            </section>
+          ))}
+        </div>
       )}
-    </div>
+    </>
   );
 }
 

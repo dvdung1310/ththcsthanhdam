@@ -618,9 +618,16 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                     <td>
                       <NameStack
                         empty="Chưa phân công"
+                        title={`Người thực hiện · ${t.assignee_count} người`}
                         items={[
-                          ...(t.departments || []).map((name) => ({ key: `d-${name}`, label: name.split(" › ").at(-1), title: name, kind: "unit" })),
+                          ...(t.units || []).map((unit) => ({ key: `d-${unit.id}`, label: `${unit.short_name} · ${unit.members.length}`, kind: "unit" })),
                           ...(t.assignees || []).filter((person) => person.direct).map((person) => ({ key: `p-${person.id}`, label: person.name })),
+                        ]}
+                        details={[
+                          ...(t.units || []).map((unit) => ({ key: `d-${unit.id}`, title: unit.name, names: unit.members.map((member) => member.name) })),
+                          ...((t.assignees || []).some((person) => person.direct)
+                            ? [{ key: "direct", title: "Cá nhân", names: t.assignees.filter((person) => person.direct).map((person) => person.name) }]
+                            : []),
                         ]}
                       />
                     </td>
