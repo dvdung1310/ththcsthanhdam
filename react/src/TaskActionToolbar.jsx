@@ -17,7 +17,7 @@ export const emptyActionFilters = {
   teacher_id: "",
   deadline: "",
   priority: "",
-  task_catalog_item_id: "",
+  category_id: "",
   action: "",
   created_by: "",
   organization_id: "",
@@ -25,23 +25,14 @@ export const emptyActionFilters = {
   assigned_to: "",
   due_from: "",
   due_to: "",
-  receipt_status: "",
-  review_status: "",
   late: "",
-  progress_min: "",
-  progress_max: "",
 };
 const statuses = {
-  not_started: "Chưa làm",
+  not_started: "Chưa thực hiện",
   in_progress: "Đang thực hiện",
+  waiting_approval: "Chờ duyệt",
   completed: "Hoàn thành",
   cancelled: "Đã hủy",
-};
-const reviews = {
-  not_requested: "Chưa gửi duyệt",
-  waiting_approval: "Chờ kiểm duyệt",
-  approved: "Đã xác nhận",
-  revision_required: "Yêu cầu làm lại",
 };
 
 export function TaskActionCards({ stats, action, onSelect }) {
@@ -50,7 +41,7 @@ export function TaskActionCards({ stats, action, onSelect }) {
       {[
         [
           "not_started",
-          "Chưa tiếp nhận",
+          "Chưa thực hiện",
           ClipboardCheck,
           "purple",
           "Cần bắt đầu xử lý",
@@ -101,7 +92,7 @@ export default function TaskActionFilters({
   const [advanced, setAdvanced] = useState(false);
   const change = (key, value) => {
     const next = { ...filters, [key]: value };
-    if (["status", "deadline", "receipt_status", "review_status"].includes(key))
+    if (["status", "deadline"].includes(key))
       next.action = "";
     if (key === "deadline") {
       if (value === "custom") setAdvanced(true);
@@ -133,11 +124,7 @@ export default function TaskActionFilters({
     "assigned_to",
     "due_from",
     "due_to",
-    "receipt_status",
-    "review_status",
     "late",
-    "progress_min",
-    "progress_max",
   ];
   const count = advancedKeys.filter((key) => filters[key] !== "").length;
   const dateField = (key, title) => (
@@ -147,25 +134,6 @@ export default function TaskActionFilters({
         type="date"
         value={filters[key]}
         onChange={(e) => change(key, e.target.value)}
-      />
-    </label>
-  );
-  const percentField = (key, title) => (
-    <label>
-      {title}
-      <input
-        type="number"
-        min="0"
-        max="100"
-        value={filters[key]}
-        onChange={(e) =>
-          change(
-            key,
-            e.target.value === ""
-              ? ""
-              : Math.min(100, Math.max(0, Number(e.target.value) || 0)),
-          )
-        }
       />
     </label>
   );
@@ -202,12 +170,9 @@ export default function TaskActionFilters({
           ["urgent", "Khẩn cấp"],
         ])}
         {select(
-          "task_catalog_item_id",
+          "category_id",
           "Loại nhiệm vụ",
-          (refs.filter_catalog_items || refs.catalog_items || []).map((t) => [
-            t.id,
-            t.name,
-          ]),
+          (refs.filter_categories || []).map((t) => [t.id, t.name]),
         )}
         <button
           className={advanced || count ? "active" : ""}
@@ -232,10 +197,10 @@ export default function TaskActionFilters({
             )}
           </label>
           <label>
-            Tổ chuyên môn
+            Tổ / nhóm
             {select(
               "organization_id",
-              "Tất cả tổ",
+              "Tất cả tổ, nhóm",
               (refs.filter_departments || refs.departments || []).map((d) => [
                 d.id,
                 d.name,
@@ -247,35 +212,13 @@ export default function TaskActionFilters({
           {dateField("due_from", "Hạn hoàn thành từ")}
           {dateField("due_to", "Hạn hoàn thành đến")}
           <label>
-            Trạng thái tiếp nhận
-            {select("receipt_status", "Tất cả trạng thái tiếp nhận", [
-              ["not_started", "Chưa tiếp nhận (chưa làm)"],
-              ["in_progress", "Đã bắt đầu thực hiện"],
-              ["completed", "Đã hoàn thành"],
-            ])}
-          </label>
-          <label>
-            Trạng thái kiểm duyệt
-            {select(
-              "review_status",
-              "Tất cả trạng thái kiểm duyệt",
-              Object.entries(reviews),
-            )}
-          </label>
-          <label>
             Trễ hạn
             {select("late", "Có / không bị trễ", [
               ["yes", "Có bị trễ"],
               ["no", "Không bị trễ"],
             ])}
           </label>
-          {percentField("progress_min", "Hoàn thành tối thiểu (%)")}
-          {percentField("progress_max", "Hoàn thành tối đa (%)")}
-          <p>
-            Khoảng ngày bao gồm cả ngày đầu và ngày cuối. Mức hoàn thành theo
-            tiến độ trung bình của người nhận. Chưa tiếp nhận hiện tương ứng với
-            Chưa làm.
-          </p>
+          <p>Khoảng ngày bao gồm cả ngày đầu và ngày cuối.</p>
         </div>
       )}
       {filters.action && (
@@ -284,7 +227,7 @@ export default function TaskActionFilters({
           <b>
             {
               {
-                not_started: "Chưa tiếp nhận",
+                not_started: "Chưa thực hiện",
                 in_progress: "Đang thực hiện",
                 soon: "Sắp đến hạn",
                 overdue: "Quá hạn",
