@@ -1,0 +1,65 @@
+.task-status-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+.task-flag {
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.task-flag.revision {
+  color: #bd3946;
+  background: #fdecee;
+}
+
+.task-flag.overdue {
+  color: #c2410c;
+  background: #fff1e6;
+}
+
+.task-flag.late {
+  color: #986200;
+  background: #fff2d5;
+}
+
+.workflow-note {
+  padding: 9px 11px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-radius: 9px;
+  color: #5a43c9;
+  background: #f1edff;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.workflow-note.revision {
+  color: #bd3946;
+  background: #fdecee;
+}
+
+.workflow-note svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.workflow-cancel {
+  justify-self: center;
+  margin-top: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  color: #e44856;
+  background: none;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}

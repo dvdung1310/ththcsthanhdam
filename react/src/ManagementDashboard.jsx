@@ -4,8 +4,8 @@ import {
   CalendarClock,
   CheckCircle2,
   ClipboardCheck,
+  Hourglass,
   ShieldAlert,
-  Star,
   Users,
   ChevronDown,
 } from "lucide-react";
@@ -93,11 +93,11 @@ export default function ManagementDashboard({ onTask, onKpi }) {
       note: "Chờ duyệt, quá hạn hoặc sắp đến hạn",
     },
     {
-      label: personal ? "KPI cá nhân" : "KPI trung bình",
-      value: data.current.kpi == null ? "—" : `${data.current.kpi}/10`,
-      icon: Star,
+      label: "Chờ duyệt",
+      value: data.progress.waiting,
+      icon: Hourglass,
       tone: "pink",
-      comparison: compare("kpi", " điểm"),
+      note: "Đã gửi kết quả, đang chờ người duyệt",
     },
     {
       label: personal
@@ -215,10 +215,11 @@ export default function ManagementDashboard({ onTask, onKpi }) {
             {data.current.workload} công việc có hạn hoàn thành trong tháng
           </p>
           {[
-            ["completed", "Đã hoàn thành", "green"],
-            ["in_progress", "Đang thực hiện", "purple"],
-            ["not_started", "Chưa thực hiện", "red"],
-          ].map(([key, label, color]) => {
+            ["completed", "completed", "Đã hoàn thành", "green"],
+            ["waiting", "waiting_approval", "Chờ duyệt", "blue"],
+            ["in_progress", "in_progress", "Đang thực hiện", "purple"],
+            ["not_started", "not_started", "Chưa thực hiện", "red"],
+          ].map(([key, status, label, color]) => {
             const count = data.progress[key],
               percent = data.current.workload
                 ? Math.round((count / data.current.workload) * 1000) / 10
@@ -228,7 +229,7 @@ export default function ManagementDashboard({ onTask, onKpi }) {
                 type="button"
                 className="month-progress"
                 key={key}
-                onClick={() => window.dispatchEvent(new CustomEvent("dashboard:task-filter", { detail: { status: key, ...monthRange } }))}
+                onClick={() => window.dispatchEvent(new CustomEvent("dashboard:task-filter", { detail: { status, ...monthRange } }))}
               >
                 <div>
                   <span>{label}</span>
@@ -250,32 +251,18 @@ export default function ManagementDashboard({ onTask, onKpi }) {
         </section>
         <section className="management-panel department-panel">
           <header>
-            <h3>{personal ? "KPI cá nhân tháng này" : "KPI theo tổ"}</h3>
+            <h3>{personal ? "Kết quả của bạn tháng này" : "Theo tổ / nhóm"}</h3>
             <button onClick={onKpi}>Xem thống kê</button>
           </header>
           <p className="management-muted">
-            Thang 10 · chỉ tính giáo viên có nhiệm vụ đã chấm điểm
+            Số công việc hoàn thành / có hạn trong tháng
           </p>
           {personal ? (
-            <div>
-              <strong className="personal-dashboard-kpi">
-                {data.personal_kpi?.score == null
-                  ? "Chưa có dữ liệu"
-                  : `${data.personal_kpi.score}/10`}
-              </strong>
-              {data.personal_kpi?.tasks?.map((task) => (
-                <button
-                  className="personal-score-task"
-                  key={task.code}
-                  onClick={() => onTask(task.task_id)}
-                >
-                  <span>{task.title}</span>
-                  <b>
-                    {task.score}/{task.maximum_score}
-                  </b>
-                </button>
-              ))}
-            </div>
+            <strong className="personal-dashboard-kpi">
+              {data.personal
+                ? `${data.personal.completed}/${data.personal.assigned} việc`
+                : "Chưa có dữ liệu"}
+            </strong>
           ) : (
             data.departments.map((dept) => (
               <div className="department-kpi-item" key={dept.id}>
@@ -286,7 +273,8 @@ export default function ManagementDashboard({ onTask, onKpi }) {
                 >
                   <span>{dept.name}</span>
                   <b>
-                    {dept.score == null ? "Chưa có điểm" : `${dept.score}/10`}
+                    {dept.completed}/{dept.assigned}
+                    {dept.completion != null && ` · ${dept.completion}%`}
                   </b>
                   <ChevronDown size={16} />
                 </button>
@@ -296,9 +284,7 @@ export default function ManagementDashboard({ onTask, onKpi }) {
                       <div key={teacher.id}>
                         <span>{teacher.name}</span>
                         <b>
-                          {teacher.score == null
-                            ? "Chưa có điểm"
-                            : `${teacher.score}/10`}
+                          {teacher.completed}/{teacher.assigned} việc
                         </b>
                       </div>
                     ))}
@@ -316,9 +302,7 @@ export default function ManagementDashboard({ onTask, onKpi }) {
       </div>
       <p className="dashboard-methodology">
         Nhiệm vụ tháng tính theo hạn hoàn thành, không bao gồm việc đã hủy. Đúng
-        hạn tính theo lúc gửi hoàn thành (hoặc lúc xác nhận nếu chưa nộp). KPI
-        tính theo tháng chốt điểm, giữ cùng thang điểm báo cáo KPI; giáo viên
-        chưa có điểm không đưa vào trung bình.
+        hạn tính theo lúc gửi hoàn thành (hoặc lúc xác nhận nếu chưa nộp).
       </p>
     </div>
   );

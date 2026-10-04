@@ -245,6 +245,9 @@
 .month-track .purple {
   background: linear-gradient(90deg, #7153e3, #a58bf3);
 }
+.month-track .blue {
+  background: linear-gradient(90deg, #2f7fe0, #8bbcf3);
+}
 .month-track .red {
   background: linear-gradient(90deg, #df5266, #f19da8);
 }
@@ -301,19 +304,6 @@
   color: #6750d0;
   font-size: 26px;
   margin: 20px 0;
-}
-.personal-score-task {
-  width: 100%;
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 0;
-  border: 0;
-  border-top: 1px solid #edf0f5;
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-  color: #46516a;
 }
 .management-error {
   color: #bf3549;

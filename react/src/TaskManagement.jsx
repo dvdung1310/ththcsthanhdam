@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity,
   CalendarClock,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
@@ -10,7 +11,6 @@ import {
   Eye,
   FileText,
   Filter,
-  Flag,
   Paperclip,
   Pencil,
   Plus,
@@ -40,30 +40,25 @@ import TaskActionFilters, {
 } from "./TaskActionToolbar";
 import "./TaskManagementOverrides.css";
 import "./TaskAssignmentMode.css";
-import "./TaskFormLayout.css";
-import "./TaskFormGridFix.css";
 import "./TaskComposeLayout.css";
 import "./TaskAttachmentPicker.css";
 import "./RichEditorToolbar.css";
-import "./TaskTypePicker.css";
-import "./TaskDepartmentTabs.css";
-import "./ReviewerTaskBadge.css";
 import "./TaskDetailRedesign.css";
-import "./TaskDetailHighlights.css";
-import "./TaskTableAssignees.css";
 import "./TaskAttachmentViewer.css";
 import "./TaskCompletionWorkflow.css";
-import "./LatePenaltyDisplay.css";
 import "./ActionLoading.css";
-import "./TaskReviewStatus.css";
+import "./TaskWorkflowPanel.css";
+import "./TaskDrawer.css";
 import "./TaskComments.css";
-import "./TaskDetailSidebar.css";
 import "./TaskAvatars.css";
 import { apiFetch } from "./api";
+import { ColumnPicker, NameStack, useScrollEdges, useTaskColumns } from "./TaskTable";
+import PeoplePicker, { roleChips, useOutsideClose } from "./PeoplePicker";
+import { useConfirm } from "./ConfirmDialog";
 
 const labels = {
   status: {
-    not_started: "Chưa làm",
+    not_started: "Chưa thực hiện",
     in_progress: "Đang thực hiện",
     waiting_approval: "Chờ duyệt",
     completed: "Hoàn thành",
@@ -75,23 +70,15 @@ const labels = {
     high: "Cao",
     urgent: "Khẩn cấp",
   },
-  review: {
-    not_requested: "Chưa gửi duyệt",
-    waiting_approval: "Chờ kiểm duyệt",
-    approved: "Đã xác nhận",
-    revision_required: "Yêu cầu làm lại",
-  },
 };
 const emptyTask = {
   title: "",
   description: "",
-  task_catalog_item_id: "",
+  category_id: "",
   priority: "normal",
   starts_at: new Date().toISOString().slice(0, 16),
   due_at: "",
-  reviewer_id: "",
-  maximum_score: 100,
-  requires_approval: false,
+  reviewer_ids: [],
   teacher_ids: [],
   department_ids: [],
   document_ids: [],
@@ -102,6 +89,8 @@ const emptyTask = {
 };
 
 export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
+  const confirm = useConfirm();
+  const columnState = useTaskColumns();
   const [tasks, setTasks] = useState([]),
     [meta, setMeta] = useState({
       current_page: 1,
@@ -118,8 +107,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
     });
   const [refs, setRefs] = useState({
       categories: [],
-      catalog_items: [],
-      product_types: [],
+      filter_categories: [],
       teachers: [],
       departments: [],
       reviewers: [],
@@ -130,6 +118,14 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
     [page, setPage] = useState(1),
     [perPage, setPerPage] = useState(10),
     [documentSearch, setDocumentSearch] = useState("");
+  const scrollEdges = useScrollEdges([tasks, columnState.hidden]);
+  const currentUserId = refs.current_user_id;
+  const formRef = useRef(null);
+  const [formBaseline, setFormBaseline] = useState(null);
+  const [, setFormTick] = useState(0);
+  const [viewDraft, setViewDraft] = useState(false);
+  const [commentDraft, setCommentDraft] = useState(false);
+  const [showSupport, setShowSupport] = useState(false);
   const [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
     [success, setSuccess] = useState(""),
@@ -140,12 +136,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
     [workflowError, setWorkflowError] = useState(""),
     [editingComment, setEditingComment] = useState(null),
     [deleting, setDeleting] = useState(null),
-    [progressing, setProgressing] = useState(null),
     [highlightedTaskId, setHighlightedTaskId] = useState(null),
-    [statusPreview, setStatusPreview] = useState("not_started"),
-    [progressPreview, setProgressPreview] = useState(0),
-    [scorePreview, setScorePreview] = useState(0),
-    [scoreError, setScoreError] = useState(""),
     [reminding, setReminding] = useState(""),
     [saving, setSaving] = useState(false);
   const loadTasks = useCallback(
@@ -257,7 +248,6 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
     editing.removed_attachment_ids?.forEach((id) =>
       f.append("remove_attachment_ids[]", id),
     );
-    f.set("requires_approval", "0");
     if (editing.id) f.append("_method", "PUT");
     try {
       const endpoint =
@@ -293,15 +283,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
         d = await r.json();
       if (!r.ok) throw new Error(d.message);
       setViewing(d.data);
-      setStatusPreview(d.data.status || "not_started");
-      setProgressPreview(Number(d.data.progress || 0));
-      setScorePreview(
-        d.data.evaluation?.score_before_penalty ??
-          d.data.catalog_score ??
-          d.data.maximum_score ??
-          0,
-      );
-      setScoreError("");
+      setWorkflowError("");
       setViewingDocument(null);
     } catch (e) {
       setError(e.message);
@@ -321,7 +303,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
   };
   const remove = async () => {
     try {
-      const r = await apiFetch(`/api/tasks/${deleting.id}`, {
+      const r = await apiFetch(`/api/${deleting.can_edit_personal ? "personal-tasks" : "tasks"}/${deleting.id}`, {
           method: "DELETE",
           headers: { Accept: "application/json" },
         }),
@@ -333,28 +315,6 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
     } catch (e) {
       setDeleting(null);
       setError(e.message);
-    }
-  };
-  const saveProgress = async (e) => {
-    e.preventDefault();
-    const body = Object.fromEntries(new FormData(e.currentTarget));
-    try {
-      const r = await apiFetch(`/api/tasks/${progressing.id}/progress`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify(body),
-        }),
-        d = await r.json();
-      if (!r.ok)
-        throw new Error(Object.values(d.errors ?? {}).flat()[0] ?? d.message);
-      setProgressing(null);
-      setSuccess(d.message);
-      await loadTasks();
-    } catch (x) {
-      setError(x.message);
     }
   };
   const downloadDocument = async (document) => {
@@ -454,156 +414,124 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
     setSuccess(payload.message);
     await show(viewing);
   };
-  const saveDetailUpdate = async (event) => {
+  const runWorkflow = async (path, options, fallbackError) => {
+    setWorkflowSaving(true);
+    setWorkflowError("");
+    try {
+      const response = await apiFetch(`/api/tasks/${viewing.id}/${path}`, {
+        method: "POST",
+        headers: { Accept: "application/json", ...(options.json ? { "Content-Type": "application/json" } : {}) },
+        body: options.json ? JSON.stringify(options.json) : options.body,
+      });
+      const payload = await response.json();
+      if (!response.ok)
+        throw new Error(Object.values(payload.errors || {}).flat()[0] || payload.message);
+      setSuccess(payload.message);
+      await show(viewing);
+      await loadTasks(true);
+      return true;
+    } catch (workflowException) {
+      setWorkflowError(workflowException.message || fallbackError);
+      return false;
+    } finally {
+      setWorkflowSaving(false);
+    }
+  };
+  const startTask = () =>
+    runWorkflow("progress", { json: { status: "in_progress" } }, "Không thể cập nhật trạng thái.");
+  const submitCompletion = async (event) => {
     event.preventDefault();
     const formElement = event.currentTarget;
-    const form = Object.fromEntries(new FormData(formElement));
-    const workflowDecision = event.nativeEvent.submitter?.value;
-    if (
-      viewing.can_review_completion &&
-      !["approved", "revision_required"].includes(workflowDecision)
-    ) {
-      setWorkflowError(
-        "Vui lòng chọn Xác nhận hoàn thành hoặc Yêu cầu làm lại.",
-      );
-      return;
-    }
-    const scoreLimit = Number(
-      viewing.catalog_score || viewing.maximum_score || 0,
-    );
-    if (viewing.can_review_completion && Number(form.score) > scoreLimit) {
-      setScoreError(`Điểm không được vượt quá ${scoreLimit}.`);
-      return;
-    }
-    if (
-      ["submit", "approved", "revision_required"].includes(workflowDecision)
-    ) {
-      setWorkflowSaving(true);
-      setWorkflowError("");
-      try {
-        const reviewing = workflowDecision !== "submit";
-        let requestOptions;
-        if (reviewing) {
-          requestOptions = {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Accept: "application/json",
-            },
-            body: JSON.stringify({
-              decision: workflowDecision,
-              comment: form.content,
-              score: form.score,
-            }),
-          };
-        } else {
-          const submissionData = new FormData(formElement);
-          submissionData.delete("submission_links");
-          submissionData.set("comment", form.content || "");
-          String(form.submission_links || "")
-            .split(/\r?\n/)
-            .map((link) => link.trim())
-            .filter(Boolean)
-            .forEach((link) => submissionData.append("links[]", link));
-          requestOptions = {
-            method: "POST",
-            headers: { Accept: "application/json" },
-            body: submissionData,
-          };
-        }
-        const response = await apiFetch(
-          `/api/tasks/${viewing.id}/${reviewing ? "review-completion" : "submit-completion"}`,
-          requestOptions,
-        );
-        const payload = await response.json();
-        if (!response.ok)
-          throw new Error(
-            Object.values(payload.errors || {}).flat()[0] || payload.message,
-          );
-        formElement.reset();
-        setSuccess(payload.message);
-        await show(viewing);
-        await loadTasks();
-      } catch (workflowException) {
-        setWorkflowError(
-          workflowException.message || "Không thể xử lý yêu cầu.",
-        );
-      } finally {
-        setWorkflowSaving(false);
-      }
-      return;
-    }
-    const managerSide = viewing.can_manage || viewing.is_reviewer;
-    if (
-      !managerSide &&
-      Number(form.progress_percent) === 100 &&
-      viewing.can_submit_completion
-    ) {
-      setWorkflowSaving(true);
-      setWorkflowError("");
-      try {
-        const submissionData = new FormData(formElement);
-        submissionData.delete("submission_links");
-        submissionData.set("comment", form.content || "");
-        String(form.submission_links || "")
-          .split(/\r?\n/)
-          .map((link) => link.trim())
-          .filter(Boolean)
-          .forEach((link) => submissionData.append("links[]", link));
-        const response = await apiFetch(
-          `/api/tasks/${viewing.id}/submit-completion`,
-          {
-            method: "POST",
-            headers: { Accept: "application/json" },
-            body: submissionData,
-          },
-        );
-        const payload = await response.json();
-        if (!response.ok)
-          throw new Error(
-            Object.values(payload.errors || {}).flat()[0] || payload.message,
-          );
-        formElement.reset();
-        setSuccess(payload.message);
-        await show(viewing);
-        await loadTasks();
-      } catch (workflowException) {
-        setWorkflowError(
-          workflowException.message || "Không thể gửi đề nghị hoàn thành.",
-        );
-      } finally {
-        setWorkflowSaving(false);
-      }
-      return;
-    }
-    const response = await apiFetch(
-      `/api/tasks/${viewing.id}/${managerSide ? "comments" : "progress"}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(managerSide ? { content: form.content } : form),
-      },
-    );
-    const payload = await response.json();
-    if (!response.ok)
-      return setError(
-        Object.values(payload.errors || {}).flat()[0] || payload.message,
-      );
-    formElement.reset();
-    setSuccess(payload.message);
-    await show(viewing);
-    await loadTasks();
+    const form = new FormData(formElement);
+    const links = String(form.get("submission_links") || "");
+    form.delete("submission_links");
+    links
+      .split(/\r?\n/)
+      .map((link) => link.trim())
+      .filter(Boolean)
+      .forEach((link) => form.append("links[]", link));
+    if (await runWorkflow("submit-completion", { body: form }, "Không thể gửi đề nghị hoàn thành."))
+      formElement.reset();
+  };
+  const reviewCompletion = async (event) => {
+    event.preventDefault();
+    const decision = event.nativeEvent.submitter?.value;
+    const comment = new FormData(event.currentTarget).get("comment");
+    await runWorkflow("review-completion", { json: { decision, comment } }, "Không thể duyệt công việc.");
+  };
+  const selfComplete = () =>
+    runWorkflow("complete", { json: {} }, "Không thể đánh dấu hoàn thành.");
+  const cancelTask = async () => {
+    const ok = await confirm({
+      tone: "danger",
+      title: `Hủy công việc ${viewing.code}?`,
+      message: viewing.is_personal
+        ? "Công việc sẽ chuyển sang trạng thái Đã hủy."
+        : "Công việc sẽ chuyển sang trạng thái Đã hủy và người thực hiện sẽ nhận được thông báo.",
+      confirmText: "Hủy công việc",
+      cancelText: "Giữ lại",
+    });
+    if (ok) await runWorkflow("cancel", { json: {} }, "Không thể hủy công việc.");
+  };
+  const postComment = async (event) => {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const content = new FormData(formElement).get("content");
+    if (!String(content || "").trim()) return;
+    if (await runWorkflow("comments", { json: { content } }, "Không thể gửi trao đổi."))
+      formElement.reset();
+  };
+  useEffect(() => {
+    if (editing && formBaseline === null && formRef.current) setFormBaseline(taskFormSnapshot(formRef.current, editing));
+    if (!editing && formBaseline !== null) setFormBaseline(null);
+  }, [editing, formBaseline]);
+  useEffect(() => {
+    if (editing) setShowSupport((editing.document_ids?.length || 0) + (editing.attachments?.length || 0) > 0);
+  }, [editing?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const formDirty = formBaseline !== null && taskFormSnapshot(formRef.current, editing) !== formBaseline;
+  const attachmentCount = editing
+    ? editing.document_ids.length + (editing.pending_files?.length || 0) + (editing.attachments?.length || 0) - (editing.removed_attachment_ids?.length || 0)
+    : 0;
+  const formMissing = editing
+    ? [
+        !formRef.current?.elements.title?.value.trim() && "tên công việc",
+        editing.assignment_mode !== "self" && !editing.teacher_ids.length && !editing.department_ids.length && "người thực hiện",
+      ].filter(Boolean)
+    : [];
+  const formBlocked = formMissing.length
+    ? `Còn thiếu: ${formMissing.join(", ")}`
+    : editing?.id && !formDirty
+      ? "Chưa có thay đổi"
+      : "";
+  const discardChanges = (message) =>
+    confirm({
+      tone: "warning",
+      title: "Bỏ các thay đổi chưa lưu?",
+      message,
+      confirmText: "Bỏ thay đổi",
+      cancelText: "Tiếp tục chỉnh sửa",
+    });
+  const requestCloseEdit = async () => {
+    if (formDirty && !(await discardChanges("Nội dung bạn vừa nhập cho công việc này sẽ không được lưu."))) return;
+    setEditing(null);
+  };
+  const requestCloseView = async () => {
+    if ((viewDraft || commentDraft) && !(await discardChanges("Kết quả, nhận xét hoặc trao đổi bạn đang nhập sẽ không được gửi."))) return false;
+    setViewDraft(false);
+    setCommentDraft(false);
+    setViewing(null);
+    return true;
   };
   const toggle = (field, id) =>
-    setEditing((c) => ({
-      ...c,
-      [field]: c[field].includes(id)
-        ? c[field].filter((x) => x !== id)
-        : [...c[field], id],
-    }));
+    setEditing((c) => {
+      const adding = !c[field].includes(id);
+      const reviewer = field === "teacher_ids" && adding ? refs.reviewers.find((r) => r.teacher_id === id) : null;
+      return {
+        ...c,
+        [field]: adding ? [...c[field], id] : c[field].filter((x) => x !== id),
+        ...(reviewer ? { reviewer_ids: (c.reviewer_ids || []).filter((x) => x !== reviewer.id) } : {}),
+      };
+    });
   return (
     <div
       className={`task-page ${canAssign ? "" : "no-assign"} ${canUpdate ? "" : "no-update"}`}
@@ -673,163 +601,144 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
             <button onClick={loadTasks}>Thử lại</button>
           </div>
         )}
-        <div className="task-table-wrap">
-          <table>
+        <div className="task-table-toolbar">
+          <span>{meta.total} công việc</span>
+          <ColumnPicker state={columnState} />
+        </div>
+        <div ref={scrollEdges.ref} onScroll={scrollEdges.onScroll} className={`task-table-wrap ${scrollEdges.className}`}>
+          <table className="task-table">
             <thead>
               <tr>
-                <th>Công việc</th>
-                <th>Loại nhiệm vụ</th>
-                <th>Người thực hiện</th>
-                <th>Thời hạn</th>
-                <th>Ưu tiên</th>
-                <th>Trạng thái người nhận</th>
-                <th>Trạng thái kiểm duyệt</th>
-                <th>Thao tác</th>
+                {columnState.columns.map((c) => (
+                  <th key={c.key} className={`col-${c.key}`}>{c.label}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {tasks.map((t) => (
-                <tr
-                  key={t.id}
-                  className={
-                    highlightedTaskId === t.id ? "notification-active-task" : ""
-                  }
-                >
-                  <td className="task-name">
-                    <code>{t.code}</code>
-                    <b>{t.title}</b>
-                    <small className="task-creator">
-                      Giao bởi <strong>{t.creator || "Quản trị"}</strong>
-                    </small>
-                    {t.is_reviewer && (
-                      <span className="reviewer-task-badge">
-                        <UserRoundCheck size={12} /> Bạn là người duyệt
+              {tasks.map((t) => {
+                const reminderCount = Math.max(0, ...(t.assignees || []).map((person) => Number(person.reminder_count || 0)));
+                const cells = {
+                  task: (
+                    <td className="task-name">
+                      <code>{t.code}</code>
+                      <b title={t.title}>{t.title}</b>
+                    </td>
+                  ),
+                  category: <td>{t.category ? <span className="task-type-name">{t.category}</span> : <span className="name-stack-empty">—</span>}</td>,
+                  assignees: (
+                    <td>
+                      <NameStack
+                        empty="Chưa phân công"
+                        title={`Người thực hiện · ${t.assignee_count} người`}
+                        items={[
+                          ...(t.units || []).map((unit) => ({ key: `d-${unit.id}`, label: `${unit.short_name} · ${unit.members.length}`, kind: "unit" })),
+                          ...(t.assignees || []).filter((person) => person.direct).map((person) => ({ key: `p-${person.id}`, label: person.name })),
+                        ]}
+                        details={[
+                          ...(t.units || []).map((unit) => ({ key: `d-${unit.id}`, title: unit.name, names: unit.members.map((member) => member.name) })),
+                          ...((t.assignees || []).some((person) => person.direct)
+                            ? [{ key: "direct", title: "Cá nhân", names: t.assignees.filter((person) => person.direct).map((person) => person.name) }]
+                            : []),
+                        ]}
+                      />
+                    </td>
+                  ),
+                  reviewer: (
+                    <td>
+                      <NameStack
+                        empty={t.is_personal ? "Tự hoàn thành" : "Người giao duyệt"}
+                        title={`Người duyệt · ${t.reviewers?.length || 0} người`}
+                        items={(t.reviewers || []).map((r) => ({ key: `r-${r.id}`, label: t.is_reviewer && r.id === currentUserId ? `${r.name} (bạn)` : r.name, kind: t.is_reviewer && r.id === currentUserId ? "me" : "" }))}
+                        details={t.reviewers?.length > 2 ? [{ key: "reviewers", title: "Bất kỳ ai trong danh sách đều duyệt được", names: t.reviewers.map((r) => r.name) }] : undefined}
+                      />
+                    </td>
+                  ),
+                  creator: <td><span className="name-chip">{t.creator || "Quản trị"}</span></td>,
+                  completed: (
+                    <td>
+                      {t.status === "completed" && t.completed_at ? (
+                        <span className={t.is_late ? "done-at late" : "done-at"} title={t.finished_at ? `Nộp lúc ${formatMoment(t.finished_at)}` : undefined}>
+                          {formatMoment(t.completed_at)}
+                        </span>
+                      ) : (
+                        <span className="name-stack-empty">—</span>
+                      )}
+                    </td>
+                  ),
+                  due: (
+                    <td>
+                      <span className={t.is_overdue ? "due overdue" : "due"}>
+                        <CalendarClock size={14} />
+                        {t.due_at
+                          ? new Date(t.due_at).toLocaleString("vi-VN", {
+                              dateStyle: "short",
+                              timeStyle: "short",
+                            })
+                          : "Không thời hạn"}
                       </span>
-                    )}
-                  </td>
-                  <td>
-                    <div className="task-type-cell">
-                      <span className="task-type-name">
-                        {t.task_type || t.category || "Chưa xác định"}
+                    </td>
+                  ),
+                  priority: (
+                    <td>
+                      <span className={`priority ${t.priority}`}>
+                        <i />
+                        {labels.priority[t.priority]}
                       </span>
-                      {t.product && <small>{t.product}</small>}
-                    </div>
-                  </td>
-                  <td>
-                    <div className="task-assignee-names">
-                      <Users size={14} />
-                      <div>
-                        {t.assignees?.map((person) => (
-                          <span className="task-assignee-reminder" key={`person-${person.id}`}>
-                            <span>{person.name}</span>
-                          </span>
-                        ))}
-                        {t.departments?.map((department) => (
-                          <span
-                            className="department-name"
-                            key={`department-${department}`}
-                          >
-                            {department}
-                          </span>
-                        ))}
-                        {!t.assignees?.length && !t.departments?.length && (
-                          <span>Chưa phân công</span>
-                        )}
-                        {canAssign && t.can_manage && t.status === "not_started" && t.assignees?.length > 0 && (
+                    </td>
+                  ),
+                  status: (
+                    <td>
+                      <TaskStatusBadges task={t} />
+                    </td>
+                  ),
+                  actions: (
+                    <td>
+                      <div className="row-actions">
+                        <button title="Xem" onClick={() => show(t)}>
+                          <Eye size={15} />
+                        </button>
+                        {t.can_manage && ["not_started", "in_progress"].includes(t.status) && t.assignees?.length > 0 && (
                           <button
-                            className="group-reminder-button"
-                            type="button"
-                            title="Đưa email nhắc việc của toàn bộ nhóm vào hàng chờ"
+                            className="remind"
+                            title={`Gửi email nhắc việc cho tất cả người thực hiện${reminderCount ? ` (đã nhắc ${reminderCount} lần)` : ""}`}
                             disabled={reminding === t.id}
                             onClick={() => sendReminder(t)}
                           >
-                            <Send size={13} />
-                            {reminding === t.id ? "Đang đưa vào hàng chờ…" : "Nhắc mail cả nhóm"}
-                            {Math.max(0, ...t.assignees.map((person) => Number(person.reminder_count || 0))) > 0 && (
-                              <em>({Math.max(...t.assignees.map((person) => Number(person.reminder_count || 0)))})</em>
-                            )}
+                            <Send size={15} />
+                            {reminderCount > 0 && <em>{reminderCount}</em>}
+                          </button>
+                        )}
+                        {(t.can_manage || t.can_edit_personal) && (
+                          <button title="Sửa" onClick={() => openEdit(t)}>
+                            <Pencil size={15} />
+                          </button>
+                        )}
+                        {t.can_manage && (
+                          <button
+                            className="delete"
+                            title="Xóa"
+                            onClick={() => setDeleting(t)}
+                          >
+                            <Trash2 size={15} />
                           </button>
                         )}
                       </div>
-                    </div>
-                  </td>
-                  <td>
-                    <span className={t.is_overdue ? "due overdue" : "due"}>
-                      <CalendarClock size={14} />
-                      {new Date(t.due_at).toLocaleString("vi-VN", {
-                        dateStyle: "short",
-                        timeStyle: "short",
-                      })}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={`priority ${t.priority}`}>
-                      <i />
-                      {labels.priority[t.priority]}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="receiver-status">
-                      <span className={`task-status ${t.status}`}>
-                        {labels.status[t.status]}
-                      </span>
-                      <b>{t.progress}%</b>
-                    </div>
-                  </td>
-                  <td>
-                    <div className="review-cell">
-                      <span
-                        className={`review-status ${t.review_status || "not_requested"}`}
-                      >
-                        {labels.review[t.review_status || "not_requested"]}
-                      </span>
-                      {t.review_status === "approved" &&
-                        t.evaluation_score !== null && (
-                          <small>
-                            Điểm:{" "}
-                            <b>
-                              {t.evaluation_score}/{t.evaluation_max_score}
-                            </b>
-                            {t.late_penalty > 0 && (
-                              <span className="late-penalty-note">
-                                Trễ {t.late_days} ngày · trừ{" "}
-                                {t.late_penalty_percent}% ({t.late_penalty}{" "}
-                                điểm)
-                              </span>
-                            )}
-                            <span>·</span>
-                            Hệ số:{" "}
-                            <b>
-                              {t.evaluation_conversion}/
-                              {t.evaluation_max_conversion}
-                            </b>
-                          </small>
-                        )}
-                    </div>
-                  </td>
-                  <td>
-                    <div className="row-actions">
-                      <button title="Xem" onClick={() => show(t)}>
-                        <Eye size={15} />
-                      </button>
-                      {(t.can_manage || t.can_edit_personal) && (
-                        <button title="Sửa" onClick={() => openEdit(t)}>
-                          <Pencil size={15} />
-                        </button>
-                      )}
-                      {t.can_manage && (
-                        <button
-                          className="delete"
-                          title="Xóa"
-                          onClick={() => setDeleting(t)}
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  ),
+                };
+                return (
+                  <tr
+                    key={t.id}
+                    className={
+                      highlightedTaskId === t.id ? "notification-active-task" : ""
+                    }
+                  >
+                    {columnState.columns.map((c) => (
+                      <Fragment key={c.key}>{cells[c.key]}</Fragment>
+                    ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
           {loading ? (
@@ -906,114 +815,118 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                 </h3>
                 <p>Thông tin rõ ràng giúp giáo viên hoàn thành đúng yêu cầu</p>
               </div>
-              <button onClick={() => setEditing(null)}>
+              <button onClick={requestCloseEdit}>
                 <X size={20} />
               </button>
             </div>
-            <form onSubmit={save}>
+            <form ref={formRef} onSubmit={save} onInput={() => setFormTick((tick) => tick + 1)} onChange={() => setFormTick((tick) => tick + 1)}>
               <div className="task-compose-body">
                 <div className="task-compose-main">
-                  <div className="task-form-section content-section">
-                    <h4>
-                      <span>1</span> Nội dung công việc
-                    </h4>
-                    <div className="task-form-grid">
-                      <label className="wide">
-                        Tên công việc
-                        <input
-                          name="title"
-                          required
-                          defaultValue={editing.title}
-                          placeholder="Nhập tên công việc ngắn gọn..."
-                        />
-                      </label>
-                      <div className="wide">
-                        <b className="editor-label">Mô tả</b>
-                        <RichTextEditor
-                          value={editing.description || ""}
-                          onChange={(description) =>
-                            setEditing({ ...editing, description })
-                          }
-                        />
-                        <input
-                          type="hidden"
-                          name="description"
-                          value={editing.description || ""}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="task-form-section document-link-section documents-section">
-                    <h4>
-                      <span>5</span> Tài liệu hỗ trợ{" "}
-                      <em>{editing.document_ids.length} đã chọn</em>
-                    </h4>
-                    <b className="support-label">Văn bản liên quan</b>
-                    <p>
-                      Liên kết văn bản để giáo viên xem đúng căn cứ và tải tài
-                      liệu gốc khi thực hiện.
-                    </p>
-                    <label className="document-search">
-                      <Search size={16} />
+                  <section className="form-block">
+                    <label className="field">
+                      <span className="field-label">
+                        Tên công việc <span className="required-mark">*</span>
+                      </span>
                       <input
-                        value={documentSearch}
-                        onChange={(event) =>
-                          setDocumentSearch(event.target.value)
-                        }
-                        placeholder="Tìm theo số, tên hoặc đơn vị ban hành..."
+                        name="title"
+                        required
+                        defaultValue={editing.title}
+                        placeholder="Nhập tên công việc ngắn gọn..."
                       />
                     </label>
-                    <div className="document-picker">
-                      {refs.documents
-                        .filter((document) =>
-                          `${document.document_number} ${document.title} ${document.issuer}`
-                            .toLowerCase()
-                            .includes(documentSearch.toLowerCase()),
-                        )
-                        .map((document) => (
-                          <label key={document.id}>
-                            <input
-                              type="checkbox"
-                              checked={editing.document_ids.includes(
-                                document.id,
-                              )}
-                              onChange={() =>
-                                toggle("document_ids", document.id)
-                              }
-                            />
-                            <span>
-                              <b>{document.document_number}</b>
-                              <strong>{document.title}</strong>
-                              <small>
-                                {document.type} · {document.issuer}
-                                {document.issued_on
-                                  ? ` · ${new Date(document.issued_on).toLocaleDateString("vi-VN")}`
-                                  : ""}
-                              </small>
-                            </span>
-                            {document.has_file && <Paperclip size={15} />}
-                          </label>
-                        ))}
+                    <div className="field">
+                      <span className="field-label">Mô tả</span>
+                      <RichTextEditor
+                        value={editing.description || ""}
+                        onChange={(description) =>
+                          setEditing({ ...editing, description })
+                        }
+                      />
+                      <input
+                        type="hidden"
+                        name="description"
+                        value={editing.description || ""}
+                      />
                     </div>
-                    {!refs.documents.length && (
-                      <div className="no-documents">
-                        Chưa có văn bản trong mục Quản lý văn bản.
+                  </section>
+                  <section className="form-block">
+                    <button
+                      type="button"
+                      className="block-toggle"
+                      aria-expanded={showSupport}
+                      onClick={() => setShowSupport(!showSupport)}
+                    >
+                      <Paperclip size={15} />
+                      <span>
+                        Văn bản & file đính kèm
+                        {attachmentCount > 0 && <em>{attachmentCount}</em>}
+                      </span>
+                      <ChevronDown size={16} className={showSupport ? "open" : ""} />
+                    </button>
+                    {showSupport && (
+                      <div className="block-body">
+                        <span className="field-label">Văn bản liên quan</span>
+                        <label className="document-search">
+                          <Search size={16} />
+                          <input
+                            value={documentSearch}
+                            onChange={(event) =>
+                              setDocumentSearch(event.target.value)
+                            }
+                            placeholder="Tìm theo số, tên hoặc đơn vị ban hành..."
+                          />
+                        </label>
+                        <div className="document-picker">
+                          {refs.documents
+                            .filter((document) =>
+                              `${document.document_number} ${document.title} ${document.issuer}`
+                                .toLowerCase()
+                                .includes(documentSearch.toLowerCase()),
+                            )
+                            .map((document) => (
+                              <label key={document.id}>
+                                <input
+                                  type="checkbox"
+                                  checked={editing.document_ids.includes(
+                                    document.id,
+                                  )}
+                                  onChange={() =>
+                                    toggle("document_ids", document.id)
+                                  }
+                                />
+                                <span>
+                                  <b>{document.document_number}</b>
+                                  <strong>{document.title}</strong>
+                                  <small>
+                                    {document.type} · {document.issuer}
+                                    {document.issued_on
+                                      ? ` · ${new Date(document.issued_on).toLocaleDateString("vi-VN")}`
+                                      : ""}
+                                  </small>
+                                </span>
+                                {document.has_file && <Paperclip size={15} />}
+                              </label>
+                            ))}
+                        </div>
+                        {!refs.documents.length && (
+                          <div className="no-documents">
+                            Chưa có văn bản trong mục Quản lý văn bản.
+                          </div>
+                        )}
+                        <span className="field-label">File đính kèm</span>
+                        <FileAttachmentPicker
+                          editing={editing}
+                          setEditing={setEditing}
+                        />
                       </div>
                     )}
-                    <b className="support-label">File đính kèm nếu có</b>
-                    <FileAttachmentPicker
-                      editing={editing}
-                      setEditing={setEditing}
-                    />
-                  </div>
+                  </section>
                 </div>
                 <div className="task-compose-aside">
-                  <div
-                    className={`task-form-section assignment-section ${editing.assignment_mode === "self" ? "personal-assignment" : ""}`}
+                  <section
+                    className={`form-block ${editing.assignment_mode === "self" ? "personal-assignment" : ""}`}
                   >
-                    <h4>
-                      <span>2</span> Phân công
-                    </h4>
+                    <h4>Phân công</h4>
                     {!editing.id && canAssign && canUpdate && refs.current_teacher && (
                       <div className="assignment-mode-picker" role="group" aria-label="Cách phân công">
                         <button
@@ -1062,46 +975,51 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                         </div>
                       </div>
                     ) : (
-                      <CompactAssignees
-                        editing={editing}
-                        refs={refs}
-                        toggle={toggle}
-                      />
+                      <div className="field">
+                        <span className="field-label">
+                          Người thực hiện <span className="required-mark">*</span>
+                        </span>
+                        <CompactAssignees
+                          editing={editing}
+                          refs={refs}
+                          toggle={toggle}
+                        />
+                      </div>
                     )}
                     <ReviewerPicker
-                      reviewers={refs.reviewers}
-                      departments={refs.departments}
-                      value={editing.reviewer_id || ""}
-                      onChange={(reviewer_id) =>
-                        setEditing({ ...editing, reviewer_id })
+                      reviewers={refs.reviewers.filter((r) => editing.assignment_mode === "self" ? r.id !== refs.current_teacher?.user_id : !editing.teacher_ids.includes(r.teacher_id))}
+                      units={refs.units || []}
+                      value={editing.reviewer_ids || []}
+                      onChange={(update) =>
+                        setEditing((c) => ({ ...c, reviewer_ids: update(c.reviewer_ids || []) }))
                       }
                     />
-                  </div>
-                  <div className="task-form-section timing-section">
-                    <h4>
-                      <span>3</span> Thời hạn & ưu tiên
-                    </h4>
-                    <div className="task-form-grid">
-                      <label>
-                        Bắt đầu
+                  </section>
+                  <section className="form-block">
+                    <h4>Thời hạn & ưu tiên</h4>
+                    <div className="field-row">
+                      <label className="field">
+                        <span className="field-label">Bắt đầu</span>
                         <input
                           name="starts_at"
                           type="datetime-local"
                           defaultValue={editing.starts_at}
                         />
                       </label>
-                      <label>
-                        Hạn hoàn thành
+                      <label className="field">
+                        <span className="field-label">Hạn hoàn thành</span>
                         <input
                           name="due_at"
-                          required
                           type="datetime-local"
                           defaultValue={editing.due_at}
                         />
                       </label>
-
-                      <label className="wide">
-                        Mức ưu tiên
+                    </div>
+                    <div className="field-row">
+                      <label className="field">
+                        <span className="field-label">
+                          Mức ưu tiên <span className="required-mark">*</span>
+                        </span>
                         <select name="priority" defaultValue={editing.priority}>
                           {Object.entries(labels.priority).map(
                             ([value, text]) => (
@@ -1112,59 +1030,33 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                           )}
                         </select>
                       </label>
+                      <label className="field">
+                        <span className="field-label">Loại nhiệm vụ</span>
+                        <select name="category_id" defaultValue={editing.category_id || ""}>
+                          <option value="">— Không phân loại —</option>
+                          {refs.categories.map((type) => (
+                            <option key={type.id} value={type.id}>
+                              {type.name}
+                            </option>
+                          ))}
+                          {editing.category_id && !refs.categories.some((type) => type.id === Number(editing.category_id)) && (
+                            <option value={editing.category_id}>{editing.category} (ngưng sử dụng)</option>
+                          )}
+                        </select>
+                      </label>
                     </div>
-                  </div>
-                  <div className="task-form-section type-section">
-                    <h4>
-                      <span>4</span> Loại nhiệm vụ <ClipboardCheck size={17} />
-                    </h4>
-                    <div className="task-form-grid">
-                      <TaskTypePicker
-                        items={refs.catalog_items}
-                        value={editing.task_catalog_item_id || ""}
-                        onChange={(task_catalog_item_id) =>
-                          setEditing({ ...editing, task_catalog_item_id })
-                        }
-                      />
-
-                      {(() => {
-                        const item = refs.catalog_items.find(
-                          (value) =>
-                            value.id === Number(editing.task_catalog_item_id),
-                        );
-                        return (
-                          <div className="task-type-summary wide">
-                            <span>
-                              <FileText size={16} />
-                              <small>Công việc</small>
-                              <b>{item?.product || "—"}</b>
-                            </span>
-                            <span>
-                              <Flag size={16} />
-                              <small>Điểm</small>
-                              <b>{item?.score ?? "—"}</b>
-                            </span>
-                            <span>
-                              <Activity size={16} />
-                              <small>Hệ số quy đổi</small>
-                              <b>{item?.conversion ?? "—"}</b>
-                            </span>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  </div>
+                  </section>
                 </div>
               </div>
               <div className="modal-actions">
                 <button
                   type="button"
                   className="secondary-btn"
-                  onClick={() => setEditing(null)}
+                  onClick={requestCloseEdit}
                 >
                   Hủy bỏ
                 </button>
-                <button className="primary-btn" disabled={saving}>
+                <button className="primary-btn" disabled={saving || !!formBlocked} title={formBlocked || undefined}>
                   <Send size={15} />
                   {saving
                     ? "Đang lưu..."
@@ -1179,764 +1071,340 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
           </div>
         </div>
       )}
-      {progressing && (
-        <div className="modal-backdrop">
-          <div className="progress-modal">
-            <div className="modal-head">
-              <div>
-                <h3>Cập nhật tiến độ</h3>
-                <p>
-                  {progressing.code} · {progressing.title}
-                </p>
-              </div>
-              <button onClick={() => setProgressing(null)}>
-                <X size={20} />
-              </button>
-            </div>
-            <form onSubmit={saveProgress}>
-              <label>
-                Trạng thái
-                <select name="status" defaultValue={progressing.status}>
-                  {Object.entries(labels.status)
-                    .filter(([value]) => value !== "waiting_approval")
-                    .map(([v, l]) => (
-                      <option value={v} key={v}>
-                        {l}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              <label>
-                Phần trăm hoàn thành
-                <input
-                  name="progress_percent"
-                  type="range"
-                  min="0"
-                  max="100"
-                  defaultValue={progressing.progress}
-                />
-                <span className="range-label">0% — 100%</span>
-              </label>
-              <label>
-                Nội dung cập nhật
-                <textarea
-                  name="content"
-                  rows="4"
-                  placeholder="Mô tả kết quả, khó khăn hoặc ghi chú..."
-                />
-              </label>
-              <div className="modal-actions">
-                <button
-                  type="button"
-                  className="secondary-btn"
-                  onClick={() => setProgressing(null)}
-                >
-                  Hủy
-                </button>
-                <button className="primary-btn">Lưu tiến độ</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
       {viewing && (
-        <div className="modal-backdrop">
-          <div className="task-detail">
-            <div className="modal-head">
+        <div className="drawer-backdrop" onMouseDown={(event) => event.target === event.currentTarget && requestCloseView()}>
+          <aside className="task-drawer" role="dialog" aria-modal="true" aria-label={`Chi tiết ${viewing.code}`}>
+            <header className="task-drawer-head">
               <div>
-                <h3>Chi tiết công việc</h3>
-                <p>{viewing.code}</p>
+                <div className="task-drawer-tags">
+                  <code>{viewing.code}</code>
+                  <span className={`priority ${viewing.priority}`}>
+                    <i />
+                    {labels.priority[viewing.priority]}
+                  </span>
+                  <TaskStatusBadges task={viewing} />
+                  {viewing.category && <span className="task-drawer-type">{viewing.category}</span>}
+                </div>
+                <h2>{viewing.title}</h2>
               </div>
-              <button onClick={() => setViewing(null)}>
-                <X size={20} />
-              </button>
-            </div>
-            <div className="task-detail-body">
-              <div className="task-detail-columns">
-                <main className="task-detail-main">
-                  <div className="detail-badges">
-                    <span className={`priority ${viewing.priority}`}>
-                      {labels.priority[viewing.priority]}
-                    </span>
-                    <span className={`task-status ${statusPreview}`}>
-                      {labels.status[statusPreview]}
-                    </span>
-                  </div>
-                  <h2>{viewing.title}</h2>
-                  {viewing.late_penalty_preview?.late_seconds > 0 &&
-                    viewing.late_penalty_preview?.penalty_percent > 0 && (
-                      <div className="task-late-alert" role="alert">
-                        <TriangleAlert size={19} />
-                        <div>
-                          <b>
-                            {viewing.latest_submission
-                              ? "Đã nộp muộn"
-                              : "Công việc đang muộn"}{" "}
-                            {formatLateDuration(
-                              viewing.late_penalty_preview.late_seconds,
-                            )}
-                          </b>
-                          <span>
-                            Áp dụng mức trừ{" "}
-                            {Number(
-                              viewing.late_penalty_preview.penalty_percent,
-                            )}
-                            % — dự kiến trừ{" "}
-                            {Number(viewing.late_penalty_preview.penalty_score)}{" "}
-                            điểm.
-                          </span>
-                        </div>
-                      </div>
-                    )}
+              <div className="task-drawer-head-actions">
+                {(viewing.can_manage || viewing.can_edit_personal) && !["completed", "cancelled"].includes(viewing.status) && (
+                  <button type="button" title="Sửa" onClick={async () => { const task = viewing; if (await requestCloseView()) openEdit(task); }}>
+                    <Pencil size={17} />
+                  </button>
+                )}
+                <button type="button" title="Đóng" onClick={requestCloseView}>
+                  <X size={19} />
+                </button>
+              </div>
+            </header>
+            <div className="task-drawer-body">
+              <TaskTimeline task={viewing} />
+              <div className="task-drawer-people">
+                <div className="person-row">
+                  <span>Người giao</span>
+                  <PersonCards people={viewing.creator_card ? [viewing.creator_card] : []} empty="Quản trị" />
+                </div>
+                <div className="person-row">
+                  <span>Người duyệt</span>
+                  <PersonCards
+                    people={viewing.reviewer_cards || []}
+                    empty={viewing.is_personal ? "Tự hoàn thành" : "Người giao duyệt"}
+                  />
+                </div>
+                <div className="person-row">
+                  <span>Người thực hiện</span>
+                  <NameStack
+                    max={4}
+                    empty="Chưa phân công"
+                    title={`Người thực hiện · ${viewing.assignee_count} người`}
+                    items={[
+                      ...(viewing.units || []).map((unit) => ({ key: `d-${unit.id}`, label: `${unit.short_name} · ${unit.members.length}`, kind: "unit" })),
+                      ...(viewing.assignees || []).filter((person) => person.direct).map((person) => ({ key: `p-${person.id}`, label: person.name, person })),
+                    ]}
+                    details={[
+                      ...(viewing.units || []).map((unit) => ({ key: `d-${unit.id}`, title: unit.name, names: unit.members.map((member) => member.name) })),
+                      ...((viewing.assignees || []).some((person) => person.direct)
+                        ? [{ key: "direct", title: "Cá nhân", names: viewing.assignees.filter((person) => person.direct).map((person) => person.name) }]
+                        : []),
+                    ]}
+                  />
+                </div>
+              </div>
+              <TaskWorkflowPanel
+                task={viewing}
+                saving={workflowSaving}
+                error={workflowError}
+                onStart={startTask}
+                onSubmit={submitCompletion}
+                onReview={reviewCompletion}
+                onSelfComplete={selfComplete}
+                onDraftChange={setViewDraft}
+              />
+              {viewing.description && (
+                <section className="drawer-section">
+                  <h4>Mô tả</h4>
                   <div
-                    className={`detail-progress ${progressPreview >= 100 ? "complete" : progressPreview >= 80 ? "high" : progressPreview >= 30 ? "medium" : "low"}`}
-                  >
-                    <span>
-                      <i style={{ width: `${progressPreview}%` }} />
-                    </span>
-                    <b>{progressPreview}% hoàn thành</b>
+                    className="rich-description"
+                    dangerouslySetInnerHTML={{
+                      __html: viewing.description,
+                    }}
+                  />
+                </section>
+              )}
+              {!!viewing.documents?.length && (
+                <section className="drawer-section">
+                  <h4>Văn bản liên quan <em>{viewing.documents.length}</em></h4>
+                  <div className="linked-documents">
+                    {viewing.documents.map((document) => (
+                      <article key={document.id}>
+                        <span>
+                          <FileText size={18} />
+                        </span>
+                        <div>
+                          <b>{document.document_number}</b>
+                          <strong>{document.title}</strong>
+                          <small>
+                            {document.type} · {document.issuer}
+                          </small>
+                        </div>
+                        <div className="linked-document-actions">
+                          <button
+                            className="document-detail-btn"
+                            onClick={() => showLinkedDocument(document)}
+                          >
+                            <Eye size={14} /> Chi tiết
+                          </button>
+                          {document.download_url && (
+                            <button onClick={() => downloadDocument(document)}>
+                              <Paperclip size={14} /> Tải file
+                            </button>
+                          )}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              )}
+              {viewingDocument && (
+                <section className="linked-document-detail">
+                  <div className="linked-detail-head">
+                    <div>
+                      <small>CHI TIẾT VĂN BẢN</small>
+                      <h3>{viewingDocument.title}</h3>
+                    </div>
+                    <button onClick={() => setViewingDocument(null)}>
+                      <X size={17} />
+                    </button>
                   </div>
                   <dl>
                     <div>
-                      <dt>Loại nhiệm vụ</dt>
-                      <dd>
-                        {viewing.task_type ||
-                          viewing.category ||
-                          "Chưa xác định"}
-                      </dd>
+                      <dt>Số hiệu</dt>
+                      <dd>{viewingDocument.document_number}</dd>
                     </div>
                     <div>
-                      <dt>Sản phẩm</dt>
-                      <dd>{viewing.product || "—"}</dd>
+                      <dt>Loại văn bản</dt>
+                      <dd>{viewingDocument.document_type}</dd>
                     </div>
                     <div>
-                      <dt>Điểm / Hệ số</dt>
-                      <dd>
-                        {viewing.catalog_score || 0} điểm ·{" "}
-                        {viewing.conversion || 0}
-                      </dd>
-                    </div>
-                    <div className="detail-highlight-assigner">
-                      <dt>Người giao</dt>
-                      <dd>{viewing.creator || "Quản trị"}</dd>
+                      <dt>Đơn vị ban hành</dt>
+                      <dd>{viewingDocument.issuer}</dd>
                     </div>
                     <div>
-                      <dt>Thời gian bắt đầu</dt>
+                      <dt>Ngày ban hành</dt>
                       <dd>
-                        {viewing.starts_at
-                          ? new Date(viewing.starts_at).toLocaleString("vi-VN")
+                        {viewingDocument.issued_on
+                          ? new Date(viewingDocument.issued_on).toLocaleDateString("vi-VN")
                           : "—"}
                       </dd>
                     </div>
-                    <div className="detail-highlight-deadline">
-                      <dt>Hạn hoàn thành</dt>
+                    <div>
+                      <dt>Ngày hiệu lực</dt>
                       <dd>
-                        {new Date(viewing.due_at).toLocaleString("vi-VN")}
+                        {viewingDocument.effective_on
+                          ? new Date(viewingDocument.effective_on).toLocaleDateString("vi-VN")
+                          : "—"}
                       </dd>
                     </div>
-                    <div className="detail-highlight-reviewer">
-                      <dt>Người duyệt</dt>
-                      <dd>{viewing.reviewer || "Không chỉ định"}</dd>
+                    <div>
+                      <dt>Trạng thái</dt>
+                      <dd>{viewingDocument.status}</dd>
                     </div>
-                    <div className="detail-highlight-role">
-                      <dt>Vai trò của bạn</dt>
-                      <dd>
-                        {viewing.is_reviewer
-                          ? "Người kiểm duyệt"
-                          : "Người thực hiện / theo dõi"}
-                      </dd>
+                    <div>
+                      <dt>Chiều văn bản</dt>
+                      <dd>{viewingDocument.direction}</dd>
+                    </div>
+                    <div>
+                      <dt>Tệp đính kèm</dt>
+                      <dd>{viewingDocument.file_name || "Không có file"}</dd>
                     </div>
                   </dl>
-                  <section>
-                    <b>Mô tả</b>
-                    {viewing.description ? (
-                      <div
-                        className="rich-description"
-                        dangerouslySetInnerHTML={{
-                          __html: viewing.description,
-                        }}
-                      />
-                    ) : (
-                      <p>Chưa có mô tả.</p>
-                    )}
-                  </section>
-                  <section>
-                    <b>Văn bản liên quan ({viewing.documents?.length || 0})</b>
-                    {viewing.documents?.length ? (
-                      <div className="linked-documents">
-                        {viewing.documents.map((document) => (
-                          <article key={document.id}>
-                            <span>
-                              <FileText size={18} />
-                            </span>
-                            <div>
-                              <b>{document.document_number}</b>
-                              <strong>{document.title}</strong>
-                              <small>
-                                {document.type} · {document.issuer}
-                              </small>
-                            </div>
-                            <div className="linked-document-actions">
-                              <button
-                                className="document-detail-btn"
-                                onClick={() => showLinkedDocument(document)}
-                              >
-                                <Eye size={14} /> Chi tiết
-                              </button>
-                              {document.download_url ? (
-                                <button
-                                  onClick={() => downloadDocument(document)}
-                                >
-                                  <Paperclip size={14} /> Tải file
-                                </button>
-                              ) : (
-                                <em>Không có file</em>
-                              )}
-                            </div>
-                          </article>
-                        ))}
-                      </div>
-                    ) : (
-                      <p>Không có văn bản liên kết.</p>
-                    )}
-                  </section>
-                  {viewingDocument && (
-                    <section className="linked-document-detail">
-                      <div className="linked-detail-head">
-                        <div>
-                          <small>CHI TIẾT VĂN BẢN</small>
-                          <h3>{viewingDocument.title}</h3>
-                        </div>
-                        <button onClick={() => setViewingDocument(null)}>
-                          <X size={17} />
-                        </button>
-                      </div>
-                      <dl>
-                        <div>
-                          <dt>Số hiệu</dt>
-                          <dd>{viewingDocument.document_number}</dd>
-                        </div>
-                        <div>
-                          <dt>Loại văn bản</dt>
-                          <dd>{viewingDocument.document_type}</dd>
-                        </div>
-                        <div>
-                          <dt>Đơn vị ban hành</dt>
-                          <dd>{viewingDocument.issuer}</dd>
-                        </div>
-                        <div>
-                          <dt>Ngày ban hành</dt>
-                          <dd>
-                            {viewingDocument.issued_on
-                              ? new Date(
-                                  viewingDocument.issued_on,
-                                ).toLocaleDateString("vi-VN")
-                              : "—"}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Ngày hiệu lực</dt>
-                          <dd>
-                            {viewingDocument.effective_on
-                              ? new Date(
-                                  viewingDocument.effective_on,
-                                ).toLocaleDateString("vi-VN")
-                              : "—"}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Trạng thái</dt>
-                          <dd>{viewingDocument.status}</dd>
-                        </div>
-                        <div>
-                          <dt>Chiều văn bản</dt>
-                          <dd>{viewingDocument.direction}</dd>
-                        </div>
-                        <div>
-                          <dt>Tệp đính kèm</dt>
-                          <dd>
-                            {viewingDocument.file_name || "Không có file"}
-                          </dd>
-                        </div>
-                      </dl>
-                      <div className="document-summary">
-                        <b>Nội dung tóm tắt</b>
-                        <p>
-                          {viewingDocument.summary ||
-                            "Chưa có nội dung tóm tắt."}
-                        </p>
-                      </div>
-                      {viewingDocument.download_url && (
-                        <button
-                          className="primary-btn"
-                          onClick={() => downloadDocument(viewingDocument)}
-                        >
-                          <Paperclip size={15} /> Tải văn bản
-                        </button>
-                      )}
-                    </section>
+                  <div className="document-summary">
+                    <b>Nội dung tóm tắt</b>
+                    <p>{viewingDocument.summary || "Chưa có nội dung tóm tắt."}</p>
+                  </div>
+                  {viewingDocument.download_url && (
+                    <button
+                      className="primary-btn"
+                      onClick={() => downloadDocument(viewingDocument)}
+                    >
+                      <Paperclip size={15} /> Tải văn bản
+                    </button>
                   )}
-                  <section>
-                    <b>Người thực hiện</b>
-                    <div className="people-chips">
-                      {viewing.assignees.map((x) => (
-                        <span key={x.id}>
-                          {x.avatar_url ? (
-                            <img src={x.avatar_url} alt={`Ảnh của ${x.name}`} />
+                </section>
+              )}
+              {!!viewing.attachments?.length && (
+                <section className="drawer-section">
+                  <h4>File đính kèm <em>{viewing.attachments.length}</em></h4>
+                  <div className="detail-attachments">
+                    {viewing.attachments.map((file) => (
+                      <button
+                        type="button"
+                        key={file.id}
+                        onClick={() => viewTaskAttachment(file)}
+                        title="Mở file trong tab mới"
+                      >
+                        <i>
+                          <Paperclip size={16} />
+                        </i>
+                        <div>
+                          <b>{file.original_name}</b>
+                          <small>{formatFileSize(file.size)}</small>
+                        </div>
+                        <Eye size={16} />
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+              {!!viewing.submissions?.length && (
+                <section className="drawer-section teacher-submissions">
+                  <h4>Bài nộp <em>{viewing.submissions.length}</em></h4>
+                  <div className="submission-list">
+                    {viewing.submissions.map((submission) => (
+                      <article key={submission.id}>
+                        <header>
+                          {submission.submitter_avatar_url ? (
+                            <img
+                              className="submission-avatar"
+                              src={submission.submitter_avatar_url}
+                              alt={`Ảnh của ${submission.submitter}`}
+                            />
                           ) : (
-                            <i>{x.name?.charAt(0)}</i>
-                          )}
-                          {x.name}
-                          <small>{x.progress}%</small>
-                        </span>
-                      ))}
-                      {viewing.departments.map((x) => (
-                        <span key={x}>{x}</span>
-                      ))}
-                    </div>
-                  </section>
-                  <section>
-                    <b>File đính kèm ({viewing.attachments?.length || 0})</b>
-                    {viewing.attachments?.length ? (
-                      <div className="detail-attachments">
-                        {viewing.attachments.map((file) => (
-                          <button
-                            type="button"
-                            key={file.id}
-                            onClick={() => viewTaskAttachment(file)}
-                            title="Mở file trong tab mới"
-                          >
-                            <i>
-                              <Paperclip size={16} />
+                            <i className="submission-avatar-fallback">
+                              {submission.submitter?.charAt(0)}
                             </i>
-                            <div>
-                              <b>{file.original_name}</b>
-                              <small>
-                                {formatFileSize(file.size)} · Bấm để xem
-                              </small>
-                            </div>
-                            <Eye size={16} />
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <p>Không có file đính kèm.</p>
-                    )}
-                  </section>
-                  <section className="teacher-submissions">
-                    <b>
-                      Bài nộp của giáo viên ({viewing.submissions?.length || 0})
-                    </b>
-                    {viewing.submissions?.length ? (
-                      <div className="submission-list">
-                        {viewing.submissions.map((submission) => (
-                          <article key={submission.id}>
-                            <header>
-                              {submission.submitter_avatar_url ? (
-                                <img
-                                  className="submission-avatar"
-                                  src={submission.submitter_avatar_url}
-                                  alt={`Ảnh của ${submission.submitter}`}
-                                />
-                              ) : (
-                                <i className="submission-avatar-fallback">
-                                  {submission.submitter?.charAt(0)}
-                                </i>
-                              )}
-                              <div>
-                                <strong>{submission.submitter}</strong>
-                                <span>Lần nộp {submission.version}</span>
-                              </div>
-                              <small>
-                                {new Date(
-                                  submission.submitted_at,
-                                ).toLocaleString("vi-VN")}
-                              </small>
-                            </header>
-                            {submission.result_content && (
-                              <p>{submission.result_content}</p>
-                            )}
-                            {!!submission.files?.length && (
-                              <div className="submission-resources">
-                                {submission.files.map((file) => (
-                                  <button
-                                    type="button"
-                                    key={file.id}
-                                    onClick={() =>
-                                      viewSubmissionAttachment(submission, file)
-                                    }
-                                    title="Mở file bài nộp trong tab mới"
-                                  >
-                                    <Paperclip size={15} />
-                                    <span>{file.original_name}</span>
-                                    <small>{formatFileSize(file.size)}</small>
-                                    <Eye size={15} />
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                            {!!submission.links?.length && (
-                              <div className="submission-links">
-                                {submission.links.map((link) => (
-                                  <a
-                                    key={link}
-                                    href={link}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                  >
-                                    <Link2 size={15} />
-                                    <span>{link}</span>
-                                  </a>
-                                ))}
-                              </div>
-                            )}
-                          </article>
-                        ))}
-                      </div>
-                    ) : (
-                      <p>Chưa có giáo viên nào nộp file hoặc đường link.</p>
-                    )}
-                  </section>
-                </main>
-                <aside className="task-detail-side">
-                  {(!(viewing.can_manage || viewing.is_reviewer) ||
-                    viewing.can_review_completion) && (
-                    <div className="detail-update-sidebar">
-                      <div className="detail-update-title">
-                        <span>
-                          <Activity size={18} />
-                        </span>
-                        <div>
-                          <b>
-                            {viewing.can_review_completion
-                              ? "Chấm điểm & xác nhận"
-                              : "Cập nhật công việc"}
-                          </b>
-                        </div>
-                      </div>
-                      <form onSubmit={saveDetailUpdate}>
-                        {!(viewing.can_manage || viewing.is_reviewer) && (
-                          <>
-                            <label>
-                              Trạng thái
-                              <select
-                                name="status"
-                                value={statusPreview}
-                                onChange={(event) =>
-                                  setStatusPreview(event.target.value)
-                                }
+                          )}
+                          <div>
+                            <strong>{submission.submitter}</strong>
+                            <span>Lần nộp {submission.version}</span>
+                          </div>
+                          <small>Nộp {formatMoment(submission.submitted_at)}</small>
+                        </header>
+                        {submission.result_content && <p>{submission.result_content}</p>}
+                        {submission.status !== "submitted" && submission.reviewed_at && (
+                          <div className={`submission-review ${submission.status}`}>
+                            {submission.status === "approved" ? <CheckCircle2 size={14} /> : <RotateCcw size={14} />}
+                            <span>
+                              {submission.status === "approved" ? "Được duyệt" : "Yêu cầu chỉnh sửa"}
+                              {submission.reviewer && <> bởi <b>{submission.reviewer}</b></>} · {formatMoment(submission.reviewed_at)}
+                              {submission.review_comment && <em>“{submission.review_comment}”</em>}
+                            </span>
+                          </div>
+                        )}
+                        {!!submission.files?.length && (
+                          <div className="submission-resources">
+                            {submission.files.map((file) => (
+                              <button
+                                type="button"
+                                key={file.id}
+                                onClick={() => viewSubmissionAttachment(submission, file)}
+                                title="Mở file bài nộp trong tab mới"
                               >
-                                {Object.entries(labels.status)
-                                  .filter(
-                                    ([value]) =>
-                                      ![
-                                        "waiting_approval",
-                                        "completed",
-                                        "cancelled",
-                                      ].includes(value),
-                                  )
-                                  .map(([value, text]) => (
-                                    <option value={value} key={value}>
-                                      {text}
-                                    </option>
-                                  ))}
-                              </select>
-                            </label>
-                            <label>
-                              Phần trăm hoàn thành
-                              <input
-                                name="progress_percent"
-                                type="number"
-                                min="0"
-                                max="100"
-                                defaultValue={viewing.progress}
-                                onChange={(event) => {
-                                  const enteredValue =
-                                    Number(event.target.value) || 0;
-                                  const value = Math.min(
-                                    100,
-                                    Math.max(0, enteredValue),
-                                  );
-                                  if (enteredValue !== value)
-                                    event.target.value = String(value);
-                                  setProgressPreview(value);
-                                  if (value > 0)
-                                    setStatusPreview("in_progress");
-                                }}
-                              />
-                            </label>
-                            <div className="submission-inputs">
-                              <label>
-                                File bài nộp (có thể chọn nhiều file)
-                                <input
-                                  name="submission_files[]"
-                                  type="file"
-                                  multiple
-                                  accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.zip,.rar"
-                                  disabled={workflowSaving}
-                                />
-                              </label>
-                              <label>
-                                Đường link bài nộp (mỗi dòng một link)
-                                <textarea
-                                  name="submission_links"
-                                  rows="3"
-                                  disabled={workflowSaving}
-                                  placeholder={
-                                    "https://drive.google.com/...\nhttps://docs.google.com/..."
-                                  }
-                                />
-                              </label>
-                              <small>
-                                File và đường link sẽ được lưu khi tiến độ được
-                                cập nhật lên 100%.
-                              </small>
-                            </div>
-                          </>
-                        )}
-                        <label>
-                          {viewing.can_review_completion
-                            ? "Nhận xét đánh giá"
-                            : "Nhận xét gửi người giao việc / kiểm duyệt"}
-                          <textarea
-                            key={viewing.evaluation?.id || "new-evaluation"}
-                            name="content"
-                            rows="5"
-                            disabled={workflowSaving}
-                            placeholder="Nhập nội dung nhận xét..."
-                            defaultValue={viewing.evaluation?.comment || ""}
-                          />
-                        </label>
-                        {workflowError && (
-                          <div className="workflow-inline-error">
-                            <TriangleAlert size={17} />
-                            {workflowError}
+                                <Paperclip size={15} />
+                                <span>{file.original_name}</span>
+                                <small>{formatFileSize(file.size)}</small>
+                                <Eye size={15} />
+                              </button>
+                            ))}
                           </div>
                         )}
-                        {viewing.can_review_completion && (
-                          <div className="task-score-grid">
-                            {scoreError && (
-                              <div className="score-inline-error" role="alert">
-                                <TriangleAlert size={15} /> {scoreError}
+                        {!!submission.links?.length && (
+                          <div className="submission-links">
+                            {submission.links.map((link) => (
+                              <a key={link} href={link} target="_blank" rel="noopener noreferrer">
+                                <Link2 size={15} />
+                                <span>{link}</span>
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              )}
+              <section className="drawer-section comment-timeline">
+                <h4>Trao đổi {!!viewing.updates?.length && <em>{viewing.updates.length}</em>}</h4>
+                {!!viewing.updates?.length && (
+                  <div className="comment-list">
+                    {viewing.updates.map((comment) => (
+                      <article className={`comment-item ${comment.author_role}`} key={comment.id}>
+                        {comment.creator_avatar_url ? (
+                          <img className="comment-avatar" src={comment.creator_avatar_url} alt={`Ảnh của ${comment.creator_name}`} />
+                        ) : (
+                          <i>{comment.creator_name?.charAt(0) || "?"}</i>
+                        )}
+                        <div>
+                          <header>
+                            <span>
+                              <b>{comment.creator_name || "Người dùng"}</b>
+                              <em>
+                                {comment.author_role === "reviewer"
+                                  ? "Người duyệt"
+                                  : comment.author_role === "assigner"
+                                    ? "Người giao việc"
+                                    : "Người thực hiện"}
+                              </em>
+                            </span>
+                            <small>{new Date(comment.created_at).toLocaleString("vi-VN")}</small>
+                          </header>
+                          {editingComment?.id === comment.id ? (
+                            <form className="comment-edit-form" onSubmit={saveComment}>
+                              <textarea name="content" required defaultValue={comment.content} rows="3" autoFocus />
+                              <div>
+                                <button type="button" className="secondary-btn" onClick={() => setEditingComment(null)}>
+                                  Hủy
+                                </button>
+                                <button className="primary-btn">Lưu nhận xét</button>
                               </div>
-                            )}
-                            <label>
-                              Điểm (tối đa{" "}
-                              {viewing.catalog_score || viewing.maximum_score})
-                              <input
-                                name="score"
-                                type="number"
-                                min="0"
-                                max={
-                                  viewing.catalog_score || viewing.maximum_score
-                                }
-                                step="0.01"
-                                defaultValue={
-                                  viewing.evaluation?.score_before_penalty ??
-                                  viewing.catalog_score ??
-                                  viewing.maximum_score
-                                }
-                                aria-invalid={Boolean(scoreError)}
-                                onChange={(event) => {
-                                  const value = Number(event.target.value) || 0;
-                                  const limit = Number(
-                                    viewing.catalog_score ||
-                                      viewing.maximum_score ||
-                                      0,
-                                  );
-                                  setScorePreview(value);
-                                  setScoreError(
-                                    value > limit
-                                      ? `Điểm không được vượt quá ${limit}.`
-                                      : "",
-                                  );
-                                }}
-                                required
-                              />
-                            </label>
-                            <small className="conversion-preview">
-                              Hệ số đạt được:{" "}
-                              <b>
-                                {viewing.catalog_score > 0
-                                  ? (
-                                      (scorePreview / viewing.catalog_score) *
-                                      viewing.conversion
-                                    ).toFixed(2)
-                                  : "0.00"}
-                              </b>
-                              {" / "}
-                              {Number(viewing.conversion || 0).toFixed(2)}
-                            </small>
-                            {viewing.late_penalty_preview?.penalty_percent >
-                              0 && (
-                              <div className="late-penalty-preview">
-                                <Clock3 size={15} />
-                                <span>
-                                  Nộp trễ{" "}
-                                  <b>
-                                    {viewing.late_penalty_preview.late_days}{" "}
-                                    ngày
-                                  </b>
-                                  : tự động trừ{" "}
-                                  <b>
-                                    {
-                                      viewing.late_penalty_preview
-                                        .penalty_percent
-                                    }
-                                    %
-                                  </b>{" "}
-                                  ={" "}
-                                  <b>
-                                    {(
-                                      (scorePreview *
-                                        viewing.late_penalty_preview
-                                          .penalty_percent) /
-                                      100
-                                    ).toFixed(2)}{" "}
-                                    điểm
-                                  </b>
-                                  . Điểm sau trừ:{" "}
-                                  <b>
-                                    {Math.max(
-                                      0,
-                                      scorePreview *
-                                        (1 -
-                                          viewing.late_penalty_preview
-                                            .penalty_percent /
-                                            100),
-                                    ).toFixed(2)}
-                                  </b>
-                                  .
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        {viewing.can_review_completion && (
-                          <div className="completion-actions">
-                            <button
-                              name="workflow_action"
-                              value="approved"
-                              className="approve-completion"
-                              disabled={workflowSaving || Boolean(scoreError)}
-                            >
-                              <CheckCircle2 size={16} /> Xác nhận hoàn thành
-                            </button>
-                            <button
-                              name="workflow_action"
-                              value="revision_required"
-                              className="revision-completion"
-                              disabled={workflowSaving || Boolean(scoreError)}
-                            >
-                              <RotateCcw size={16} /> Yêu cầu làm lại
-                            </button>
-                          </div>
-                        )}
-                        {!viewing.can_review_completion && (
-                          <button
-                            className="primary-btn"
-                            disabled={workflowSaving || Boolean(scoreError)}
-                          >
-                            <Send size={15} /> Cập nhật công việc
-                          </button>
-                        )}
-                      </form>
-                    </div>
-                  )}
-                  <section className="comment-timeline">
-                    <div className="comment-heading">
-                      <b>
-                        Trao đổi & nhận xét ({viewing.updates?.length || 0})
-                      </b>
-                      <small>
-                        Ý kiến của người nhận việc, người kiểm duyệt và người
-                        giao việc
-                      </small>
-                    </div>
-                    {viewing.updates?.length ? (
-                      <div className="comment-list">
-                        {viewing.updates.map((comment) => (
-                          <article
-                            className={`comment-item ${comment.author_role}`}
-                            key={comment.id}
-                          >
-                            {comment.creator_avatar_url ? (
-                              <img
-                                className="comment-avatar"
-                                src={comment.creator_avatar_url}
-                                alt={`Ảnh của ${comment.creator_name}`}
-                              />
-                            ) : (
-                              <i>{comment.creator_name?.charAt(0) || "?"}</i>
-                            )}
-                            <div>
-                              <header>
-                                <span>
-                                  <b>{comment.creator_name || "Người dùng"}</b>
-                                  <em>
-                                    {comment.author_role === "reviewer"
-                                      ? "Người kiểm duyệt"
-                                      : comment.author_role === "assigner"
-                                        ? "Người giao việc"
-                                        : "Người nhận việc"}
-                                  </em>
-                                </span>
-                                <small>
-                                  {new Date(comment.created_at).toLocaleString(
-                                    "vi-VN",
-                                  )}
-                                </small>
-                              </header>
-                              {editingComment?.id === comment.id ? (
-                                <form
-                                  className="comment-edit-form"
-                                  onSubmit={saveComment}
-                                >
-                                  <textarea
-                                    name="content"
-                                    required
-                                    defaultValue={comment.content}
-                                    rows="3"
-                                    autoFocus
-                                  />
-                                  <div>
-                                    <button
-                                      type="button"
-                                      className="secondary-btn"
-                                      onClick={() => setEditingComment(null)}
-                                    >
-                                      Hủy
-                                    </button>
-                                    <button className="primary-btn">
-                                      Lưu nhận xét
-                                    </button>
-                                  </div>
-                                </form>
-                              ) : (
-                                <>
-                                  <p>{comment.content}</p>
-                                  {comment.can_edit && (
-                                    <button
-                                      className="edit-comment-btn"
-                                      onClick={() => setEditingComment(comment)}
-                                    >
-                                      <Pencil size={14} /> Chỉnh sửa
-                                    </button>
-                                  )}
-                                </>
+                            </form>
+                          ) : (
+                            <>
+                              <p>{comment.content}</p>
+                              {comment.can_edit && (
+                                <button className="edit-comment-btn" onClick={() => setEditingComment(comment)}>
+                                  <Pencil size={14} /> Chỉnh sửa
+                                </button>
                               )}
-                            </div>
-                          </article>
-                        ))}
-                      </div>
-                    ) : (
-                      <p>Chưa có trao đổi hoặc nhận xét nào.</p>
-                    )}
-                  </section>
-                </aside>
-              </div>
+                            </>
+                          )}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+                <CommentComposer task={viewing} saving={workflowSaving} onComment={postComment} onDraftChange={setCommentDraft} />
+              </section>
             </div>
-          </div>
+            {viewing.can_cancel && (
+              <footer className="task-drawer-foot">
+                <button type="button" className="danger-link" disabled={workflowSaving} onClick={cancelTask}>
+                  <Trash2 size={15} /> Hủy công việc
+                </button>
+              </footer>
+            )}
+          </aside>
         </div>
       )}
       {deleting && (
@@ -1969,150 +1437,43 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
 }
 
 function CompactAssignees({ editing, refs, toggle }) {
-  const [picker, setPicker] = useState("");
-  const [search, setSearch] = useState("");
-  const [teacherDepartment, setTeacherDepartment] = useState("");
-  const pickerRef = useRef(null);
-  useEffect(() => {
-    if (!picker) return undefined;
-    const closeOnOutside = (event) => {
-      if (!pickerRef.current?.contains(event.target)) setPicker("");
-    };
-    const closeOnEscape = (event) => {
-      if (event.key === "Escape") setPicker("");
-    };
-    document.addEventListener("mousedown", closeOnOutside);
-    document.addEventListener("focusin", closeOnOutside);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("mousedown", closeOnOutside);
-      document.removeEventListener("focusin", closeOnOutside);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [picker]);
-  const teachers = refs.teachers.filter((item) =>
-    editing.teacher_ids.includes(item.id),
-  );
-  const departments = refs.departments.filter((item) =>
-    editing.department_ids.includes(item.id),
-  );
-  const options = picker === "teachers" ? refs.teachers : refs.departments;
+  const [open, setOpen] = useState(false);
+  const close = useCallback(() => setOpen(false), []);
+  const ref = useOutsideClose(open, close);
+  const teachers = refs.teachers.filter((item) => editing.teacher_ids.includes(item.id));
+  const departments = refs.departments.filter((item) => editing.department_ids.includes(item.id));
   return (
-    <div className="compact-assignees" ref={pickerRef}>
+    <div className="compact-assignees" ref={ref}>
       <div className="assignee-chip-list">
-        <button
-          type="button"
-          className="add-assignee"
-          onClick={() => {
-            setPicker(picker === "teachers" ? "" : "teachers");
-            setSearch("");
-            setTeacherDepartment("");
-          }}
-        >
-          <Plus size={16} /> Thêm giáo viên
+        <button type="button" className="add-assignee" aria-expanded={open} onClick={() => setOpen(!open)}>
+          <Plus size={16} /> Chọn tổ / nhóm / cá nhân
         </button>
-        <button
-          type="button"
-          className="add-assignee"
-          onClick={() => {
-            setPicker(picker === "departments" ? "" : "departments");
-            setSearch("");
-          }}
-        >
-          <Plus size={16} /> Thêm tổ chuyên môn
-        </button>
-        {teachers.map((item) => (
-          <button
-            type="button"
-            className="assignee-chip"
-            key={`t-${item.id}`}
-            onClick={() => toggle("teacher_ids", item.id)}
-            title="Bấm để bỏ chọn"
-          >
-            {item.avatar_url ? (
-              <img src={item.avatar_url} alt={`Ảnh của ${item.name}`} />
-            ) : (
-              <i>{item.name.charAt(0)}</i>
-            )}
-            {item.name}
+        {departments.map((item) => (
+          <button type="button" className="assignee-chip department" key={`d-${item.id}`} onClick={() => toggle("department_ids", item.id)} title={`${item.name} — bấm để bỏ chọn`}>
+            <Users size={14} />
+            {item.short_name || item.name}
             <X size={12} />
           </button>
         ))}
-        {departments.map((item) => (
-          <button
-            type="button"
-            className="assignee-chip department"
-            key={`d-${item.id}`}
-            onClick={() => toggle("department_ids", item.id)}
-            title="Bấm để bỏ chọn"
-          >
-            <Users size={14} />
+        {teachers.map((item) => (
+          <button type="button" className="assignee-chip" key={`t-${item.id}`} onClick={() => toggle("teacher_ids", item.id)} title="Bấm để bỏ chọn">
+            {item.avatar_url ? <img src={item.avatar_url} alt={`Ảnh của ${item.name}`} /> : <i>{item.name.charAt(0)}</i>}
             {item.name}
             <X size={12} />
           </button>
         ))}
       </div>
-      {picker && (
-        <div className="compact-picker">
-          <label>
-            <Search size={15} />
-            <input
-              autoFocus
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder={
-                picker === "teachers"
-                  ? "Tìm giáo viên..."
-                  : "Tìm tổ chuyên môn..."
-              }
-            />
-          </label>
-          {picker === "teachers" && (
-            <DepartmentTabs
-              departments={refs.departments}
-              value={teacherDepartment}
-              onChange={setTeacherDepartment}
-            />
-          )}
-          <div>
-            {options
-              .filter(
-                (item) =>
-                  picker !== "teachers" ||
-                  !teacherDepartment ||
-                  item.department_ids?.includes(Number(teacherDepartment)),
-              )
-              .filter((item) =>
-                `${item.name} ${item.code || ""}`
-                  .toLowerCase()
-                  .includes(search.toLowerCase()),
-              )
-              .map((item) => {
-                const field =
-                  picker === "teachers" ? "teacher_ids" : "department_ids";
-                const selected = editing[field].includes(item.id);
-                return (
-                  <button
-                    type="button"
-                    className={selected ? "selected" : ""}
-                    key={item.id}
-                    onClick={() => toggle(field, item.id)}
-                  >
-                    {item.avatar_url ? (
-                      <img src={item.avatar_url} alt={`Ảnh của ${item.name}`} />
-                    ) : (
-                      <i>{item.name.charAt(0)}</i>
-                    )}
-                    <span>
-                      {item.name}
-                      <small>{item.code}</small>
-                    </span>
-                    {selected && <CheckCircle2 size={15} />}
-                  </button>
-                );
-              })}
-          </div>
-        </div>
+      {open && (
+        <PeoplePicker
+          title="Chọn người thực hiện"
+          anchorRef={ref}
+          people={refs.teachers}
+          units={refs.departments}
+          selectedPeople={editing.teacher_ids}
+          selectedUnits={editing.department_ids}
+          onTogglePerson={(id) => toggle("teacher_ids", id)}
+          onToggleUnit={(id) => toggle("department_ids", id)}
+        />
       )}
     </div>
   );
@@ -2179,203 +1540,38 @@ export function RichTextEditor({ value, onChange, placeholder = "Mô tả nội 
   );
 }
 
-function ReviewerPicker({ reviewers, departments, value, onChange }) {
+function ReviewerPicker({ reviewers, units, value, onChange }) {
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const [reviewerDepartment, setReviewerDepartment] = useState("");
-  const pickerRef = useRef(null);
-  const searchRef = useRef(null);
-  useEffect(() => {
-    if (!open) return undefined;
-    searchRef.current?.focus({ preventScroll: true });
-    const closeOnOutside = (event) => {
-      if (!pickerRef.current?.contains(event.target)) setOpen(false);
-    };
-    const closeOnEscape = (event) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", closeOnOutside);
-    document.addEventListener("focusin", closeOnOutside);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("mousedown", closeOnOutside);
-      document.removeEventListener("focusin", closeOnOutside);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [open]);
-  const selected = reviewers.find((item) => item.id === Number(value));
+  const close = useCallback(() => setOpen(false), []);
+  const ref = useOutsideClose(open, close);
+  const selected = value.map((id) => reviewers.find((item) => item.id === id)).filter(Boolean);
+  const toggle = (id) => onChange((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
   return (
-    <div className="reviewer-picker wide" ref={pickerRef}>
-      <b>Người duyệt</b>
-      <input type="hidden" name="reviewer_id" value={value} />
+    <div className="reviewer-picker wide" ref={ref}>
+      <b>
+        Người duyệt
+      </b>
+      {selected.map((item) => (
+        <input key={item.id} type="hidden" name="reviewer_ids[]" value={item.id} />
+      ))}
       <div className="assignee-chip-list">
-        <button
-          type="button"
-          className="add-assignee"
-          aria-expanded={open}
-          onClick={() => setOpen(!open)}
-        >
-          <Plus size={16} /> {selected ? "Đổi người duyệt" : "Thêm người duyệt"}
+        <button type="button" className="add-assignee" aria-expanded={open} onClick={() => setOpen(!open)}>
+          <Plus size={16} /> {selected.length ? "Thêm / bớt người duyệt" : "Chọn người duyệt"}
         </button>
-        {selected && (
-          <button
-            type="button"
-            className="assignee-chip"
-            onClick={() => onChange("")}
-          >
-            {selected.avatar_url ? (
-              <img src={selected.avatar_url} alt={`Ảnh của ${selected.name}`} />
-            ) : (
-              <i>{selected.name.charAt(0)}</i>
-            )}
-            {selected.name}
+        {selected.map((item) => (
+          <button type="button" className="assignee-chip" key={item.id} onClick={() => toggle(item.id)} title="Bấm để bỏ chọn">
+            {item.avatar_url ? <img src={item.avatar_url} alt={`Ảnh của ${item.name}`} /> : <i>{item.name.charAt(0)}</i>}
+            {item.name}
+            {roleChips(item, null, units).slice(0, 1).map((chip) => (
+              <small key={chip.label}>{chip.label}</small>
+            ))}
             <X size={12} />
           </button>
-        )}
+        ))}
       </div>
       {open && (
-        <div className="compact-picker">
-          <label>
-            <Search size={15} />
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Tìm người duyệt..."
-              ref={searchRef}
-            />
-          </label>
-          <DepartmentTabs
-            departments={departments}
-            value={reviewerDepartment}
-            onChange={setReviewerDepartment}
-          />
-          <div>
-            {reviewers
-              .filter(
-                (item) =>
-                  !reviewerDepartment ||
-                  item.department_ids?.includes(Number(reviewerDepartment)),
-              )
-              .filter((item) =>
-                item.name.toLowerCase().includes(search.toLowerCase()),
-              )
-              .map((item) => (
-                <button
-                  type="button"
-                  className={item.id === Number(value) ? "selected" : ""}
-                  key={item.id}
-                  onClick={() => {
-                    onChange(item.id);
-                    setOpen(false);
-                  }}
-                >
-                  {item.avatar_url ? (
-                    <img src={item.avatar_url} alt={`Ảnh của ${item.name}`} />
-                  ) : (
-                    <i>{item.name.charAt(0)}</i>
-                  )}
-                  <span>{item.name}</span>
-                  {item.id === Number(value) && <CheckCircle2 size={15} />}
-                </button>
-              ))}
-          </div>
-        </div>
+        <PeoplePicker title="Chọn người duyệt" anchorRef={ref} people={reviewers} units={units} selectedPeople={value} onTogglePerson={toggle} />
       )}
-    </div>
-  );
-}
-
-function DepartmentTabs({ departments, value, onChange }) {
-  return (
-    <div className="department-picker-tabs">
-      <button
-        type="button"
-        className={!value ? "active" : ""}
-        onClick={() => onChange("")}
-      >
-        Tất cả
-      </button>
-      {departments.map((department) => (
-        <button
-          type="button"
-          className={Number(value) === department.id ? "active" : ""}
-          key={department.id}
-          onClick={() => onChange(department.id)}
-        >
-          {department.name}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function TaskTypePicker({ items, value, onChange }) {
-  const selected = items.find((item) => item.id === Number(value));
-  const [scope, setScope] = useState(selected?.scope || "school");
-  const [search, setSearch] = useState("");
-  const visible = items.filter(
-    (item) =>
-      item.scope === scope &&
-      `${item.name} ${item.product} ${item.group || ""}`
-        .toLowerCase()
-        .includes(search.toLowerCase()),
-  );
-  const changeScope = (nextScope) => {
-    setScope(nextScope);
-    setSearch("");
-    if (selected?.scope !== nextScope) onChange("");
-  };
-  return (
-    <div className="task-type-picker wide">
-      <input type="hidden" name="task_catalog_item_id" value={value} />
-      <label className="task-type-search">
-        <Search size={16} />
-        <input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Tìm kiếm loại nhiệm vụ"
-        />
-      </label>
-      <div className="task-type-tabs">
-        <button
-          type="button"
-          className={scope === "school" ? "active" : ""}
-          onClick={() => changeScope("school")}
-        >
-          Tổ chức
-        </button>
-        <button
-          type="button"
-          className={scope === "department" ? "active" : ""}
-          onClick={() => changeScope("department")}
-        >
-          Phòng ban
-        </button>
-      </div>
-      <div className="task-type-options">
-        {visible.map((item) => {
-          const checked = item.id === Number(value);
-          return (
-            <button
-              type="button"
-              className={checked ? "selected" : ""}
-              onClick={() => onChange(item.id)}
-              key={item.id}
-            >
-              <i />{" "}
-              <span>
-                <b>{item.name}</b>
-                <small>
-                  {item.group ? `${item.group} · ` : ""}
-                  {item.product}
-                </small>
-              </span>
-              {checked && <CheckCircle2 size={17} />}
-            </button>
-          );
-        })}
-        {!visible.length && <p>Không tìm thấy loại nhiệm vụ phù hợp.</p>}
-      </div>
     </div>
   );
 }
@@ -2477,9 +1673,6 @@ function FileAttachmentPicker({ editing, setEditing }) {
           </article>
         ))}
       </div>
-      {!existing.length && !(editing.pending_files || []).length && (
-        <p className="attachment-empty">Chưa có file đính kèm.</p>
-      )}
     </div>
   );
 }
@@ -2490,18 +1683,252 @@ function formatFileSize(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function formatLateDuration(totalSeconds) {
-  let remaining = Math.max(1, Math.floor(Number(totalSeconds) || 0));
-  const days = Math.floor(remaining / 86400);
-  remaining %= 86400;
-  const hours = Math.floor(remaining / 3600);
-  remaining %= 3600;
-  const minutes = Math.floor(remaining / 60);
-  const seconds = remaining % 60;
-  const parts = [];
-  if (days) parts.push(`${days} ngày`);
-  if (hours) parts.push(`${hours} giờ`);
-  if (minutes) parts.push(`${minutes} phút`);
-  if (!parts.length && seconds) parts.push(`${seconds} giây`);
-  return parts.slice(0, 2).join(" ");
+function humanSpan(ms) {
+  const minutes = Math.max(1, Math.round(Math.abs(ms) / 60000));
+  if (minutes < 60) return `${minutes} phút`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours} giờ`;
+  return `${Math.round(hours / 24)} ngày`;
+}
+
+function formatMoment(value) {
+  return new Date(value).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" });
+}
+
+function TaskTimeline({ task }) {
+  const start = task.starts_at || task.created_at;
+  const due = task.due_at ? new Date(task.due_at).getTime() : null;
+  const now = Date.now();
+  let tone = "neutral";
+  let label = "Không thời hạn";
+  if (task.status === "cancelled") {
+    label = "Đã hủy";
+  } else if (task.status === "completed") {
+    tone = task.is_late ? "warn" : "good";
+    label = task.is_late ? "Hoàn thành trễ hạn" : due ? "Hoàn thành đúng hạn" : "Đã hoàn thành";
+  } else if (due) {
+    const left = due - now;
+    tone = left < 0 ? "alert" : left <= 24 * 3600 * 1000 ? "warn" : "good";
+    label = left < 0 ? `Quá hạn ${humanSpan(left)}` : `Còn ${humanSpan(left)}`;
+  }
+  const startAt = start ? new Date(start).getTime() : null;
+  const progress = task.status === "completed" ? 100 : due && startAt && due > startAt ? Math.min(100, Math.max(0, ((now - startAt) / (due - startAt)) * 100)) : null;
+  return (
+    <section className={`task-timeline ${tone}`}>
+      <div className="task-timeline-top">
+        <div>
+          <span>Bắt đầu</span>
+          <b>{start ? formatMoment(start) : "—"}</b>
+        </div>
+        <em>
+          <CalendarClock size={14} /> {label}
+        </em>
+        <div className="end">
+          <span>Hạn hoàn thành</span>
+          <b>{task.due_at ? formatMoment(task.due_at) : "Không thời hạn"}</b>
+        </div>
+      </div>
+      {progress !== null && task.status !== "cancelled" && (
+        <div className="task-timeline-track">
+          <i style={{ width: `${progress}%` }} />
+        </div>
+      )}
+      {task.status === "completed" && task.completed_at && (
+        <p className="task-timeline-done">
+          <CheckCircle2 size={14} />
+          {task.finished_at && Math.abs(new Date(task.completed_at) - new Date(task.finished_at)) > 60000 ? (
+            <>
+              Nộp lúc <b>{formatMoment(task.finished_at)}</b> · Duyệt lúc <b>{formatMoment(task.completed_at)}</b>
+            </>
+          ) : (
+            <>
+              Hoàn thành lúc <b>{formatMoment(task.completed_at)}</b>
+            </>
+          )}
+        </p>
+      )}
+    </section>
+  );
+}
+
+const avatarTones = ["#7b68df", "#2f7fe0", "#17a871", "#e0862f", "#d14d72", "#4b9aa8"];
+
+function PersonAvatar({ person, size = 32 }) {
+  return person.avatar_url ? (
+    <img className="person-avatar" src={person.avatar_url} alt="" style={{ width: size, height: size }} />
+  ) : (
+    <i className="person-avatar" style={{ width: size, height: size, background: avatarTones[(person.id || 0) % avatarTones.length] }}>
+      {person.name?.split(" ").at(-1)?.charAt(0)}
+    </i>
+  );
+}
+
+function PersonCards({ people, empty }) {
+  if (!people.length) return <span className="person-empty">{empty}</span>;
+  return (
+    <div className="person-cards">
+      {people.map((person) => (
+        <div className="person-card" key={person.id}>
+          <PersonAvatar person={person} />
+          <div>
+            <b>{person.name}</b>
+            {person.role && <small>{person.role}</small>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function taskFormSnapshot(element, editing) {
+  if (!element || !editing) return null;
+  const values = [...new FormData(element).entries()].filter(([key, value]) => typeof value === "string" && !["description", "reviewer_ids", "teacher_ids", "department_ids", "document_ids"].includes(key.replace(/\[\]$/, "")));
+  return JSON.stringify([
+    values,
+    editing.description || "",
+    editing.reviewer_ids || [],
+    editing.assignment_mode,
+    editing.teacher_ids,
+    editing.department_ids,
+    editing.document_ids,
+    editing.pending_files?.length || 0,
+    editing.removed_attachment_ids?.length || 0,
+  ]);
+}
+
+function TaskStatusBadges({ task }) {
+  return (
+    <div className="task-status-badges">
+      <span className={`task-status ${task.status}`}>{labels.status[task.status]}</span>
+      {task.needs_revision && <span className="task-flag revision">Cần chỉnh sửa</span>}
+      {task.is_overdue && <span className="task-flag overdue">Quá hạn</span>}
+      {task.is_late && <span className="task-flag late">Hoàn thành trễ</span>}
+    </div>
+  );
+}
+
+function useDraftTracker(resetKeys, onDraftChange) {
+  const [drafts, setDrafts] = useState({});
+  useEffect(() => setDrafts({}), resetKeys); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => onDraftChange?.(Object.values(drafts).some(Boolean)), [drafts, onDraftChange]);
+  const track = (name) => ({
+    onInput: (event) => {
+      const filled = [...event.currentTarget.elements].some((el) => (el.type === "file" ? el.files?.length > 0 : el.tagName === "TEXTAREA" && el.value.trim() !== ""));
+      setDrafts((current) => ({ ...current, [name]: filled }));
+    },
+    onChange: (event) => {
+      const filled = [...event.currentTarget.elements].some((el) => (el.type === "file" ? el.files?.length > 0 : el.tagName === "TEXTAREA" && el.value.trim() !== ""));
+      setDrafts((current) => ({ ...current, [name]: filled }));
+    },
+    onReset: () => setDrafts((current) => ({ ...current, [name]: false })),
+  });
+  return [drafts, track];
+}
+
+function TaskWorkflowPanel({ task, saving, error, onStart, onSubmit, onReview, onSelfComplete, onDraftChange }) {
+  const [, track] = useDraftTracker([task.id, task.status, task.submission_count], onDraftChange);
+  const [submitOpen, setSubmitOpen] = useState(false);
+  useEffect(() => setSubmitOpen(false), [task.id, task.status]);
+  const latest = task.latest_submission;
+  const hasAction = task.can_update_progress || task.can_submit_completion || task.can_review_completion || task.can_self_complete;
+  const waiting = task.status === "waiting_approval" && !task.can_review_completion;
+  if (!hasAction && !waiting && !task.needs_revision && !error) return null;
+  return (
+    <section className="drawer-actions">
+      {error && (
+        <div className="workflow-inline-error">
+          <TriangleAlert size={17} />
+          {error}
+        </div>
+      )}
+      {task.needs_revision && latest?.review_comment && (
+        <div className="workflow-note revision">
+          <RotateCcw size={15} />
+          <span>
+            <b>Yêu cầu chỉnh sửa:</b> {latest.review_comment}
+          </span>
+        </div>
+      )}
+      {waiting && (
+        <div className="workflow-note">
+          <Clock3 size={15} />
+          <span>Đang chờ {task.reviewers?.length ? task.reviewers.map((r) => r.name).join(" hoặc ") : task.creator || "người duyệt"} xác nhận.</span>
+        </div>
+      )}
+      {task.can_review_completion && (
+        <form className="workflow-form" onSubmit={onReview} {...track("review")}>
+          <textarea name="comment" rows="2" disabled={saving} placeholder="Nhận xét gửi người thực hiện (không bắt buộc)..." />
+          <div className="drawer-action-row">
+            <button name="decision" value="approved" className="approve-completion" disabled={saving}>
+              <CheckCircle2 size={16} /> Xác nhận hoàn thành
+            </button>
+            <button name="decision" value="revision_required" className="revision-completion" disabled={saving}>
+              <RotateCcw size={16} /> Yêu cầu chỉnh sửa
+            </button>
+          </div>
+        </form>
+      )}
+      {(task.can_update_progress && task.status === "not_started") || task.can_submit_completion || task.can_self_complete ? (
+        <div className="drawer-action-row">
+          {task.can_update_progress && task.status === "not_started" && (
+            <button type="button" className="secondary-btn" disabled={saving} onClick={onStart}>
+              <Activity size={15} /> Bắt đầu thực hiện
+            </button>
+          )}
+          {task.can_submit_completion && !submitOpen && (
+            <button type="button" className="primary-btn" disabled={saving} onClick={() => setSubmitOpen(true)}>
+              <Send size={15} /> Nộp kết quả
+            </button>
+          )}
+          {task.can_self_complete && (
+            <button type="button" className="approve-completion" disabled={saving} onClick={onSelfComplete}>
+              <CheckCircle2 size={16} /> Đánh dấu hoàn thành
+            </button>
+          )}
+        </div>
+      ) : null}
+      {task.can_submit_completion && submitOpen && (
+        <form className="workflow-form submit-form" onSubmit={onSubmit} {...track("submit")}>
+          <label>
+            File kết quả
+            <input
+              name="submission_files[]"
+              type="file"
+              multiple
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.zip,.rar"
+              disabled={saving}
+            />
+          </label>
+          <label>
+            Đường link (mỗi dòng một link)
+            <textarea name="submission_links" rows="2" disabled={saving} placeholder="https://drive.google.com/..." />
+          </label>
+          <label>
+            Ghi chú
+            <textarea name="comment" rows="2" disabled={saving} placeholder="Mô tả kết quả đã làm..." />
+          </label>
+          <div className="drawer-action-row end">
+            <button type="button" className="secondary-btn" disabled={saving} onClick={() => setSubmitOpen(false)}>
+              Hủy
+            </button>
+            <button className="primary-btn" disabled={saving}>
+              <Send size={15} /> Gửi đề nghị duyệt
+            </button>
+          </div>
+        </form>
+      )}
+    </section>
+  );
+}
+
+function CommentComposer({ task, saving, onComment, onDraftChange }) {
+  const [drafts, track] = useDraftTracker([task.id], onDraftChange);
+  return (
+    <form className="comment-composer" onSubmit={onComment} {...track("comment")}>
+      <textarea name="content" rows="2" disabled={saving} placeholder="Viết trao đổi tới những người liên quan..." />
+      <button className="primary-btn" disabled={saving || !drafts.comment} title="Gửi trao đổi">
+        <Send size={15} />
+      </button>
+    </form>
+  );
 }

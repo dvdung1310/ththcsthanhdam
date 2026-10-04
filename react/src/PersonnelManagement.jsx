@@ -312,7 +312,6 @@ export default function PersonnelManagement() {
                     <th>Liên hệ</th>
                     <th>Tổ / nhóm</th>
                     <th>Vai trò</th>
-                    <th>KPI</th>
                     <th>Trạng thái</th>
                     <th>Thao tác</th>
                   </tr>
@@ -372,13 +371,6 @@ export default function PersonnelManagement() {
                             ))}
                             {!person.roles.length && <span className="muted-cell">Chưa có</span>}
                           </div>
-                        </td>
-                        <td>
-                          {person.is_teacher ? (
-                            <span className={`kpi-chip ${person.kpi >= 90 ? "high" : person.kpi >= 85 ? "medium" : "low"}`}>{person.kpi}</span>
-                          ) : (
-                            <span className="muted-cell">—</span>
-                          )}
                         </td>
                         <td>
                           <span className={`status-chip ${STATUS_TONE[status] ?? "paused"}`}>
