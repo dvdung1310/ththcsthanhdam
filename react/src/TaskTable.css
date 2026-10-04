@@ -1,0 +1,222 @@
+.task-table-toolbar {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #eff1f5;
+  color: #6d7690;
+  font-size: 12px;
+}
+
+.task-table {
+  min-width: 100%;
+}
+
+.task-table th,
+.task-table td {
+  white-space: nowrap;
+}
+
+.task-table td.task-name {
+  min-width: 220px;
+  max-width: 320px;
+  white-space: normal;
+}
+
+.task-table td.task-name b {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.task-table th:first-child,
+.task-table td:first-child,
+.task-table th:last-child,
+.task-table td:last-child {
+  position: sticky;
+  z-index: 1;
+  transition: box-shadow 0.15s ease;
+}
+
+.task-table th:first-child,
+.task-table td:first-child {
+  left: 0;
+}
+
+.task-table th:last-child,
+.task-table td:last-child {
+  right: 0;
+}
+
+.task-table td:first-child,
+.task-table td:last-child {
+  background: #fff;
+}
+
+.task-table th:first-child,
+.task-table th:last-child {
+  background: #fafbfc;
+}
+
+.task-table tbody tr:hover td:first-child,
+.task-table tbody tr:hover td:last-child {
+  background: #faf9ff;
+}
+
+.task-table-wrap.shadow-left .task-table th:first-child,
+.task-table-wrap.shadow-left .task-table td:first-child {
+  box-shadow: 10px 0 12px -8px rgba(31, 42, 72, 0.32), inset -1px 0 0 #e3e6ee;
+}
+
+.task-table-wrap.shadow-right .task-table th:last-child,
+.task-table-wrap.shadow-right .task-table td:last-child {
+  box-shadow: -10px 0 12px -8px rgba(31, 42, 72, 0.32), inset 1px 0 0 #e3e6ee;
+}
+
+.task-table .task-status-badges > * {
+  white-space: nowrap;
+}
+
+.name-stack {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 5px;
+}
+
+.name-chip {
+  max-width: 170px;
+  padding: 4px 8px;
+  display: inline-block;
+  overflow: hidden;
+  border-radius: 6px;
+  color: #3f4a66;
+  background: #f1f3f8;
+  font-size: 11px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.name-chip.unit {
+  color: #0f8a5f;
+  background: #e7f6ef;
+}
+
+.name-chip.me {
+  color: #5a3fd6;
+  background: #efebff;
+}
+
+.name-chip.more {
+  color: #5a3fd6;
+  background: #fff;
+  border: 1px solid #ddd6fe;
+  cursor: help;
+}
+
+.name-stack-empty {
+  color: #9aa1b4;
+  font-size: 11px;
+}
+
+.row-actions button.remind {
+  position: relative;
+}
+
+.row-actions button.remind em {
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  border-radius: 99px;
+  color: #fff;
+  background: #7153e3;
+  font-size: 9px;
+  font-style: normal;
+}
+
+.column-picker {
+  position: relative;
+}
+
+.column-picker > button {
+  height: 32px;
+  padding: 0 11px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #e2e6ef;
+  border-radius: 8px;
+  color: #4b5574;
+  background: #fff;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.column-picker > button.active,
+.column-picker > button:hover {
+  color: #5a3fd6;
+  border-color: #d8d1fc;
+  background: #f6f4ff;
+}
+
+.column-picker-menu {
+  width: 210px;
+  padding: 8px;
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 15;
+  display: grid;
+  gap: 2px;
+  border: 1px solid #e5e7ee;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 12px 30px rgba(31, 42, 72, 0.14);
+}
+
+.column-picker-menu label {
+  padding: 7px 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 6px;
+  color: #3f4a66;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.column-picker-menu label:hover {
+  background: #f6f7fb;
+}
+
+.column-picker-menu label.fixed {
+  color: #9aa1b4;
+  cursor: default;
+}
+
+.column-picker-menu > button {
+  margin-top: 4px;
+  padding: 7px 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-top: 1px solid #eff1f5;
+  color: #6d7690;
+  background: transparent;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.task-type-name {
+  color: #4f46b8;
+  font-weight: 700;
+}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity,
   CalendarClock,
@@ -46,10 +46,8 @@ import "./TaskComposeLayout.css";
 import "./TaskAttachmentPicker.css";
 import "./RichEditorToolbar.css";
 import "./TaskDepartmentTabs.css";
-import "./ReviewerTaskBadge.css";
 import "./TaskDetailRedesign.css";
 import "./TaskDetailHighlights.css";
-import "./TaskTableAssignees.css";
 import "./TaskAttachmentViewer.css";
 import "./TaskCompletionWorkflow.css";
 import "./ActionLoading.css";
@@ -58,6 +56,7 @@ import "./TaskComments.css";
 import "./TaskDetailSidebar.css";
 import "./TaskAvatars.css";
 import { apiFetch } from "./api";
+import { ColumnPicker, NameStack, useScrollEdges, useTaskColumns } from "./TaskTable";
 import { useConfirm } from "./ConfirmDialog";
 
 const labels = {
@@ -94,6 +93,7 @@ const emptyTask = {
 
 export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
   const confirm = useConfirm();
+  const columnState = useTaskColumns();
   const [tasks, setTasks] = useState([]),
     [meta, setMeta] = useState({
       current_page: 1,
@@ -121,6 +121,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
     [page, setPage] = useState(1),
     [perPage, setPerPage] = useState(10),
     [documentSearch, setDocumentSearch] = useState("");
+  const scrollEdges = useScrollEdges([tasks, columnState.hidden]);
   const [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
     [success, setSuccess] = useState(""),
@@ -552,127 +553,125 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
             <button onClick={loadTasks}>Thử lại</button>
           </div>
         )}
-        <div className="task-table-wrap">
-          <table>
+        <div className="task-table-toolbar">
+          <span>{meta.total} công việc</span>
+          <ColumnPicker state={columnState} />
+        </div>
+        <div ref={scrollEdges.ref} onScroll={scrollEdges.onScroll} className={`task-table-wrap ${scrollEdges.className}`}>
+          <table className="task-table">
             <thead>
               <tr>
-                <th>Công việc</th>
-                <th>Loại nhiệm vụ</th>
-                <th>Người thực hiện</th>
-                <th>Thời hạn</th>
-                <th>Ưu tiên</th>
-                <th>Trạng thái</th>
-                <th>Thao tác</th>
+                {columnState.columns.map((c) => (
+                  <th key={c.key} className={`col-${c.key}`}>{c.label}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {tasks.map((t) => (
-                <tr
-                  key={t.id}
-                  className={
-                    highlightedTaskId === t.id ? "notification-active-task" : ""
-                  }
-                >
-                  <td className="task-name">
-                    <code>{t.code}</code>
-                    <b>{t.title}</b>
-                    <small className="task-creator">
-                      Giao bởi <strong>{t.creator || "Quản trị"}</strong>
-                    </small>
-                    {t.is_reviewer && (
-                      <span className="reviewer-task-badge">
-                        <UserRoundCheck size={12} /> Bạn là người duyệt
+              {tasks.map((t) => {
+                const reminderCount = Math.max(0, ...(t.assignees || []).map((person) => Number(person.reminder_count || 0)));
+                const cells = {
+                  task: (
+                    <td className="task-name">
+                      <code>{t.code}</code>
+                      <b title={t.title}>{t.title}</b>
+                    </td>
+                  ),
+                  category: <td>{t.category ? <span className="task-type-name">{t.category}</span> : <span className="name-stack-empty">—</span>}</td>,
+                  assignees: (
+                    <td>
+                      <NameStack
+                        empty="Chưa phân công"
+                        items={[
+                          ...(t.departments || []).map((name) => ({ key: `d-${name}`, label: name.split(" › ").at(-1), title: name, kind: "unit" })),
+                          ...(t.assignees || []).filter((person) => person.direct).map((person) => ({ key: `p-${person.id}`, label: person.name })),
+                        ]}
+                      />
+                    </td>
+                  ),
+                  reviewer: (
+                    <td>
+                      {t.reviewer ? (
+                        <span className={t.is_reviewer ? "name-chip me" : "name-chip"}>{t.is_reviewer ? `${t.reviewer} (bạn)` : t.reviewer}</span>
+                      ) : (
+                        <span className="name-stack-empty">{t.is_personal ? "Tự hoàn thành" : "Người giao duyệt"}</span>
+                      )}
+                    </td>
+                  ),
+                  creator: <td><span className="name-chip">{t.creator || "Quản trị"}</span></td>,
+                  due: (
+                    <td>
+                      <span className={t.is_overdue ? "due overdue" : "due"}>
+                        <CalendarClock size={14} />
+                        {t.due_at
+                          ? new Date(t.due_at).toLocaleString("vi-VN", {
+                              dateStyle: "short",
+                              timeStyle: "short",
+                            })
+                          : "Không thời hạn"}
                       </span>
-                    )}
-                  </td>
-                  <td>
-                    <div className="task-type-cell">
-                      <span className="task-type-name">
-                        {t.category || "—"}
+                    </td>
+                  ),
+                  priority: (
+                    <td>
+                      <span className={`priority ${t.priority}`}>
+                        <i />
+                        {labels.priority[t.priority]}
                       </span>
-                    </div>
-                  </td>
-                  <td>
-                    <div className="task-assignee-names">
-                      <Users size={14} />
-                      <div>
-                        {t.assignees?.map((person) => (
-                          <span className="task-assignee-reminder" key={`person-${person.id}`}>
-                            <span>{person.name}</span>
-                          </span>
-                        ))}
-                        {t.departments?.map((department) => (
-                          <span
-                            className="department-name"
-                            key={`department-${department}`}
-                          >
-                            {department}
-                          </span>
-                        ))}
-                        {!t.assignees?.length && !t.departments?.length && (
-                          <span>Chưa phân công</span>
-                        )}
+                    </td>
+                  ),
+                  status: (
+                    <td>
+                      <TaskStatusBadges task={t} />
+                    </td>
+                  ),
+                  actions: (
+                    <td>
+                      <div className="row-actions">
+                        <button title="Xem" onClick={() => show(t)}>
+                          <Eye size={15} />
+                        </button>
                         {t.can_manage && ["not_started", "in_progress"].includes(t.status) && t.assignees?.length > 0 && (
                           <button
-                            className="group-reminder-button"
-                            type="button"
-                            title="Đưa email nhắc việc của toàn bộ nhóm vào hàng chờ"
+                            className="remind"
+                            title={`Gửi email nhắc việc cho tất cả người thực hiện${reminderCount ? ` (đã nhắc ${reminderCount} lần)` : ""}`}
                             disabled={reminding === t.id}
                             onClick={() => sendReminder(t)}
                           >
-                            <Send size={13} />
-                            {reminding === t.id ? "Đang đưa vào hàng chờ…" : "Nhắc mail cả nhóm"}
-                            {Math.max(0, ...t.assignees.map((person) => Number(person.reminder_count || 0))) > 0 && (
-                              <em>({Math.max(...t.assignees.map((person) => Number(person.reminder_count || 0)))})</em>
-                            )}
+                            <Send size={15} />
+                            {reminderCount > 0 && <em>{reminderCount}</em>}
+                          </button>
+                        )}
+                        {(t.can_manage || t.can_edit_personal) && (
+                          <button title="Sửa" onClick={() => openEdit(t)}>
+                            <Pencil size={15} />
+                          </button>
+                        )}
+                        {t.can_manage && (
+                          <button
+                            className="delete"
+                            title="Xóa"
+                            onClick={() => setDeleting(t)}
+                          >
+                            <Trash2 size={15} />
                           </button>
                         )}
                       </div>
-                    </div>
-                  </td>
-                  <td>
-                    <span className={t.is_overdue ? "due overdue" : "due"}>
-                      <CalendarClock size={14} />
-                      {t.due_at
-                        ? new Date(t.due_at).toLocaleString("vi-VN", {
-                            dateStyle: "short",
-                            timeStyle: "short",
-                          })
-                        : "Không thời hạn"}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={`priority ${t.priority}`}>
-                      <i />
-                      {labels.priority[t.priority]}
-                    </span>
-                  </td>
-                  <td>
-                    <TaskStatusBadges task={t} />
-                  </td>
-                  <td>
-                    <div className="row-actions">
-                      <button title="Xem" onClick={() => show(t)}>
-                        <Eye size={15} />
-                      </button>
-                      {(t.can_manage || t.can_edit_personal) && (
-                        <button title="Sửa" onClick={() => openEdit(t)}>
-                          <Pencil size={15} />
-                        </button>
-                      )}
-                      {t.can_manage && (
-                        <button
-                          className="delete"
-                          title="Xóa"
-                          onClick={() => setDeleting(t)}
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  ),
+                };
+                return (
+                  <tr
+                    key={t.id}
+                    className={
+                      highlightedTaskId === t.id ? "notification-active-task" : ""
+                    }
+                  >
+                    {columnState.columns.map((c) => (
+                      <Fragment key={c.key}>{cells[c.key]}</Fragment>
+                    ))}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
           {loading ? (

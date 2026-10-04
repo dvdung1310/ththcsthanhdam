@@ -132,9 +132,6 @@
 .task-table-wrap {
   overflow-x: auto;
 }
-.task-table-card table {
-  min-width: 1150px;
-}
 .task-table-card th {
   font-size: 11px;
 }
@@ -162,10 +159,6 @@
   margin-top: 5px;
   color: #75809a;
   font-size: 10px;
-}
-.task-name .task-creator strong {
-  color: #d06a0b;
-  font-weight: 700;
 }
 .assignee-count,
 .due {
