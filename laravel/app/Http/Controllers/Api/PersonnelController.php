@@ -128,8 +128,10 @@ class PersonnelController extends Controller
         $roleUnits = $user->roles()->whereNotNull('role_user.department_id')->pluck('role_user.department_id')->map(fn ($id) => (int) $id)->all();
         $managed = $actor->managedUnitIds();
         $outOfScope = $managed === null ? [] : array_diff($teacher->directUnitIds(), $managed);
-        $added = $roles === null ? [] : array_values(array_diff($roleUnits, $data['unit_ids'], $teacher->directUnitIds()));
-        $this->syncUnits($teacher, array_values(array_unique([...$data['unit_ids'], ...$roleUnits, ...$outOfScope])));
+        $units = array_values(array_unique([...$data['unit_ids'], ...$outOfScope]));
+        $missing = array_values(array_diff(array_unique($roleUnits), Department::withAncestors($units)));
+        $added = $roles === null ? [] : array_values(array_diff($missing, Department::withAncestors($teacher->directUnitIds())));
+        $this->syncUnits($teacher, [...$units, ...$missing]);
 
         return array_map(fn ($id) => Department::pathLabel((int) $id), $added);
     }

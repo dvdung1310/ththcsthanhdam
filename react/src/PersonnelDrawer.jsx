@@ -116,7 +116,11 @@ export default function PersonnelDrawer({
               (row) =>
                 roleById[row.role_id]?.scope === "unit" &&
                 row.department_id &&
-                !form.unit_ids.includes(row.department_id),
+                !form.unit_ids.some(
+                  (id) =>
+                    id === row.department_id ||
+                    units.find((unit) => unit.id === id)?.parent_id === row.department_id,
+                ),
             )
             .map((row) => row.department_id),
         ),
