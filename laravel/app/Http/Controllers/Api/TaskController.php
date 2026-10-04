@@ -7,6 +7,7 @@ use App\Events\TaskWorkflowRealtime;
 use App\Http\Controllers\Controller;
 use App\Models\Department;
 use App\Models\OfficialDocument;
+use App\Models\Role;
 use App\Models\StoredFile;
 use App\Models\Task;
 use App\Models\TaskCategory;
@@ -160,7 +161,7 @@ class TaskController extends Controller
             'reviewed_at' => $submission->reviewed_at?->toIso8601String(),
         ]);
 
-        return response()->json(['data' => [...$this->serialize($task), ...$this->abilities($request, $task), 'description' => $task->description, 'submissions' => $submissions, 'latest_submission' => $submissions->first(), 'updates' => $updates, 'attachments' => $attachments]]);
+        return response()->json(['data' => [...$this->serialize($task), ...$this->abilities($request, $task), 'creator_card' => $task->creator ? $this->personCard($task->creator) : null, 'reviewer_cards' => $task->reviewers->map(fn (User $u) => $this->personCard($u))->values(), 'description' => $task->description, 'submissions' => $submissions, 'latest_submission' => $submissions->first(), 'updates' => $updates, 'attachments' => $attachments]]);
     }
 
     public function update(Request $request, Task $task): JsonResponse
@@ -577,6 +578,19 @@ class TaskController extends Controller
     private function authorRole(Task $task, int $userId): string
     {
         return $this->isReviewer($task, $userId) ? 'reviewer' : ($userId === $task->created_by ? 'assigner' : 'assignee');
+    }
+
+    private function personCard(User $user): array
+    {
+        $order = [Role::ADMIN, Role::HIEU_TRUONG, Role::THU_KY, Role::TO_TRUONG, Role::TO_PHO, Role::NHOM_TRUONG, Role::GIAO_VIEN];
+        $role = $user->activeRoles()->sortBy(fn (Role $r) => array_search($r->code, $order, true))->first();
+        $unit = $role?->pivot->department_id ? Department::find($role->pivot->department_id)?->name : null;
+
+        return [
+            'id' => $user->id, 'name' => $user->name,
+            'avatar_url' => $user->avatar_path ? route('avatars.show', ['filename' => basename($user->avatar_path)]) : null,
+            'role' => $role ? $role->name.($unit ? ' · '.$unit : '') : null,
+        ];
     }
 
     private function isReviewer(Task $task, int $userId): bool
