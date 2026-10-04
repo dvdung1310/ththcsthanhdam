@@ -398,24 +398,9 @@
   color: #8e96aa;
   font-size: 10px;
 }
-.task-detail {
-  width: min(700px, 100%);
-  max-height: 92vh;
-  overflow: auto;
-  border-radius: 15px;
-  background: #fff;
-  box-shadow: 0 25px 70px rgba(13, 20, 45, 0.25);
-}
-.task-detail-body {
-  padding: 20px;
-}
 .detail-badges {
   display: flex;
   gap: 7px;
-}
-.task-detail h2 {
-  margin: 14px 0;
-  font-size: 20px;
 }
 .detail-progress {
   display: flex;
@@ -442,34 +427,6 @@
 .detail-progress.low>b { color:#c93648; }
 .detail-progress.medium>b { color:#6045ce; }
 .detail-progress.high>b,.detail-progress.complete>b { color:#087e4c; }
-.task-detail dl {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 9px;
-  margin: 18px 0;
-}
-.task-detail dl div {
-  padding: 10px;
-  border-radius: 8px;
-  background: #f7f8fb;
-}
-.task-detail dt {
-  color: #8f97aa;
-  font-size: 10px;
-}
-.task-detail dd {
-  margin: 5px 0 0;
-  font-weight: 600;
-}
-.task-detail section {
-  padding: 13px 0;
-  border-top: 1px solid #eceef3;
-}
-.task-detail section p {
-  margin: 7px 0;
-  color: #66718a;
-  line-height: 1.65;
-}
 .people-chips {
   display: flex;
   flex-wrap: wrap;
@@ -754,9 +711,6 @@
     grid-column: auto;
   }
   .check-list {
-    grid-template-columns: 1fr;
-  }
-  .task-detail dl {
     grid-template-columns: 1fr;
   }
 }

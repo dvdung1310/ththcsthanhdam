@@ -28,35 +28,6 @@
   background: #fff2d5;
 }
 
-.task-workflow-panel {
-  display: grid;
-  gap: 12px;
-}
-
-.task-workflow-panel .detail-update-title small {
-  display: block;
-  margin-top: 2px;
-  color: #8a92a8;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.task-workflow-panel .workflow-form {
-  margin-top: 0;
-  padding-top: 12px;
-  border-top: 1px solid #ebe8fb;
-}
-
-.task-workflow-panel .workflow-form > b {
-  color: #34405e;
-  font-size: 13px;
-}
-
-.task-workflow-panel .workflow-btn {
-  width: 100%;
-  justify-content: center;
-}
-
 .workflow-note {
   padding: 9px 11px;
   display: flex;
