@@ -270,172 +270,24 @@ const _legacyTeachers = [
   ["Hoàng Quốc Bảo", "Tổ Xã hội", "90.4", "#ffe4a8"],
 ];
 
-const initialTeacherRecords = [
-  {
-    id: 1,
-    code: "GV001",
-    name: "Nguyễn Thị Mai",
-    email: "mai.nt@thanhdam.edu.vn",
-    phone: "0912 345 678",
-    department: "Tổ Ngữ văn",
-    subject: "Ngữ văn",
-    position: "Hiệu trưởng",
-    status: "Đang làm việc",
-    kpi: 94.2,
-  },
-  {
-    id: 2,
-    code: "GV002",
-    name: "Trần Văn Nam",
-    email: "nam.tv@thanhdam.edu.vn",
-    phone: "0988 234 567",
-    department: "Tổ Toán",
-    subject: "Toán học",
-    position: "Tổ trưởng",
-    status: "Đang làm việc",
-    kpi: 96.5,
-  },
-  {
-    id: 3,
-    code: "GV003",
-    name: "Lê Minh Quân",
-    email: "quan.lm@thanhdam.edu.vn",
-    phone: "0905 111 232",
-    department: "Tổ KHTN",
-    subject: "Vật lý",
-    position: "Giáo viên",
-    status: "Đang làm việc",
-    kpi: 92.1,
-  },
-  {
-    id: 4,
-    code: "GV004",
-    name: "Phạm Thu Hà",
-    email: "ha.pt@thanhdam.edu.vn",
-    phone: "0977 420 688",
-    department: "Tổ Ngoại ngữ",
-    subject: "Tiếng Anh",
-    position: "Tổ trưởng",
-    status: "Đang làm việc",
-    kpi: 91.3,
-  },
-  {
-    id: 5,
-    code: "GV005",
-    name: "Hoàng Quốc Bảo",
-    email: "bao.hq@thanhdam.edu.vn",
-    phone: "0934 822 199",
-    department: "Tổ Xã hội",
-    subject: "Lịch sử",
-    position: "Giáo viên",
-    status: "Nghỉ phép",
-    kpi: 90.4,
-  },
-  {
-    id: 6,
-    code: "GV006",
-    name: "Vũ Thanh Hương",
-    email: "huong.vt@thanhdam.edu.vn",
-    phone: "0966 321 455",
-    department: "Tổ KHTN",
-    subject: "Sinh học",
-    position: "Giáo viên",
-    status: "Đang làm việc",
-    kpi: 88.7,
-  },
-  {
-    id: 7,
-    code: "GV007",
-    name: "Đỗ Anh Tuấn",
-    email: "tuan.da@thanhdam.edu.vn",
-    phone: "0903 734 211",
-    department: "Tổ Toán",
-    subject: "Tin học",
-    position: "Giáo viên",
-    status: "Tạm nghỉ",
-    kpi: 82.6,
-  },
-  {
-    id: 8,
-    code: "GV008",
-    name: "Bùi Ngọc Lan",
-    email: "lan.bn@thanhdam.edu.vn",
-    phone: "0918 287 613",
-    department: "Tổ Ngữ văn",
-    subject: "Ngữ văn",
-    position: "Giáo viên",
-    status: "Đang làm việc",
-    kpi: 89.8,
-  },
-  {
-    id: 9,
-    code: "GV009",
-    name: "Ngô Đức Huy",
-    email: "huy.nd@thanhdam.edu.vn",
-    phone: "0982 520 311",
-    department: "Tổ Ngoại ngữ",
-    subject: "Tiếng Anh",
-    position: "Giáo viên",
-    status: "Đang làm việc",
-    kpi: 87.9,
-  },
-  {
-    id: 10,
-    code: "GV010",
-    name: "Đặng Minh Anh",
-    email: "anh.dm@thanhdam.edu.vn",
-    phone: "0938 460 722",
-    department: "Tổ Xã hội",
-    subject: "Địa lý",
-    position: "Giáo viên",
-    status: "Đang làm việc",
-    kpi: 86.4,
-  },
-  {
-    id: 11,
-    code: "GV011",
-    name: "Phan Khánh Linh",
-    email: "linh.pk@thanhdam.edu.vn",
-    phone: "0975 317 266",
-    department: "Tổ KHTN",
-    subject: "Hóa học",
-    position: "Tổ phó",
-    status: "Đang làm việc",
-    kpi: 90.8,
-  },
-  {
-    id: 12,
-    code: "GV012",
-    name: "Lương Hoài An",
-    email: "an.lh@thanhdam.edu.vn",
-    phone: "0908 215 778",
-    department: "Tổ Toán",
-    subject: "Toán học",
-    position: "Giáo viên",
-    status: "Nghỉ phép",
-    kpi: 84.5,
-  },
-];
-
 const emptyTeacher = {
   code: "",
   name: "",
   email: "",
   phone: "",
   password: "",
-  department: "Tổ Toán",
-  position: "Giáo viên",
+  unit_ids: [],
   status: "Đang làm việc",
   kpi: 0,
 };
 
-function TeacherManagement({ canManage, canConfigure }) {
+function TeacherManagement({ canManage }) {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [keyword, setKeyword] = useState("");
-  const [department, setDepartment] = useState("Tất cả tổ");
+  const [unitFilter, setUnitFilter] = useState("");
   const [status, setStatus] = useState("Tất cả trạng thái");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -443,15 +295,11 @@ function TeacherManagement({ canManage, canConfigure }) {
   const [deleting, setDeleting] = useState(null);
   const [configuring, setConfiguring] = useState(false);
   const [managementScope, setManagementScope] = useState("school");
-  const [teacherConfig, setTeacherConfig] = useState({
-    departments: [],
-    positions: [],
+  const [unitConfig, setUnitConfig] = useState({
+    units: [],
+    can_configure: false,
   });
-  const departments = [
-    "Tất cả tổ",
-    ...teacherConfig.departments.map((item) => item.name),
-  ];
-  const positions = teacherConfig.positions.map((item) => item.name);
+  const activeUnits = unitConfig.units.filter((unit) => unit.is_active);
   const filtered = records.filter((item) => {
     const matchKeyword = [item.name, item.code, item.email]
       .join(" ")
@@ -459,7 +307,7 @@ function TeacherManagement({ canManage, canConfigure }) {
       .includes(keyword.toLowerCase());
     return (
       matchKeyword &&
-      (department === "Tất cả tổ" || item.department === department) &&
+      (unitFilter === "" || item.unit_path_ids.includes(Number(unitFilter))) &&
       (status === "Tất cả trạng thái" || item.status === status)
     );
   });
@@ -472,8 +320,8 @@ function TeacherManagement({ canManage, canConfigure }) {
   const working = records.filter(
     (item) => item.status === "Đang làm việc",
   ).length;
-  const leaders = records.filter(
-    (item) => item.position !== "Giáo viên",
+  const leaders = records.filter((item) =>
+    item.roles.some((role) => role !== "Giáo viên"),
   ).length;
   const averageKpi = records.length
     ? (
@@ -502,11 +350,11 @@ function TeacherManagement({ canManage, canConfigure }) {
 
   const loadTeacherConfig = async () => {
     try {
-      const response = await apiFetch("/api/teacher-configuration", {
+      const response = await apiFetch("/api/units", {
         headers: { Accept: "application/json" },
       });
-      if (!response.ok) throw new Error("Không thể tải cấu hình giáo viên.");
-      setTeacherConfig(await response.json());
+      if (!response.ok) throw new Error("Không thể tải danh sách tổ, nhóm.");
+      setUnitConfig(await response.json());
     } catch (error) {
       setApiError(error.message);
     }
@@ -529,13 +377,17 @@ function TeacherManagement({ canManage, canConfigure }) {
 
   const resetFilters = () => {
     setKeyword("");
-    setDepartment("Tất cả tổ");
+    setUnitFilter("");
     setStatus("Tất cả trạng thái");
     setPage(1);
   };
   const saveTeacher = async (event) => {
     event.preventDefault();
-    const data = Object.fromEntries(new FormData(event.currentTarget));
+    const form = new FormData(event.currentTarget);
+    const data = {
+      ...Object.fromEntries(form),
+      unit_ids: form.getAll("unit_ids").map(Number),
+    };
     setApiError("");
     try {
       const response = await apiFetch(
@@ -611,7 +463,7 @@ function TeacherManagement({ canManage, canConfigure }) {
           <span>
             <b>{records.length}</b>
             <small>Tổng số giáo viên</small>
-            <em>{managementScope === "department" ? "Trong tổ của bạn" : "Toàn trường"}</em>
+            <em>{managementScope === "department" ? "Trong đơn vị của bạn" : "Toàn trường"}</em>
           </span>
         </article>
         <article>
@@ -627,7 +479,7 @@ function TeacherManagement({ canManage, canConfigure }) {
           <span>
             <b>{leaders}</b>
             <small>Cán bộ quản lý</small>
-            <em>BGH, tổ trưởng, tổ phó</em>
+            <em>Hiệu trưởng, thư ký, tổ/nhóm trưởng</em>
           </span>
         </article>
         <article>
@@ -644,15 +496,15 @@ function TeacherManagement({ canManage, canConfigure }) {
         <div className="teacher-title">
           <div>
             <h2>Danh sách giáo viên</h2>
-            <p>Quản lý hồ sơ, tổ chuyên môn và trạng thái công tác</p>
+            <p>Quản lý hồ sơ, tổ/nhóm và trạng thái công tác</p>
           </div>
           <div>
-            {canConfigure && (
+            {unitConfig.can_configure && (
               <button
                 className="secondary-btn"
                 onClick={() => setConfiguring(true)}
               >
-                <Settings size={16} /> Cấu hình
+                <Settings size={16} /> Tổ, nhóm
               </button>
             )}
             <button className="secondary-btn">
@@ -662,11 +514,7 @@ function TeacherManagement({ canManage, canConfigure }) {
               <button
                 className="primary-btn"
                 onClick={() =>
-                  setEditing({
-                    ...emptyTeacher,
-                    department: departments[1] ?? "",
-                    position: positions[0] ?? "",
-                  })
+                  setEditing({ ...emptyTeacher })
                 }
               >
                 <Plus size={17} /> Thêm giáo viên
@@ -689,14 +537,17 @@ function TeacherManagement({ canManage, canConfigure }) {
           <label>
             <SlidersHorizontal size={15} />
             <select
-              value={department}
+              value={unitFilter}
               onChange={(e) => {
-                setDepartment(e.target.value);
+                setUnitFilter(e.target.value);
                 setPage(1);
               }}
             >
-              {departments.map((item) => (
-                <option key={item}>{item}</option>
+              <option value="">Tất cả tổ, nhóm</option>
+              {activeUnits.map((unit) => (
+                <option key={unit.id} value={unit.id}>
+                  {unit.label}
+                </option>
               ))}
             </select>
           </label>
@@ -729,8 +580,8 @@ function TeacherManagement({ canManage, canConfigure }) {
                 <th>Giáo viên</th>
                 <th>Mã GV</th>
                 <th>Liên hệ</th>
-                <th>Tổ chuyên môn</th>
-                <th>Chức vụ</th>
+                <th>Tổ / nhóm</th>
+                <th>Vai trò</th>
                 <th>KPI</th>
                 <th>Trạng thái</th>
                 <th>Thao tác</th>
@@ -766,7 +617,13 @@ function TeacherManagement({ canManage, canConfigure }) {
                   <td>
                     <b className="cell-main">{teacher.department}</b>
                   </td>
-                  <td>{teacher.position}</td>
+                  <td>
+                    <div className="teacher-role-chips">
+                      {teacher.roles.map((role) => (
+                        <span key={role}>{role}</span>
+                      ))}
+                    </div>
+                  </td>
                   <td>
                     <span
                       className={`kpi-chip ${teacher.kpi >= 90 ? "high" : teacher.kpi >= 85 ? "medium" : "low"}`}
@@ -925,30 +782,6 @@ function TeacherManagement({ canManage, canConfigure }) {
                   />
                 </label>
                 <label>
-                  Tổ chuyên môn
-                  <select
-                    name="department"
-                    defaultValue={editing.department}
-                    required
-                  >
-                    {departments.slice(1).map((item) => (
-                      <option key={item}>{item}</option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Chức vụ
-                  <select
-                    name="position"
-                    defaultValue={editing.position}
-                    required
-                  >
-                    {positions.map((item) => (
-                      <option key={item}>{item}</option>
-                    ))}
-                  </select>
-                </label>
-                <label>
                   Trạng thái
                   <select name="status" defaultValue={editing.status}>
                     <option>Đang làm việc</option>
@@ -957,6 +790,28 @@ function TeacherManagement({ canManage, canConfigure }) {
                   </select>
                 </label>
               </div>
+              <fieldset className="teacher-unit-picker">
+                <legend>Thuộc tổ / nhóm</legend>
+                {activeUnits.map((unit) => (
+                  <label
+                    key={unit.id}
+                    className={unit.parent_id ? "is-child" : ""}
+                  >
+                    <input
+                      type="checkbox"
+                      name="unit_ids"
+                      value={unit.id}
+                      defaultChecked={editing.unit_ids.includes(unit.id)}
+                    />
+                    {unit.name}
+                  </label>
+                ))}
+                {!activeUnits.length && <p>Chưa có tổ, nhóm nào.</p>}
+                <small>
+                  Chức vụ (tổ trưởng, nhóm trưởng...) được gán ở màn Phân
+                  quyền.
+                </small>
+              </fieldset>
               <div className="modal-actions">
                 <button
                   type="button"
@@ -974,8 +829,8 @@ function TeacherManagement({ canManage, canConfigure }) {
         </div>
       )}
       {configuring && (
-        <TeacherConfigurationModal
-          data={teacherConfig}
+        <UnitTreeModal
+          units={unitConfig.units}
           onClose={() => setConfiguring(false)}
           onChanged={async (message) => {
             await loadTeacherConfig();
@@ -1040,42 +895,41 @@ function TeacherManagement({ canManage, canConfigure }) {
   );
 }
 
-function TeacherConfigurationModal({ data, onClose, onChanged, setError }) {
-  const [tab, setTab] = useState("departments");
-  const [editingItem, setEditingItem] = useState(null);
-  const items = data[tab] ?? [];
-  const label = tab === "departments" ? "tổ chuyên môn" : "chức vụ";
-  const baseUrl =
-    tab === "departments" ? "teacher-departments" : "teacher-positions";
+function UnitTreeModal({ units, onClose, onChanged, setError }) {
+  const [editingUnit, setEditingUnit] = useState(null);
+  const roots = units.filter((unit) => !unit.parent_id);
+
+  const request = async (method, url, body) => {
+    setError("");
+    const response = await apiFetch(url, {
+      method,
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const payload = await response.json();
+    if (!response.ok)
+      throw new Error(
+        Object.values(payload.errors ?? {}).flat()[0] ?? payload.message,
+      );
+    return payload;
+  };
 
   const save = async (event) => {
     event.preventDefault();
-    setError("");
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
-    const body = { name: form.get("name") };
-    if (tab === "positions") {
-      body.is_manager = form.get("is_manager") === "on";
-      body.level = Number(form.get("level"));
-    }
+    const body = {
+      name: form.get("name"),
+      parent_id: form.get("parent_id") ? Number(form.get("parent_id")) : null,
+    };
+    if (editingUnit?.id) body.is_active = form.get("is_active") === "on";
     try {
-      const response = await apiFetch(
-        `/api/${baseUrl}${editingItem?.id ? `/${editingItem.id}` : ""}`,
-        {
-          method: editingItem?.id ? "PUT" : "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify(body),
-        },
+      const payload = await request(
+        editingUnit?.id ? "PUT" : "POST",
+        `/api/units${editingUnit?.id ? `/${editingUnit.id}` : ""}`,
+        body,
       );
-      const payload = await response.json();
-      if (!response.ok)
-        throw new Error(
-          Object.values(payload.errors ?? {}).flat()[0] ?? payload.message,
-        );
-      setEditingItem(null);
+      setEditingUnit(null);
       formElement.reset();
       await onChanged(payload.message);
     } catch (error) {
@@ -1083,131 +937,124 @@ function TeacherConfigurationModal({ data, onClose, onChanged, setError }) {
     }
   };
 
-  const remove = async (item) => {
-    if (!window.confirm(`Xóa ${label} “${item.name}”?`)) return;
-    setError("");
+  const remove = async (unit) => {
+    if (!window.confirm(`Xóa “${unit.label}”?`)) return;
     try {
-      const response = await apiFetch(`/api/${baseUrl}/${item.id}`, {
-        method: "DELETE",
-        headers: { Accept: "application/json" },
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.message);
+      const payload = await request("DELETE", `/api/units/${unit.id}`);
       await onChanged(payload.message);
     } catch (error) {
       setError(error.message);
     }
   };
 
+  const isTo = editingUnit?.id && !editingUnit.parent_id;
+
   return (
     <div className="modal-backdrop">
       <div className="teacher-config-modal">
         <div className="modal-head">
           <div>
-            <h3>Cấu hình giáo viên</h3>
-            <p>Quản lý danh mục dùng trong hồ sơ giáo viên</p>
+            <h3>Cơ cấu tổ, nhóm</h3>
+            <p>Tổ là cấp 1; nhóm là cấp 2 thuộc một tổ. Tổ có thể không có nhóm.</p>
           </div>
           <button onClick={onClose}>
             <X size={20} />
           </button>
         </div>
-        <div className="teacher-config-tabs">
-          <button
-            className={tab === "departments" ? "active" : ""}
-            onClick={() => {
-              setTab("departments");
-              setEditingItem(null);
-            }}
-          >
-            Tổ chuyên môn
-          </button>
-          <button
-            className={tab === "positions" ? "active" : ""}
-            onClick={() => {
-              setTab("positions");
-              setEditingItem(null);
-            }}
-          >
-            Chức vụ
-          </button>
-        </div>
         <form
-          className={`teacher-config-form ${tab}`}
+          className="teacher-config-form unit-form"
           onSubmit={save}
-          key={`${tab}-${editingItem?.id ?? "new"}`}
+          key={editingUnit?.id ?? editingUnit?.parent_id ?? "new"}
         >
           <label>
-            Tên {label}
+            {editingUnit?.id ? "Tên đơn vị" : "Tên tổ / nhóm mới"}
             <input
               name="name"
               required
               autoFocus
-              defaultValue={editingItem?.name ?? ""}
-              placeholder={`Nhập tên ${label}...`}
+              defaultValue={editingUnit?.name ?? ""}
+              placeholder="VD: Tổ tự nhiên, Nhóm toán..."
             />
           </label>
-          {tab === "positions" && (
-            <>
-              <label>
-                Cấp bậc (1 cao nhất, 6 thấp nhất)
-                <select name="level" defaultValue={editingItem?.level ?? 6} required>
-                  {[1, 2, 3, 4, 5, 6].map((level) => <option key={level} value={level}>Cấp {level}</option>)}
-                </select>
-              </label>
-              <label className="manager-check">
-                <input
-                  name="is_manager"
-                  type="checkbox"
-                  defaultChecked={editingItem?.is_manager ?? false}
-                />{" "}
-                Cán bộ quản lý
-              </label>
-            </>
-          )}
-          <button className="primary-btn">
-            {editingItem ? "Lưu thay đổi" : "Thêm mới"}
-          </button>
-          {editingItem && (
-            <button
-              type="button"
-              className="secondary-btn"
-              onClick={() => setEditingItem(null)}
+          <label>
+            Thuộc
+            <select
+              name="parent_id"
+              defaultValue={editingUnit?.parent_id ?? ""}
+              disabled={isTo}
             >
-              Hủy
-            </button>
+              <option value="">— Là tổ (cấp 1) —</option>
+              {roots
+                .filter((root) => root.id !== editingUnit?.id)
+                .map((root) => (
+                  <option key={root.id} value={root.id}>
+                    Nhóm thuộc {root.name}
+                  </option>
+                ))}
+            </select>
+          </label>
+          {editingUnit?.id && (
+            <label className="manager-check">
+              <input
+                name="is_active"
+                type="checkbox"
+                defaultChecked={editingUnit.is_active}
+              />{" "}
+              Đang hoạt động
+            </label>
           )}
+          <div className="unit-form-actions">
+            <button className="primary-btn">
+              {editingUnit?.id ? "Lưu thay đổi" : "Thêm mới"}
+            </button>
+            {editingUnit && (
+              <button
+                type="button"
+                className="secondary-btn"
+                onClick={() => setEditingUnit(null)}
+              >
+                Hủy
+              </button>
+            )}
+          </div>
         </form>
-        <div className="teacher-config-list">
-          {items.map((item) => (
-            <div key={item.id}>
+        <div className="teacher-config-list unit-tree">
+          {units.map((unit) => (
+            <div
+              key={unit.id}
+              className={`${unit.parent_id ? "is-child" : ""} ${unit.is_active ? "" : "is-inactive"}`}
+            >
               <span>
-                <b>{item.name}</b>
+                <b>{unit.name}</b>
                 <small>
-                  {item.code}
-                  {tab === "positions" ? ` · Cấp ${item.level}` : ""}
-                  {tab === "positions" && item.is_manager
-                    ? " · Cán bộ quản lý"
-                    : ""}
+                  {unit.parent_id ? "Nhóm" : "Tổ"} · {unit.members} giáo viên
+                  trực thuộc
+                  {unit.is_active ? "" : " · Ngưng hoạt động"}
                 </small>
               </span>
               <div>
-                <button
-                  title="Chỉnh sửa danh mục"
-                  onClick={() => setEditingItem(item)}
-                >
+                {!unit.parent_id && (
+                  <button
+                    title="Thêm nhóm vào tổ"
+                    onClick={() => setEditingUnit({ parent_id: unit.id })}
+                  >
+                    <Plus size={15} />
+                  </button>
+                )}
+                <button title="Chỉnh sửa" onClick={() => setEditingUnit(unit)}>
                   <Pencil size={15} />
                 </button>
                 <button
                   className="delete"
-                  title="Xóa danh mục"
-                  onClick={() => remove(item)}
+                  title="Xóa"
+                  onClick={() => remove(unit)}
                 >
                   <Trash2 size={15} />
                 </button>
               </div>
             </div>
           ))}
-          {!items.length && <p>Chưa có {label}.</p>}
+          {!units.length && <p>Chưa có tổ nào. Hãy thêm tổ đầu tiên.</p>}
         </div>
       </div>
     </div>
@@ -1429,10 +1276,7 @@ function App() {
         {active === "KPI & Thống kê" ? (
           <KpiReport canManage={can("kpi.manage")} onTask={(id) => { setSelectedTask({ id, token: Date.now() }); setActive("Giao việc"); }} />
         ) : active === "Quản lý giáo viên" ? (
-          <TeacherManagement
-            canManage={can("teachers.manage")}
-            canConfigure={authUser.permissions.includes("roles.manage")}
-          />
+          <TeacherManagement canManage={can("teachers.manage")} />
         ) : active === "Cấu hình giao việc" ? (
           <TaskConfiguration canManage={canConfigureTasks} />
         ) : active === "Giao việc" ? (

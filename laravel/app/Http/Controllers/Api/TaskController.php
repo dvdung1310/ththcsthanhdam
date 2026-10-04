@@ -33,20 +33,6 @@ class TaskController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $limitToAccessibleTasks = function ($query) use ($request) {
-            $managedDepartmentIds = $this->assignmentDepartmentIds($request);
-            if ($request->user()->hasPermission('tasks.assign') && $managedDepartmentIds === null) {
-                return $query;
-            }
-            $teacherId = $request->user()->teacher?->id;
-            $departmentIds = $request->user()->teacher?->departments()->wherePivotNull('ends_on')->pluck('departments.id') ?? collect();
-
-            return $query->where(fn ($q) => $q
-                ->whereHas('teachers', fn ($t) => $t->where('teachers.id', $teacherId))
-                ->orWhereHas('departments', fn ($d) => $d->whereIn('departments.id', $departmentIds))
-                ->orWhere('created_by', $request->user()->id)
-                ->orWhere('reviewer_id', $request->user()->id));
-        };
         $query = Task::with(['category', 'catalogItem', 'creator', 'reviewer', 'teachers.user', 'departments', 'documents.type', 'documents.file'])
             ->withCount(['teachers', 'departments', 'submissions'])
             ->when($request->string('search')->toString(), fn ($q, $search) => $q->where(fn ($b) => $b->where('code', 'like', "%{$search}%")->orWhere('title', 'like', "%{$search}%")->orWhere('description', 'like', "%{$search}%")))
@@ -56,7 +42,7 @@ class TaskController extends Controller
             ->when($request->string('product_type')->toString(), fn ($q, $productType) => $q->whereHas('catalogItem', fn ($item) => $item->where('product_type', $productType)))
             ->when($request->integer('department_id'), fn ($q, $department) => $q->whereHas('departments', fn ($d) => $d->where('departments.id', $department)))
             ->latest('created_at');
-        $limitToAccessibleTasks($query);
+        $this->limitToAccessible($query, $request);
         app(TaskActionFilters::class)->apply($query, $request, fn ($q) => $this->reviewQueue($q, $request));
         $perPage = min(max($request->integer('per_page', 10), 5), 100);
         $paginator = $query->paginate($perPage);
@@ -70,7 +56,7 @@ class TaskController extends Controller
 
             return [...$this->serialize($task), 'review_status' => $task->review_status, 'evaluation_score' => $evaluation ? (float) $evaluation->score : null, 'evaluation_score_before_penalty' => $evaluation ? (float) $evaluation->score_before_penalty : null, 'late_penalty' => $evaluation ? (float) $evaluation->late_penalty : 0, 'late_penalty_percent' => $evaluation ? (float) $evaluation->late_penalty_percent : 0, 'late_days' => $evaluation ? (int) $evaluation->late_days : 0, 'evaluation_max_score' => $maximumScore, 'evaluation_conversion' => $earnedConversion, 'evaluation_max_conversion' => $maximumConversion, 'is_reviewer' => $task->reviewer_id === $request->user()->id, 'can_manage' => $this->canManageTask($request, $task), 'can_review_completion' => $this->canReviewTask($request, $task), 'can_edit_personal' => $this->isPersonalTaskFor($request, $task)];
         });
-        $base = $limitToAccessibleTasks(Task::query());
+        $base = $this->limitToAccessible(Task::query(), $request);
 
         return response()->json([
             'data' => $paginator->items(),
@@ -91,18 +77,20 @@ class TaskController extends Controller
 
     public function referenceData(Request $request): JsonResponse
     {
-        $departmentIds = $this->assignmentDepartmentIds($request);
+        $user = $request->user();
+        $unitIds = $user->managedUnitIds();
+        $unitOption = fn ($unit) => ['id' => $unit['id'], 'name' => $unit['label'], 'parent_id' => $unit['parent_id'], 'type' => $unit['type']];
 
         return response()->json([
             'categories' => TaskCategory::where('is_active', true)->orderBy('name')->get(['id', 'name']),
-            'filter_teachers' => Teacher::with('user')->where('employment_status', 'working')->when($departmentIds !== null, fn ($q) => $q->where(fn ($b) => $b->where('id', $request->user()->teacher?->id ?? 0)->orWhereHas('departments', fn ($d) => $d->whereIn('departments.id', $departmentIds)->whereNull('teacher_department.ends_on'))))->get()->map(fn ($t) => ['id' => $t->id, 'name' => $t->user?->name]),
+            'filter_teachers' => Teacher::with('user')->where('employment_status', 'working')->when($unitIds !== null, fn ($q) => $q->where(fn ($b) => $b->where('id', $user->teacher?->id ?? 0)->orWhere(fn ($m) => $m->inUnits($unitIds))))->get()->map(fn ($t) => ['id' => $t->id, 'name' => $t->user?->name]),
             'catalog_items' => TaskCatalogItem::with('group:id,code,name,maximum_score')->where('publication_status', 'published')->orderBy('name')->get()->map(fn ($item) => ['id' => $item->id, 'name' => $item->name, 'product' => $item->product_type, 'score' => (float) $item->score, 'conversion' => (float) $item->conversion_factor, 'scope' => $item->scope, 'group' => $item->group?->code]),
             'product_types' => TaskCatalogItem::where('publication_status', 'published')->whereNotNull('product_type')->where('product_type', '!=', '')->distinct()->orderBy('product_type')->pluck('product_type')->values(),
             'filter_catalog_items' => TaskCatalogItem::orderBy('name')->get(['id', 'name']),
-            'filter_departments' => Department::where('is_active', true)->when($departmentIds !== null, fn ($q) => $q->whereIn('id', collect($departmentIds)->merge($request->user()->teacher?->departments()->wherePivotNull('ends_on')->pluck('departments.id') ?? collect())))->orderBy('name')->get(['id', 'name']),
-            'teachers' => Teacher::with(['user', 'departments' => fn ($q) => $q->wherePivotNull('ends_on')])->where('employment_status', 'working')->when($departmentIds !== null, fn ($q) => $q->whereHas('departments', fn ($d) => $d->whereIn('departments.id', $departmentIds)->whereNull('teacher_department.ends_on')))->orderBy('employee_code')->get()->map(fn ($t) => ['id' => $t->id, 'name' => $t->user->name, 'code' => $t->employee_code, 'avatar_url' => $t->user->avatar_path ? route('avatars.show', ['filename' => basename($t->user->avatar_path)]) : null, 'department_ids' => $t->departments->pluck('id')]),
-            'departments' => Department::where('is_active', true)->where('type', 'professional_group')->when($departmentIds !== null, fn ($q) => $q->whereIn('id', $departmentIds))->orderBy('name')->get(['id', 'name']),
-            'reviewers' => User::with(['teacher.departments' => fn ($q) => $q->wherePivotNull('ends_on')])->where('status', 'active')->orderBy('name')->get()->map(fn ($user) => ['id' => $user->id, 'name' => $user->name, 'avatar_url' => $user->avatar_path ? route('avatars.show', ['filename' => basename($user->avatar_path)]) : null, 'department_ids' => $user->teacher?->departments->pluck('id') ?? collect()]),
+            'filter_departments' => Department::ordered($unitIds === null ? null : array_values(array_unique([...$unitIds, ...$user->memberUnitIds()])))->map($unitOption)->values(),
+            'teachers' => Teacher::with(['user', 'departments' => fn ($q) => $q->wherePivotNull('ends_on')])->where('employment_status', 'working')->when($unitIds !== null, fn ($q) => $q->inUnits($unitIds))->orderBy('employee_code')->get()->map(fn ($t) => ['id' => $t->id, 'name' => $t->user->name, 'code' => $t->employee_code, 'avatar_url' => $t->user->avatar_path ? route('avatars.show', ['filename' => basename($t->user->avatar_path)]) : null, 'department_ids' => $t->unitIds()]),
+            'departments' => Department::ordered($unitIds)->map($unitOption)->values(),
+            'reviewers' => User::with(['teacher.departments' => fn ($q) => $q->wherePivotNull('ends_on')])->where('status', 'active')->orderBy('name')->get()->map(fn ($u) => ['id' => $u->id, 'name' => $u->name, 'avatar_url' => $u->avatar_path ? route('avatars.show', ['filename' => basename($u->avatar_path)]) : null, 'department_ids' => $u->teacher?->unitIds() ?? []]),
             'current_teacher' => $request->user()->teacher
                 ? ['id' => $request->user()->teacher->id, 'name' => $request->user()->name, 'avatar_url' => $request->user()->avatar_path ? route('avatars.show', ['filename' => basename($request->user()->avatar_path)]) : null]
                 : null,
@@ -125,9 +113,7 @@ class TaskController extends Controller
         if ($task->departments->isNotEmpty()) {
             $teachers = $teachers->merge(Teacher::with('user')
                 ->where('employment_status', 'working')
-                ->whereHas('departments', fn ($query) => $query
-                    ->whereIn('departments.id', $task->departments->pluck('id'))
-                    ->whereNull('teacher_department.ends_on'))
+                ->inUnits($task->departments->pluck('id'))
                 ->get());
         }
         $teachers = $teachers->unique('id')->filter(fn (Teacher $teacher) => filled($teacher->user?->email))->values();
@@ -198,9 +184,7 @@ class TaskController extends Controller
         if ($departmentIds->isNotEmpty()) {
             $departmentUsers = Teacher::with('user')
                 ->where('employment_status', 'working')
-                ->whereHas('departments', fn ($query) => $query
-                    ->whereIn('departments.id', $departmentIds)
-                    ->whereNull('teacher_department.ends_on'))
+                ->inUnits($departmentIds)
                 ->get()->pluck('user')->filter();
             $users = $users->merge($departmentUsers);
         }
@@ -226,7 +210,7 @@ class TaskController extends Controller
         $users = $task->teachers->pluck('user')->filter();
         $departmentIds = $task->departments->pluck('id');
         if ($departmentIds->isNotEmpty()) {
-            $users = $users->merge(Teacher::with('user')->where('employment_status', 'working')->whereHas('departments', fn ($query) => $query->whereIn('departments.id', $departmentIds)->whereNull('teacher_department.ends_on'))->get()->pluck('user')->filter());
+            $users = $users->merge(Teacher::with('user')->where('employment_status', 'working')->inUnits($departmentIds)->get()->pluck('user')->filter());
         }
 
         return $users;
@@ -279,8 +263,7 @@ class TaskController extends Controller
                 'reviewed_at' => $submission->reviewed_at?->toIso8601String(),
             ];
         });
-        $teacher = request()->user()->teacher;
-        $isAssignee = $teacher && ($task->teachers->contains('id', $teacher->id) || $task->departments->pluck('id')->intersect($teacher->departments()->wherePivotNull('ends_on')->pluck('departments.id'))->isNotEmpty());
+        $isAssignee = $this->isTaskAssignee(request(), $task);
         if ($task->review_status === 'waiting_approval') {
             $isAssignee = false;
         }
@@ -501,7 +484,7 @@ class TaskController extends Controller
             return response()->json(['message' => 'Đã xử lý mà không kèm nhận xét.']);
         }
         $teacher = $request->user()->teacher;
-        $isAssignee = $teacher && ($task->teachers()->where('teachers.id', $teacher->id)->exists() || $task->departments()->whereIn('departments.id', $teacher->departments()->wherePivotNull('ends_on')->pluck('departments.id'))->exists());
+        $isAssignee = $this->isTaskAssignee($request, $task);
         $task->updates()->create(['teacher_id' => $isAssignee ? $teacher->id : null, 'created_by' => $request->user()->id, 'status' => $task->status, 'content' => $data['content']]);
         $recipients = $isAssignee ? collect([$task->reviewer ?: $task->creator])->filter() : $this->assigneeUsers($task);
         $notice = $request->user()->name.' đã gửi nhận xét về công việc '.$task->title.': '.$data['content'];
@@ -534,57 +517,40 @@ class TaskController extends Controller
 
     private function ensureTaskAccess(Request $request, Task $task): void
     {
-        if ($request->user()->hasPermission('tasks.assign')) {
-            return;
-        }
-        $teacher = $request->user()->teacher;
-        $allowed = $task->reviewer_id === $request->user()->id || ($teacher && ($task->teachers()->where('teachers.id', $teacher->id)->exists()
-            || $task->departments()->whereIn('departments.id', $teacher->departments()->wherePivotNull('ends_on')->pluck('departments.id'))->exists()));
-        abort_unless($allowed, 403, 'Bạn không được phân công công việc này.');
+        abort_unless($this->limitToAccessible(Task::whereKey($task->id), $request)->exists(), 403, 'Bạn không được phân công công việc này.');
     }
 
-    /** @return array<int>|null Null means school-wide assignment access. */
-    private function assignmentDepartmentIds(Request $request): ?array
+    private function limitToAccessible($query, Request $request)
     {
         $user = $request->user();
-        if ($user->isPrincipal()) {
-            return null;
+        if ($user->isSchoolWide()) {
+            return $query;
         }
-        $hasSchoolPermission = $user->roles()->whereHas('permissions', fn ($q) => $q->where('code', 'tasks.assign'))->exists();
-        if ($hasSchoolPermission && ! $user->isDepartmentTeacherManager()) {
-            return null;
-        }
+        $managed = $user->managedUnitIds() ?? [];
+        $units = array_values(array_unique([...$user->memberUnitIds(), ...$managed]));
 
-        $teacher = $user->teacher;
-        if (! $teacher || ! $user->isDepartmentTeacherManager()) {
-            return [];
-        }
-
-        $ids = DB::table('teacher_position')->join('positions', 'positions.id', '=', 'teacher_position.position_id')
-            ->where('teacher_position.teacher_id', $teacher->id)->whereNull('teacher_position.ends_on')
-            ->whereIn('positions.name', ['Tổ trưởng', 'Tổ phó'])->whereNotNull('teacher_position.department_id')
-            ->pluck('teacher_position.department_id');
-        if ($ids->isEmpty()) {
-            $ids = $teacher->departments()->wherePivotNull('ends_on')->pluck('departments.id');
-        }
-
-        return $ids->map(fn ($id) => (int) $id)->unique()->values()->all();
+        return $query->where(fn ($q) => $q
+            ->whereHas('teachers', fn ($t) => $t->where('teachers.id', $user->teacher?->id ?? 0))
+            ->orWhereHas('departments', fn ($d) => $d->whereIn('departments.id', $units ?: [0]))
+            ->when($managed, fn ($b) => $b->orWhereHas('teachers', fn ($t) => $t->inUnits($managed)))
+            ->orWhere('created_by', $user->id)
+            ->orWhere('reviewer_id', $user->id));
     }
 
     private function ensureAssignmentScope(Request $request, array $data): void
     {
-        $departmentIds = $this->assignmentDepartmentIds($request);
-        if ($departmentIds === null) {
+        $unitIds = $request->user()->managedUnitIds();
+        if ($unitIds === null) {
             return;
         }
 
-        $requestedDepartments = collect($data['department_ids'] ?? [])->map(fn ($id) => (int) $id);
-        abort_if($requestedDepartments->diff($departmentIds)->isNotEmpty(), 403, 'Bạn chỉ được giao việc trong tổ của mình.');
+        $requestedUnits = collect($data['department_ids'] ?? [])->map(fn ($id) => (int) $id);
+        abort_if($requestedUnits->diff($unitIds)->isNotEmpty(), 403, 'Bạn chỉ được giao việc trong đơn vị mình quản lý.');
 
         $teacherIds = collect($data['teacher_ids'] ?? [])->map(fn ($id) => (int) $id);
         if ($teacherIds->isNotEmpty()) {
-            $allowedTeacherIds = Teacher::whereHas('departments', fn ($q) => $q->whereIn('departments.id', $departmentIds)->whereNull('teacher_department.ends_on'))->pluck('id');
-            abort_if($teacherIds->diff($allowedTeacherIds)->isNotEmpty(), 403, 'Bạn chỉ được giao việc cho giáo viên trong tổ của mình.');
+            $allowedTeacherIds = Teacher::inUnits($unitIds)->pluck('id');
+            abort_if($teacherIds->diff($allowedTeacherIds)->isNotEmpty(), 403, 'Bạn chỉ được giao việc cho giáo viên trong đơn vị mình quản lý.');
         }
     }
 
@@ -605,7 +571,7 @@ class TaskController extends Controller
     private function reviewQueue($query, Request $request)
     {
         $user = $request->user();
-        $departments = $user->teacher?->departments()->wherePivotNull('ends_on')->pluck('departments.id') ?? collect();
+        $departments = $user->memberUnitIds();
 
         return $query->where('review_status', 'waiting_approval')->where('status', '!=', 'cancelled')
             ->where(fn ($q) => $q->where('reviewer_id', $user->id)->orWhere(function ($b) use ($user, $departments, $request) {
@@ -647,15 +613,13 @@ class TaskController extends Controller
         if ($task->teachers->contains('id', $teacher->id)) {
             return true;
         }
-        $departmentIds = $teacher->departments()->wherePivotNull('ends_on')->pluck('departments.id');
 
-        return $task->departments->pluck('id')->intersect($departmentIds)->isNotEmpty();
+        return $task->departments->pluck('id')->intersect($teacher->unitIds())->isNotEmpty();
     }
 
     private function hasSchoolWideTaskAuthority(Request $request): bool
     {
-        return $request->user()->isPrincipal()
-            || $request->user()->roles()->whereIn('code', ['system_admin', 'school_board'])->exists();
+        return $request->user()->isSchoolWide() && $request->user()->hasPermission('tasks.assign');
     }
 
     private function isPersonalTaskFor(Request $request, Task $task): bool
@@ -737,15 +701,12 @@ class TaskController extends Controller
         if ($departmentIds->isNotEmpty()) {
             $departmentTeachers = Teacher::with('user')
                 ->where('employment_status', 'working')
-                ->whereHas('departments', fn ($query) => $query
-                    ->whereIn('departments.id', $departmentIds)
-                    ->whereNull('teacher_department.ends_on'))
+                ->inUnits($departmentIds)
                 ->get();
-            $directTeacherIds = $task->teachers->pluck('id');
-            $departmentTeachers
-                ->whereNotIn('id', $directTeacherIds)
+            $extraTeachers = $departmentTeachers
+                ->whereNotIn('id', $task->teachers->pluck('id'))
                 ->each(fn (Teacher $teacher) => $teacher->setRelation('pivot', (object) ['progress_percent' => 0]));
-            $task->setRelation('teachers', $task->teachers->merge($departmentTeachers)->unique('id')->values());
+            $task->setRelation('teachers', $task->teachers->concat($extraTeachers)->values());
         }
         $reminders = DB::table('task_reminders')
             ->where('task_id', $task->id)
@@ -754,6 +715,6 @@ class TaskController extends Controller
             ->get()
             ->keyBy('teacher_id');
 
-        return ['id' => $task->id, 'code' => $task->code, 'title' => $task->title, 'category_id' => $task->category_id, 'category' => $task->category?->name, 'task_catalog_item_id' => $task->task_catalog_item_id, 'task_type' => $task->catalogItem?->name, 'product' => $task->catalogItem?->product_type, 'priority' => $task->priority, 'status' => $task->status, 'starts_at' => $task->starts_at?->format('Y-m-d\TH:i'), 'due_at' => $task->due_at?->format('Y-m-d\TH:i'), 'maximum_score' => (float) $task->maximum_score, 'requires_approval' => $task->requires_approval, 'reviewer_id' => $task->reviewer_id, 'reviewer' => $task->reviewer?->name, 'creator' => $task->creator?->name, 'progress' => $progress, 'teacher_ids' => $task->teachers->pluck('id'), 'department_ids' => $task->departments->pluck('id'), 'document_ids' => $task->documents->pluck('id'), 'documents' => $task->documents->map(fn ($document) => ['id' => $document->id, 'document_number' => $document->document_number, 'title' => $document->title, 'issuer' => $document->issuer, 'issued_on' => $document->issued_on?->format('Y-m-d'), 'type' => $document->type?->name, 'file_name' => $document->file?->original_name, 'download_url' => $document->file ? route('documents.download', $document) : null]), 'assignees' => $task->teachers->map(fn ($t) => ['id' => $t->id, 'name' => $t->user->name, 'avatar_url' => $t->user->avatar_path ? route('avatars.show', ['filename' => basename($t->user->avatar_path)]) : null, 'progress' => (float) $t->pivot->progress_percent, 'reminder_count' => (int) ($reminders->get($t->id)?->reminder_count ?? 0), 'last_reminded_at' => $reminders->get($t->id)?->last_reminded_at]), 'departments' => $task->departments->pluck('name'), 'assignee_count' => $task->teachers_count ?? $task->teachers->count(), 'department_count' => $task->departments_count ?? $task->departments->count(), 'submission_count' => $task->submissions_count ?? 0, 'is_overdue' => $task->due_at?->isPast() && ! in_array($task->status, ['completed', 'cancelled'])];
+        return ['id' => $task->id, 'code' => $task->code, 'title' => $task->title, 'category_id' => $task->category_id, 'category' => $task->category?->name, 'task_catalog_item_id' => $task->task_catalog_item_id, 'task_type' => $task->catalogItem?->name, 'product' => $task->catalogItem?->product_type, 'priority' => $task->priority, 'status' => $task->status, 'starts_at' => $task->starts_at?->format('Y-m-d\TH:i'), 'due_at' => $task->due_at?->format('Y-m-d\TH:i'), 'maximum_score' => (float) $task->maximum_score, 'requires_approval' => $task->requires_approval, 'reviewer_id' => $task->reviewer_id, 'reviewer' => $task->reviewer?->name, 'creator' => $task->creator?->name, 'progress' => $progress, 'teacher_ids' => $task->teachers->pluck('id'), 'department_ids' => $task->departments->pluck('id'), 'document_ids' => $task->documents->pluck('id'), 'documents' => $task->documents->map(fn ($document) => ['id' => $document->id, 'document_number' => $document->document_number, 'title' => $document->title, 'issuer' => $document->issuer, 'issued_on' => $document->issued_on?->format('Y-m-d'), 'type' => $document->type?->name, 'file_name' => $document->file?->original_name, 'download_url' => $document->file ? route('documents.download', $document) : null]), 'assignees' => $task->teachers->map(fn ($t) => ['id' => $t->id, 'name' => $t->user->name, 'avatar_url' => $t->user->avatar_path ? route('avatars.show', ['filename' => basename($t->user->avatar_path)]) : null, 'progress' => (float) $t->pivot->progress_percent, 'reminder_count' => (int) ($reminders->get($t->id)?->reminder_count ?? 0), 'last_reminded_at' => $reminders->get($t->id)?->last_reminded_at]), 'departments' => $task->departments->map(fn ($d) => Department::pathLabel($d->id)), 'assignee_count' => $task->teachers_count ?? $task->teachers->count(), 'department_count' => $task->departments_count ?? $task->departments->count(), 'submission_count' => $task->submissions_count ?? 0, 'is_overdue' => $task->due_at?->isPast() && ! in_array($task->status, ['completed', 'cancelled'])];
     }
 }

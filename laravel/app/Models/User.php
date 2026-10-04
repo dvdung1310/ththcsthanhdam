@@ -2,11 +2,11 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Collection;
 
 class User extends Authenticatable
 {
@@ -54,28 +54,74 @@ class User extends Authenticatable
         ];
     }
 
-    public function roles() { return $this->belongsToMany(Role::class, 'role_user')->withPivot(['department_id','expires_at'])->withTimestamps(); }
+    private ?Collection $activeRolesCache = null;
+
+    public function roles() { return $this->belongsToMany(Role::class, 'role_user')->withPivot(['department_id', 'expires_at', 'assigned_by'])->withTimestamps(); }
     public function teacher() { return $this->hasOne(Teacher::class); }
+
+    public function activeRoles(): Collection
+    {
+        return $this->activeRolesCache ??= $this->roles()->with('permissions')
+            ->where(fn ($q) => $q->whereNull('role_user.expires_at')->orWhere('role_user.expires_at', '>', now()))
+            ->get();
+    }
+
+    public function flushAccessCache(): void
+    {
+        $this->activeRolesCache = null;
+        $this->unsetRelation('roles');
+    }
+
+    public function hasRole(string ...$codes): bool
+    {
+        return $this->activeRoles()->whereIn('code', $codes)->isNotEmpty();
+    }
+
+    public function permissionCodes(): Collection
+    {
+        return $this->activeRoles()->flatMap->permissions->pluck('code')->unique()->values();
+    }
+
     public function hasPermission(string $permission): bool
     {
-        if ($this->isPrincipal()) return true;
-        if (in_array($permission, ['teachers.manage', 'tasks.assign'], true) && $this->isDepartmentTeacherManager()) return true;
-        return $this->roles()->whereHas('permissions', fn($q) => $q->where('code',$permission))->exists();
+        return $this->permissionCodes()->contains($permission);
     }
 
-    public function isPrincipal(): bool
+    public function isSchoolWide(): bool
     {
-        return $this->teacher?->positions()
-            ->wherePivotNull('ends_on')
-            ->where('positions.code', 'HIEU_TRUONG')
-            ->exists() ?? false;
+        return $this->activeRoles()->contains(fn (Role $role) => $role->isSchoolWide());
     }
 
-    public function isDepartmentTeacherManager(): bool
+    public function accessScope(): string
     {
-        return $this->teacher?->positions()
-            ->wherePivotNull('ends_on')
-            ->whereIn('positions.name', ['Tổ trưởng', 'Tổ phó'])
-            ->exists() ?? false;
+        if ($this->isSchoolWide()) {
+            return 'school';
+        }
+
+        return $this->managedUnitIds() ? 'unit' : 'self';
+    }
+
+    public function managedUnitIds(): ?array
+    {
+        if ($this->isSchoolWide()) {
+            return null;
+        }
+        $ids = $this->activeRoles()->filter(fn (Role $role) => $role->requiresUnit())
+            ->pluck('pivot.department_id')->filter();
+
+        return Department::withDescendants($ids);
+    }
+
+    public function memberUnitIds(): array
+    {
+        return $this->teacher?->unitIds() ?? [];
+    }
+
+    public function roleLabels(): array
+    {
+        return $this->activeRoles()
+            ->sortBy(fn (Role $role) => array_search($role->code, [Role::ADMIN, Role::HIEU_TRUONG, Role::THU_KY, Role::TO_TRUONG, Role::TO_PHO, Role::NHOM_TRUONG, Role::GIAO_VIEN], true))
+            ->map(fn (Role $role) => $role->pivot->department_id ? $role->name.' — '.Department::pathLabel((int) $role->pivot->department_id) : $role->name)
+            ->values()->all();
     }
 }

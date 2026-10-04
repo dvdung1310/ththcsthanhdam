@@ -12,6 +12,14 @@ import {
 import { apiFetch } from "./api";
 import "./RoleManagement.css";
 import "./RoleDepartmentFilter.css";
+const scopeLabel = (role) =>
+  ({
+    system: "Toàn hệ thống",
+    school: "Toàn trường",
+    unit: role.unit_type === "nhom" ? "Theo nhóm" : "Theo tổ",
+    self: "Cá nhân",
+  })[role.scope] ?? "";
+
 export default function RoleManagement() {
   const [data, setData] = useState({ users: [], roles: [], departments: [] }),
     [search, setSearch] = useState(""),
@@ -50,18 +58,42 @@ export default function RoleManagement() {
           ? !u.department_ids?.length
           : u.department_ids?.includes(Number(departmentFilter)))),
   );
-  const toggle = (id) =>
+  const unitsFor = (role) =>
+    data.departments.filter((d) => d.type === role.unit_type);
+  const toggle = (role) =>
     setEditing((c) => ({
       ...c,
-      role_ids: c.role_ids.includes(id)
-        ? c.role_ids.filter((x) => x !== id)
-        : [...c.role_ids, id],
+      assignments: c.assignments.some((a) => a.role_id === role.id)
+        ? c.assignments.filter((a) => a.role_id !== role.id)
+        : [...c.assignments, { role_id: role.id, department_id: "" }],
     }));
+  const setUnit = (index, departmentId) =>
+    setEditing((c) => ({
+      ...c,
+      assignments: c.assignments.map((a, i) =>
+        i === index ? { ...a, department_id: departmentId } : a,
+      ),
+    }));
+  const addUnit = (role) =>
+    setEditing((c) => ({
+      ...c,
+      assignments: [...c.assignments, { role_id: role.id, department_id: "" }],
+    }));
+  const removeAssignment = (index) =>
+    setEditing((c) => ({
+      ...c,
+      assignments: c.assignments.filter((_, i) => i !== index),
+    }));
+  const missingUnit = editing?.assignments.some(
+    (a) =>
+      data.roles.find((r) => r.id === a.role_id)?.scope === "unit" &&
+      !a.department_id,
+  );
   const save = async () => {
     try {
-      const roles = editing.role_ids.map((role_id) => ({
-          role_id,
-          department_id: editing.department_id || null,
+      const roles = editing.assignments.map((a) => ({
+          role_id: a.role_id,
+          department_id: a.department_id || null,
         })),
         r = await apiFetch(`/api/users/${editing.id}/roles`, {
           method: "PUT",
@@ -130,7 +162,7 @@ export default function RoleManagement() {
         <div className="role-heading">
           <div>
             <h2>Phân quyền tài khoản</h2>
-            <p>Gán vai trò và phạm vi tổ chuyên môn cho từng người dùng</p>
+            <p>Gán vai trò và tổ/nhóm phụ trách cho từng người dùng</p>
           </div>
           <div className="role-filters">
             <label>
@@ -147,13 +179,13 @@ export default function RoleManagement() {
                 value={departmentFilter}
                 onChange={(e) => setDepartmentFilter(e.target.value)}
               >
-                <option value="">Tất cả bộ phận / tổ</option>
+                <option value="">Tất cả tổ, nhóm</option>
                 {data.departments.map((department) => (
                   <option value={department.id} key={department.id}>
                     {department.name}
                   </option>
                 ))}
-                <option value="unassigned">Chưa phân bộ phận / tổ</option>
+                <option value="unassigned">Chưa thuộc tổ, nhóm</option>
               </select>
             </label>
           </div>
@@ -194,7 +226,7 @@ export default function RoleManagement() {
                   <td>
                     <div className="role-chips">
                       {u.roles.map((r) => (
-                        <span key={r.id}>{r.name}</span>
+                        <span key={`${r.id}-${r.department_id}`}>{r.label}</span>
                       ))}
                     </div>
                   </td>
@@ -213,10 +245,10 @@ export default function RoleManagement() {
                       onClick={() =>
                         setEditing({
                           ...u,
-                          role_ids: u.roles.map((r) => r.id),
-                          department_id:
-                            u.roles.find((r) => r.department_id)
-                              ?.department_id || "",
+                          assignments: u.roles.map((r) => ({
+                            role_id: r.id,
+                            department_id: r.department_id ?? "",
+                          })),
                         })
                       }
                     >
@@ -244,48 +276,80 @@ export default function RoleManagement() {
               </button>
             </div>
             <div className="role-modal-body">
-              <label className="scope-select">
-                Phạm vi tổ chuyên môn
-                <select
-                  value={editing.department_id}
-                  onChange={(e) =>
-                    setEditing((c) => ({
-                      ...c,
-                      department_id: e.target.value ? +e.target.value : "",
-                    }))
-                  }
-                >
-                  <option value="">Toàn trường / Không giới hạn tổ</option>
-                  {data.departments.map((d) => (
-                    <option value={d.id} key={d.id}>
-                      {d.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
               <div className="role-options">
-                {data.roles.map((role) => (
-                  <label
-                    className={
-                      editing.role_ids.includes(role.id) ? "selected" : ""
-                    }
-                    key={role.id}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={editing.role_ids.includes(role.id)}
-                      onChange={() => toggle(role.id)}
-                    />
-                    <span>
-                      <b>{role.name}</b>
-                      <small>
-                        {role.description ||
-                          role.permissions.map((p) => p.name).join(" · ")}
-                      </small>
-                      <em>{role.permissions.length} quyền</em>
-                    </span>
-                  </label>
-                ))}
+                {data.roles.map((role) => {
+                  const rows = editing.assignments
+                    .map((a, index) => ({ ...a, index }))
+                    .filter((a) => a.role_id === role.id);
+                  const checked = rows.length > 0;
+                  return (
+                    <div
+                      className={`role-option ${checked ? "selected" : ""}`}
+                      key={role.id}
+                    >
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggle(role)}
+                        />
+                        <span>
+                          <b>{role.name}</b>
+                          <small>
+                            {scopeLabel(role)} ·{" "}
+                            {role.description ||
+                              role.permissions.map((p) => p.name).join(" · ")}
+                          </small>
+                          <em>{role.permissions.length} quyền</em>
+                        </span>
+                      </label>
+                      {checked && role.scope === "unit" && (
+                        <div className="role-units">
+                          {rows.map((row) => (
+                            <div key={row.index}>
+                              <select
+                                value={row.department_id}
+                                onChange={(e) =>
+                                  setUnit(
+                                    row.index,
+                                    e.target.value ? +e.target.value : "",
+                                  )
+                                }
+                              >
+                                <option value="">
+                                  {role.unit_type === "nhom"
+                                    ? "Chọn nhóm..."
+                                    : "Chọn tổ..."}
+                                </option>
+                                {unitsFor(role).map((d) => (
+                                  <option value={d.id} key={d.id}>
+                                    {d.name}
+                                  </option>
+                                ))}
+                              </select>
+                              {rows.length > 1 && (
+                                <button
+                                  type="button"
+                                  title="Bỏ đơn vị này"
+                                  onClick={() => removeAssignment(row.index)}
+                                >
+                                  <X size={14} />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                          <button
+                            type="button"
+                            className="role-add-unit"
+                            onClick={() => addUnit(role)}
+                          >
+                            + Thêm {role.unit_type === "nhom" ? "nhóm" : "tổ"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
               <div className="modal-actions">
                 <button
@@ -296,7 +360,7 @@ export default function RoleManagement() {
                 </button>
                 <button
                   className="primary-btn"
-                  disabled={!editing.role_ids.length}
+                  disabled={missingUnit}
                   onClick={save}
                 >
                   Lưu phân quyền

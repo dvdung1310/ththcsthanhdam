@@ -67,6 +67,12 @@ return [
 
     'timezone' => env('APP_TIMEZONE', 'Asia/Ho_Chi_Minh'),
 
+    'admin' => [
+        'name' => env('ADMIN_NAME', 'Quản trị viên'),
+        'email' => env('ADMIN_EMAIL', 'admin@thanhdam.edu.vn'),
+        'password' => env('ADMIN_PASSWORD'),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Application Locale Configuration

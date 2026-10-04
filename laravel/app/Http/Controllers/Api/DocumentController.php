@@ -56,7 +56,7 @@ class DocumentController extends Controller
             ],
             'filters' => ['types' => DocumentType::orderBy('name')->pluck('name')],
             'folders' => DocumentFolder::withCount(['documents', 'children'])->orderBy('name')->get(['id', 'parent_id', 'name', 'created_by']),
-            'can_see_all' => $request->user()->isPrincipal() || $request->user()->roles()->where('code', 'system_admin')->exists(),
+            'can_see_all' => $request->user()->isSchoolWide(),
         ]);
     }
 

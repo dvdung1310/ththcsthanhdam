@@ -15,11 +15,10 @@ class TaskConfigurationController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $this->ensureConfigurationAccess($request);
         return response()->json([
             'groups' => TaskGroup::orderBy('code')->get(),
             'catalog_items' => TaskCatalogItem::with(['group:id,code,name,maximum_score', 'department:id,name', 'users:id,name'])->latest()->get(),
-            'departments' => Department::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'departments' => Department::ordered()->map(fn ($unit) => ['id' => $unit['id'], 'name' => $unit['label']])->values(),
             'users' => User::where('status', 'active')->orderBy('name')->get(['id', 'name']),
             'late_penalty_rules' => LatePenaltyRule::orderBy('from_day')->get(),
         ]);
@@ -27,42 +26,36 @@ class TaskConfigurationController extends Controller
 
     public function storeLatePenaltyRule(Request $request): JsonResponse
     {
-        $this->ensureConfigurationAccess($request);
         $rule = LatePenaltyRule::create($this->validateLatePenaltyRule($request));
         return response()->json(['message' => 'Đã thêm mức trừ điểm hoàn thành muộn.', 'data' => $rule], 201);
     }
 
     public function updateLatePenaltyRule(Request $request, LatePenaltyRule $latePenaltyRule): JsonResponse
     {
-        $this->ensureConfigurationAccess($request);
         $latePenaltyRule->update($this->validateLatePenaltyRule($request, $latePenaltyRule));
         return response()->json(['message' => 'Đã cập nhật mức trừ điểm hoàn thành muộn.', 'data' => $latePenaltyRule]);
     }
 
     public function destroyLatePenaltyRule(Request $request, LatePenaltyRule $latePenaltyRule): JsonResponse
     {
-        $this->ensureConfigurationAccess($request);
         $latePenaltyRule->delete();
         return response()->json(['message' => 'Đã xóa mức trừ điểm hoàn thành muộn.']);
     }
 
     public function storeGroup(Request $request): JsonResponse
     {
-        $this->ensureConfigurationAccess($request);
         $group = TaskGroup::create($this->validateGroup($request));
         return response()->json(['message' => 'Đã thêm phân nhóm nhiệm vụ.', 'data' => $group], 201);
     }
 
     public function updateGroup(Request $request, TaskGroup $taskGroup): JsonResponse
     {
-        $this->ensureConfigurationAccess($request);
         $taskGroup->update($this->validateGroup($request, $taskGroup));
         return response()->json(['message' => 'Đã cập nhật phân nhóm nhiệm vụ.', 'data' => $taskGroup]);
     }
 
     public function destroyGroup(Request $request, TaskGroup $taskGroup): JsonResponse
     {
-        $this->ensureConfigurationAccess($request);
         if ($taskGroup->catalogItems()->exists()) return response()->json(['message' => 'Nhóm đang được sử dụng trong danh mục nhiệm vụ.'], 422);
         $taskGroup->delete();
         return response()->json(['message' => 'Đã xóa phân nhóm nhiệm vụ.']);
@@ -70,7 +63,6 @@ class TaskConfigurationController extends Controller
 
     public function storeItem(Request $request): JsonResponse
     {
-        $this->ensureConfigurationAccess($request);
         $data = $this->validateItem($request);
         $userIds = $data['user_ids'] ?? [];
         unset($data['user_ids']);
@@ -81,7 +73,6 @@ class TaskConfigurationController extends Controller
 
     public function updateItem(Request $request, TaskCatalogItem $taskCatalogItem): JsonResponse
     {
-        $this->ensureConfigurationAccess($request);
         $data = $this->validateItem($request);
         $userIds = $data['user_ids'] ?? [];
         unset($data['user_ids']);
@@ -92,7 +83,6 @@ class TaskConfigurationController extends Controller
 
     public function destroyItem(Request $request, TaskCatalogItem $taskCatalogItem): JsonResponse
     {
-        $this->ensureConfigurationAccess($request);
         $taskCatalogItem->delete();
         return response()->json(['message' => 'Đã xóa nhiệm vụ khỏi danh mục.']);
     }
@@ -108,10 +98,6 @@ class TaskConfigurationController extends Controller
         ]);
     }
 
-    private function ensureConfigurationAccess(Request $request): void
-    {
-        abort_unless($request->user()->isPrincipal() || $request->user()->roles()->whereIn('code',['system_admin','school_board','department_leader'])->exists(),403,'Bạn không có quyền thay đổi cấu hình giao việc.');
-    }
 
     private function validateItem(Request $request): array
     {

@@ -11,7 +11,7 @@ class DocumentSeeder extends Seeder
 {
     public function run(): void
     {
-        $admin = User::where('email', 'admin@thanhdam.edu.vn')->firstOrFail();
+        $admin = User::where('email', config('app.admin.email'))->firstOrFail();
         $records = [
             ['123/PGDĐT-GDTHCS','Hướng dẫn thực hiện nhiệm vụ giáo dục THCS năm học 2026-2027','Hướng dẫn','Phòng Giáo dục và Đào tạo','2026-08-25','incoming','active'],
             ['58/KH-THCSTĐ','Kế hoạch tổ chức khai giảng năm học 2026-2027','Kế hoạch','Trường THCS Thanh Đạm','2026-08-22','outgoing','active'],
