@@ -654,6 +654,17 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                     </td>
                   ),
                   creator: <td><span className="name-chip">{t.creator || "Quản trị"}</span></td>,
+                  completed: (
+                    <td>
+                      {t.status === "completed" && t.completed_at ? (
+                        <span className={t.is_late ? "done-at late" : "done-at"} title={t.finished_at ? `Nộp lúc ${formatMoment(t.finished_at)}` : undefined}>
+                          {formatMoment(t.completed_at)}
+                        </span>
+                      ) : (
+                        <span className="name-stack-empty">—</span>
+                      )}
+                    </td>
+                  ),
                   due: (
                     <td>
                       <span className={t.is_overdue ? "due overdue" : "due"}>
@@ -1288,9 +1299,19 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                             <strong>{submission.submitter}</strong>
                             <span>Lần nộp {submission.version}</span>
                           </div>
-                          <small>{new Date(submission.submitted_at).toLocaleString("vi-VN")}</small>
+                          <small>Nộp {formatMoment(submission.submitted_at)}</small>
                         </header>
                         {submission.result_content && <p>{submission.result_content}</p>}
+                        {submission.status !== "submitted" && submission.reviewed_at && (
+                          <div className={`submission-review ${submission.status}`}>
+                            {submission.status === "approved" ? <CheckCircle2 size={14} /> : <RotateCcw size={14} />}
+                            <span>
+                              {submission.status === "approved" ? "Được duyệt" : "Yêu cầu chỉnh sửa"}
+                              {submission.reviewer && <> bởi <b>{submission.reviewer}</b></>} · {formatMoment(submission.reviewed_at)}
+                              {submission.review_comment && <em>“{submission.review_comment}”</em>}
+                            </span>
+                          </div>
+                        )}
                         {!!submission.files?.length && (
                           <div className="submission-resources">
                             {submission.files.map((file) => (
@@ -1711,6 +1732,20 @@ function TaskTimeline({ task }) {
         <div className="task-timeline-track">
           <i style={{ width: `${progress}%` }} />
         </div>
+      )}
+      {task.status === "completed" && task.completed_at && (
+        <p className="task-timeline-done">
+          <CheckCircle2 size={14} />
+          {task.finished_at && Math.abs(new Date(task.completed_at) - new Date(task.finished_at)) > 60000 ? (
+            <>
+              Nộp lúc <b>{formatMoment(task.finished_at)}</b> · Duyệt lúc <b>{formatMoment(task.completed_at)}</b>
+            </>
+          ) : (
+            <>
+              Hoàn thành lúc <b>{formatMoment(task.completed_at)}</b>
+            </>
+          )}
+        </p>
       )}
     </section>
   );

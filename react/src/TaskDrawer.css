@@ -537,3 +537,54 @@
     gap: 6px;
   }
 }
+
+.task-timeline-done {
+  margin: 12px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #3f4a66;
+  font-size: 12px;
+}
+
+.task-timeline-done svg {
+  flex: none;
+  color: #17a871;
+}
+
+.task-timeline.warn .task-timeline-done svg {
+  color: #d58a1a;
+}
+
+.submission-review {
+  margin-top: 10px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.submission-review svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.submission-review em {
+  display: block;
+  margin-top: 2px;
+  color: inherit;
+  opacity: 0.85;
+}
+
+.submission-review.approved {
+  color: #0f7a54;
+  background: #e8f7ef;
+}
+
+.submission-review.revision_required {
+  color: #b33b46;
+  background: #fdeef0;
+}

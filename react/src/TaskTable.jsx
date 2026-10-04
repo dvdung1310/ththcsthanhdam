@@ -9,6 +9,7 @@ export const TASK_COLUMNS = [
   { key: "reviewer", label: "Người duyệt" },
   { key: "creator", label: "Người tạo", hidden: true },
   { key: "due", label: "Thời hạn" },
+  { key: "completed", label: "Hoàn thành lúc", hidden: true },
   { key: "priority", label: "Ưu tiên" },
   { key: "status", label: "Trạng thái", fixed: true },
   { key: "actions", label: "Thao tác", fixed: true },
@@ -16,19 +17,23 @@ export const TASK_COLUMNS = [
 
 const STORAGE_KEY = "thanhdam_task_columns";
 const defaultHidden = TASK_COLUMNS.filter((c) => c.hidden).map((c) => c.key);
+const LEGACY_KEYS = ["task", "category", "assignees", "reviewer", "creator", "due", "priority", "status", "actions"];
 
 export function useTaskColumns() {
   const [hidden, setHidden] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-      if (Array.isArray(saved)) return saved;
+      const legacy = Array.isArray(saved);
+      const list = legacy ? saved : saved?.hidden;
+      if (!Array.isArray(list)) return defaultHidden;
+      const seen = legacy ? LEGACY_KEYS : saved.seen || [];
+      return [...list, ...defaultHidden.filter((key) => !seen.includes(key) && !list.includes(key))];
     } catch {
       return defaultHidden;
     }
-    return defaultHidden;
   });
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(hidden));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ hidden, seen: TASK_COLUMNS.map((c) => c.key) }));
   }, [hidden]);
   const columns = TASK_COLUMNS.filter((c) => c.fixed || !hidden.includes(c.key));
   return {

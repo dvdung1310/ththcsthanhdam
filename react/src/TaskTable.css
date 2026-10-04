@@ -325,3 +325,13 @@
   font-style: normal;
   font-weight: 700;
 }
+
+.done-at {
+  color: #0f8a5f;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.done-at.late {
+  color: #b45309;
+}
