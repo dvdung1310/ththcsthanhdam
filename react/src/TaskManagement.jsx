@@ -122,6 +122,10 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
     [perPage, setPerPage] = useState(10),
     [documentSearch, setDocumentSearch] = useState("");
   const scrollEdges = useScrollEdges([tasks, columnState.hidden]);
+  const formRef = useRef(null);
+  const [formBaseline, setFormBaseline] = useState(null);
+  const [, setFormTick] = useState(0);
+  const [viewDraft, setViewDraft] = useState(false);
   const [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
     [success, setSuccess] = useState(""),
@@ -477,6 +481,39 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
     if (await runWorkflow("comments", { json: { content } }, "Không thể gửi trao đổi."))
       formElement.reset();
   };
+  useEffect(() => {
+    if (editing && formBaseline === null && formRef.current) setFormBaseline(taskFormSnapshot(formRef.current, editing));
+    if (!editing && formBaseline !== null) setFormBaseline(null);
+  }, [editing, formBaseline]);
+  const formDirty = formBaseline !== null && taskFormSnapshot(formRef.current, editing) !== formBaseline;
+  const formMissing = editing
+    ? [
+        !formRef.current?.elements.title?.value.trim() && "tên công việc",
+        editing.assignment_mode !== "self" && !editing.teacher_ids.length && !editing.department_ids.length && "người thực hiện",
+      ].filter(Boolean)
+    : [];
+  const formBlocked = formMissing.length
+    ? `Còn thiếu: ${formMissing.join(", ")}`
+    : editing?.id && !formDirty
+      ? "Chưa có thay đổi"
+      : "";
+  const discardChanges = (message) =>
+    confirm({
+      tone: "warning",
+      title: "Bỏ các thay đổi chưa lưu?",
+      message,
+      confirmText: "Bỏ thay đổi",
+      cancelText: "Tiếp tục chỉnh sửa",
+    });
+  const requestCloseEdit = async () => {
+    if (formDirty && !(await discardChanges("Nội dung bạn vừa nhập cho công việc này sẽ không được lưu."))) return;
+    setEditing(null);
+  };
+  const requestCloseView = async () => {
+    if (viewDraft && !(await discardChanges("Kết quả, nhận xét hoặc trao đổi bạn đang nhập sẽ không được gửi."))) return;
+    setViewDraft(false);
+    setViewing(null);
+  };
   const toggle = (field, id) =>
     setEditing((c) => ({
       ...c,
@@ -748,11 +785,11 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                 </h3>
                 <p>Thông tin rõ ràng giúp giáo viên hoàn thành đúng yêu cầu</p>
               </div>
-              <button onClick={() => setEditing(null)}>
+              <button onClick={requestCloseEdit}>
                 <X size={20} />
               </button>
             </div>
-            <form onSubmit={save}>
+            <form ref={formRef} onSubmit={save} onInput={() => setFormTick((tick) => tick + 1)} onChange={() => setFormTick((tick) => tick + 1)}>
               <div className="task-compose-body">
                 <div className="task-compose-main">
                   <div className="task-form-section content-section">
@@ -982,11 +1019,11 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                 <button
                   type="button"
                   className="secondary-btn"
-                  onClick={() => setEditing(null)}
+                  onClick={requestCloseEdit}
                 >
                   Hủy bỏ
                 </button>
-                <button className="primary-btn" disabled={saving}>
+                <button className="primary-btn" disabled={saving || !!formBlocked} title={formBlocked || undefined}>
                   <Send size={15} />
                   {saving
                     ? "Đang lưu..."
@@ -1009,7 +1046,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                 <h3>Chi tiết công việc</h3>
                 <p>{viewing.code}</p>
               </div>
-              <button onClick={() => setViewing(null)}>
+              <button onClick={requestCloseView}>
                 <X size={20} />
               </button>
             </div>
@@ -1329,6 +1366,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                     onSelfComplete={selfComplete}
                     onCancel={cancelTask}
                     onComment={postComment}
+                    onDraftChange={setViewDraft}
                   />
                   <section className="comment-timeline">
                     <div className="comment-heading">
@@ -1708,6 +1746,20 @@ function formatFileSize(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function taskFormSnapshot(element, editing) {
+  if (!element || !editing) return null;
+  const values = [...new FormData(element).entries()].filter(([, value]) => typeof value === "string");
+  return JSON.stringify([
+    values,
+    editing.assignment_mode,
+    editing.teacher_ids,
+    editing.department_ids,
+    editing.document_ids,
+    editing.pending_files?.length || 0,
+    editing.removed_attachment_ids?.length || 0,
+  ]);
+}
+
 function TaskStatusBadges({ task }) {
   return (
     <div className="task-status-badges">
@@ -1719,7 +1771,17 @@ function TaskStatusBadges({ task }) {
   );
 }
 
-function TaskWorkflowPanel({ task, saving, error, onStart, onSubmit, onReview, onSelfComplete, onCancel, onComment }) {
+function TaskWorkflowPanel({ task, saving, error, onStart, onSubmit, onReview, onSelfComplete, onCancel, onComment, onDraftChange }) {
+  const [drafts, setDrafts] = useState({});
+  useEffect(() => setDrafts({}), [task.id, task.status, task.submission_count]);
+  useEffect(() => onDraftChange?.(Object.values(drafts).some(Boolean)), [drafts, onDraftChange]);
+  const track = (name) => ({
+    onInput: (event) => {
+      const filled = [...event.currentTarget.elements].some((el) => (el.type === "file" ? el.files?.length > 0 : el.tagName === "TEXTAREA" && el.value.trim() !== ""));
+      setDrafts((current) => ({ ...current, [name]: filled }));
+    },
+    onReset: () => setDrafts((current) => ({ ...current, [name]: false })),
+  });
   const latest = task.latest_submission;
   return (
     <div className="detail-update-sidebar task-workflow-panel">
@@ -1752,7 +1814,7 @@ function TaskWorkflowPanel({ task, saving, error, onStart, onSubmit, onReview, o
         </button>
       )}
       {task.can_submit_completion && (
-        <form className="workflow-form" onSubmit={onSubmit}>
+        <form className="workflow-form" onSubmit={onSubmit} onChange={track("submit").onInput} {...track("submit")}>
           <b>Nộp kết quả & đề nghị duyệt</b>
           <label>
             File kết quả (có thể chọn nhiều)
@@ -1772,7 +1834,7 @@ function TaskWorkflowPanel({ task, saving, error, onStart, onSubmit, onReview, o
             Ghi chú
             <textarea name="comment" rows="3" disabled={saving} placeholder="Mô tả kết quả đã làm..." />
           </label>
-          <button className="primary-btn workflow-btn" disabled={saving}>
+          <button className="primary-btn workflow-btn" disabled={saving || !drafts.submit} title={drafts.submit ? undefined : "Thêm file, link hoặc ghi chú kết quả"}>
             <Send size={15} /> Nộp & đề nghị duyệt
           </button>
         </form>
@@ -1784,7 +1846,7 @@ function TaskWorkflowPanel({ task, saving, error, onStart, onSubmit, onReview, o
         </div>
       )}
       {task.can_review_completion && (
-        <form className="workflow-form" onSubmit={onReview}>
+        <form className="workflow-form" onSubmit={onReview} {...track("review")}>
           <b>Duyệt kết quả</b>
           <label>
             Nhận xét
@@ -1794,7 +1856,7 @@ function TaskWorkflowPanel({ task, saving, error, onStart, onSubmit, onReview, o
             <button name="decision" value="approved" className="approve-completion" disabled={saving}>
               <CheckCircle2 size={16} /> Xác nhận hoàn thành
             </button>
-            <button name="decision" value="revision_required" className="revision-completion" disabled={saving}>
+            <button name="decision" value="revision_required" className="revision-completion" disabled={saving || !drafts.review} title={drafts.review ? undefined : "Nhập nhận xét để người thực hiện biết cần sửa gì"}>
               <RotateCcw size={16} /> Yêu cầu chỉnh sửa
             </button>
           </div>
@@ -1805,12 +1867,12 @@ function TaskWorkflowPanel({ task, saving, error, onStart, onSubmit, onReview, o
           <CheckCircle2 size={16} /> Đánh dấu hoàn thành
         </button>
       )}
-      <form className="workflow-form comment-form" onSubmit={onComment}>
+      <form className="workflow-form comment-form" onSubmit={onComment} {...track("comment")}>
         <label>
           Trao đổi
           <textarea name="content" rows="2" disabled={saving} placeholder="Gửi ý kiến tới những người liên quan..." />
         </label>
-        <button className="secondary-btn workflow-btn" disabled={saving}>
+        <button className="secondary-btn workflow-btn" disabled={saving || !drafts.comment}>
           <MessageSquare size={15} /> Gửi trao đổi
         </button>
       </form>
