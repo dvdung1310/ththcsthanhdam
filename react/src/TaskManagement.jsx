@@ -81,7 +81,7 @@ const emptyTask = {
   priority: "normal",
   starts_at: new Date().toISOString().slice(0, 16),
   due_at: "",
-  reviewer_id: "",
+  reviewer_ids: [],
   teacher_ids: [],
   department_ids: [],
   document_ids: [],
@@ -122,6 +122,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
     [perPage, setPerPage] = useState(10),
     [documentSearch, setDocumentSearch] = useState("");
   const scrollEdges = useScrollEdges([tasks, columnState.hidden]);
+  const currentUserId = refs.current_user_id;
   const formRef = useRef(null);
   const [formBaseline, setFormBaseline] = useState(null);
   const [, setFormTick] = useState(0);
@@ -515,12 +516,15 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
     setViewing(null);
   };
   const toggle = (field, id) =>
-    setEditing((c) => ({
-      ...c,
-      [field]: c[field].includes(id)
-        ? c[field].filter((x) => x !== id)
-        : [...c[field], id],
-    }));
+    setEditing((c) => {
+      const adding = !c[field].includes(id);
+      const reviewer = field === "teacher_ids" && adding ? refs.reviewers.find((r) => r.teacher_id === id) : null;
+      return {
+        ...c,
+        [field]: adding ? [...c[field], id] : c[field].filter((x) => x !== id),
+        ...(reviewer ? { reviewer_ids: (c.reviewer_ids || []).filter((x) => x !== reviewer.id) } : {}),
+      };
+    });
   return (
     <div
       className={`task-page ${canAssign ? "" : "no-assign"} ${canUpdate ? "" : "no-update"}`}
@@ -634,11 +638,12 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                   ),
                   reviewer: (
                     <td>
-                      {t.reviewer ? (
-                        <span className={t.is_reviewer ? "name-chip me" : "name-chip"}>{t.is_reviewer ? `${t.reviewer} (bạn)` : t.reviewer}</span>
-                      ) : (
-                        <span className="name-stack-empty">{t.is_personal ? "Tự hoàn thành" : "Người giao duyệt"}</span>
-                      )}
+                      <NameStack
+                        empty={t.is_personal ? "Tự hoàn thành" : "Người giao duyệt"}
+                        title={`Người duyệt · ${t.reviewers?.length || 0} người`}
+                        items={(t.reviewers || []).map((r) => ({ key: `r-${r.id}`, label: t.is_reviewer && r.id === currentUserId ? `${r.name} (bạn)` : r.name, kind: t.is_reviewer && r.id === currentUserId ? "me" : "" }))}
+                        details={t.reviewers?.length > 2 ? [{ key: "reviewers", title: "Bất kỳ ai trong danh sách đều duyệt được", names: t.reviewers.map((r) => r.name) }] : undefined}
+                      />
                     </td>
                   ),
                   creator: <td><span className="name-chip">{t.creator || "Quản trị"}</span></td>,
@@ -955,11 +960,11 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                       />
                     )}
                     <ReviewerPicker
-                      reviewers={editing.assignment_mode === "self" ? refs.reviewers.filter((r) => r.id !== refs.current_teacher?.user_id) : refs.reviewers}
+                      reviewers={refs.reviewers.filter((r) => editing.assignment_mode === "self" ? r.id !== refs.current_teacher?.user_id : !editing.teacher_ids.includes(r.teacher_id))}
                       units={refs.units || []}
-                      value={editing.reviewer_id || ""}
-                      onChange={(reviewer_id) =>
-                        setEditing({ ...editing, reviewer_id })
+                      value={editing.reviewer_ids || []}
+                      onChange={(update) =>
+                        setEditing((c) => ({ ...c, reviewer_ids: update(c.reviewer_ids || []) }))
                       }
                     />
                   </div>
@@ -1095,8 +1100,11 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                     <div className="detail-highlight-reviewer">
                       <dt>Người duyệt</dt>
                       <dd>
-                        {viewing.reviewer ||
-                          (viewing.is_personal ? "Không có — tự đánh dấu hoàn thành" : "Người giao việc")}
+                        {viewing.reviewers?.length
+                          ? viewing.reviewers.map((r) => r.name).join(", ")
+                          : viewing.is_personal
+                            ? "Không có — tự đánh dấu hoàn thành"
+                            : "Người giao việc"}
                       </dd>
                     </div>
                     <div className="detail-highlight-role">
@@ -1607,37 +1615,33 @@ function ReviewerPicker({ reviewers, units, value, onChange }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
   const ref = useOutsideClose(open, close);
-  const selected = reviewers.find((item) => item.id === Number(value));
+  const selected = value.map((id) => reviewers.find((item) => item.id === id)).filter(Boolean);
+  const toggle = (id) => onChange((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
   return (
     <div className="reviewer-picker wide" ref={ref}>
-      <b>Người duyệt</b>
-      <input type="hidden" name="reviewer_id" value={value} />
+      <b>
+        Người duyệt <small>(không bắt buộc · một người duyệt là đủ)</small>
+      </b>
+      {selected.map((item) => (
+        <input key={item.id} type="hidden" name="reviewer_ids[]" value={item.id} />
+      ))}
       <div className="assignee-chip-list">
         <button type="button" className="add-assignee" aria-expanded={open} onClick={() => setOpen(!open)}>
-          <Plus size={16} /> {selected ? "Đổi người duyệt" : "Chọn người duyệt"}
+          <Plus size={16} /> {selected.length ? "Thêm / bớt người duyệt" : "Chọn người duyệt"}
         </button>
-        {selected && (
-          <button type="button" className="assignee-chip" onClick={() => onChange("")} title="Bấm để bỏ chọn">
-            {selected.avatar_url ? <img src={selected.avatar_url} alt={`Ảnh của ${selected.name}`} /> : <i>{selected.name.charAt(0)}</i>}
-            {selected.name}
-            {roleChips(selected, null, units).slice(0, 1).map((chip) => (
+        {selected.map((item) => (
+          <button type="button" className="assignee-chip" key={item.id} onClick={() => toggle(item.id)} title="Bấm để bỏ chọn">
+            {item.avatar_url ? <img src={item.avatar_url} alt={`Ảnh của ${item.name}`} /> : <i>{item.name.charAt(0)}</i>}
+            {item.name}
+            {roleChips(item, null, units).slice(0, 1).map((chip) => (
               <small key={chip.label}>{chip.label}</small>
             ))}
             <X size={12} />
           </button>
-        )}
+        ))}
       </div>
       {open && (
-        <PeoplePicker
-          title="Chọn người duyệt"
-          people={reviewers}
-          units={units}
-          selectedPeople={selected ? [selected.id] : []}
-          onTogglePerson={(id) => {
-            onChange(id === selected?.id ? "" : id);
-            setOpen(false);
-          }}
-        />
+        <PeoplePicker title="Chọn người duyệt" people={reviewers} units={units} selectedPeople={value} onTogglePerson={toggle} />
       )}
     </div>
   );
@@ -1849,7 +1853,7 @@ function TaskWorkflowPanel({ task, saving, error, onStart, onSubmit, onReview, o
       {task.status === "waiting_approval" && !task.can_review_completion && (
         <div className="workflow-note">
           <Clock3 size={15} />
-          <span>Đang chờ {task.reviewer || task.creator || "người duyệt"} xác nhận.</span>
+          <span>Đang chờ {task.reviewers?.length ? task.reviewers.map((r) => r.name).join(" hoặc ") : task.creator || "người duyệt"} xác nhận.</span>
         </div>
       )}
       {task.can_review_completion && (

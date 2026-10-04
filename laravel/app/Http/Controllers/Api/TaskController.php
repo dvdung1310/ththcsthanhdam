@@ -79,8 +79,9 @@ class TaskController extends Controller
             'teachers' => $canAssign ? Teacher::with(['user.roles' => $activeRoles, 'departments' => fn ($q) => $q->wherePivotNull('ends_on')])->where('employment_status', 'working')->when($unitIds !== null, fn ($q) => $q->inUnits($unitIds))->orderBy('employee_code')->get()->map(fn ($t) => ['id' => $t->id, 'name' => $t->user->name, 'code' => $t->employee_code, 'avatar_url' => $avatar($t->user), 'department_ids' => $t->unitIds(), 'roles' => $roles($t->user)]) : [],
             'departments' => $canAssign ? Department::ordered($unitIds)->map($unitOption)->values() : [],
             'units' => Department::ordered()->map($unitOption)->values(),
-            'reviewers' => User::with(['roles' => $activeRoles, 'teacher.departments' => fn ($q) => $q->wherePivotNull('ends_on')])->where('status', 'active')->orderBy('name')->get()->map(fn ($u) => ['id' => $u->id, 'name' => $u->name, 'avatar_url' => $avatar($u), 'department_ids' => $u->teacher?->unitIds() ?? [], 'roles' => $roles($u)]),
+            'reviewers' => User::with(['roles' => $activeRoles, 'teacher.departments' => fn ($q) => $q->wherePivotNull('ends_on')])->where('status', 'active')->orderBy('name')->get()->map(fn ($u) => ['id' => $u->id, 'name' => $u->name, 'teacher_id' => $u->teacher?->id, 'avatar_url' => $avatar($u), 'department_ids' => $u->teacher?->unitIds() ?? [], 'roles' => $roles($u)]),
             'current_teacher' => $user->teacher ? ['id' => $user->teacher->id, 'user_id' => $user->id, 'name' => $user->name, 'avatar_url' => $avatar($user)] : null,
+            'current_user_id' => $user->id,
             'can_assign' => $canAssign,
             'documents' => OfficialDocument::with(['type', 'file'])->latest('issued_on')->limit(200)->get()->map(fn ($document) => [
                 'id' => $document->id, 'document_number' => $document->document_number,
