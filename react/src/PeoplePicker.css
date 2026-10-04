@@ -57,7 +57,7 @@
 }
 
 .pp-unit.child {
-  padding-left: 14px;
+  padding-left: 46px;
 }
 
 .pp-unit.focused {
@@ -351,4 +351,53 @@
 .pp-tree,
 .pp-list {
   overscroll-behavior: contain;
+}
+
+.people-picker .pp-expand,
+.pp-expand-spacer {
+  width: 22px;
+  height: 22px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  flex: none;
+  display: grid;
+  place-items: center;
+}
+
+.people-picker .pp-expand {
+  border: 0;
+  border-radius: 6px;
+  color: #8a92a8;
+  background: transparent;
+  cursor: pointer;
+}
+
+.people-picker .pp-expand:hover {
+  color: #5a3fd6;
+  background: #ece8ff;
+}
+
+.people-picker .pp-expand svg {
+  display: block;
+  transition: transform 0.15s ease;
+}
+
+.people-picker .pp-expand.open svg {
+  transform: rotate(90deg);
+}
+
+.pp-unit:not(.child) .pp-check {
+  margin-left: 0;
+}
+
+.pp-hidden-picks {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 99px;
+  color: #fff;
+  background: #6a4ee0;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
 }

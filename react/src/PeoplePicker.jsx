@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, CheckCircle2, Search, Users } from "lucide-react";
+import { Check, CheckCircle2, ChevronRight, Search, Users } from "lucide-react";
 import "./PeoplePicker.css";
 
 const SCHOOL_ROLES = ["admin", "hieu_truong", "thu_ky"];
@@ -77,6 +77,13 @@ export default function PeoplePicker({
   }, [anchorRef, selectedPeople.length, selectedUnits.length]);
   const [search, setSearch] = useState("");
   const roots = units.filter((u) => !u.parent_id || !units.some((p) => p.id === u.parent_id));
+  const childrenOf = (id) => units.filter((u) => u.parent_id === id);
+  const [expanded, setExpanded] = useState(() =>
+    roots.length === 1
+      ? roots.map((root) => root.id)
+      : roots.filter((root) => childrenOf(root.id).some((child) => selectedUnits.includes(child.id))).map((root) => root.id),
+  );
+  const toggleExpanded = (id) => setExpanded((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
   const countIn = (id) => people.filter((p) => p.department_ids?.includes(id)).length;
   const focusedUnit = units.find((u) => u.id === focus);
   const keyword = search.trim().toLowerCase();
@@ -90,8 +97,25 @@ export default function PeoplePicker({
   );
   const unitRow = (unit, child) => {
     const checked = selectedUnits.includes(unit.id);
+    const kids = child ? [] : childrenOf(unit.id);
+    const open = expanded.includes(unit.id);
+    const hiddenPicks = !child && !open ? kids.filter((k) => selectedUnits.includes(k.id)).length : 0;
     return (
       <div key={unit.id} className={`pp-unit ${child ? "child" : ""} ${focus === unit.id ? "focused" : ""}`}>
+        {!child &&
+          (kids.length ? (
+            <button
+              type="button"
+              className={`pp-expand ${open ? "open" : ""}`}
+              aria-expanded={open}
+              title={open ? "Thu gọn nhóm" : "Mở các nhóm"}
+              onClick={() => toggleExpanded(unit.id)}
+            >
+              <ChevronRight size={14} />
+            </button>
+          ) : (
+            <span className="pp-expand-spacer" />
+          ))}
         {onToggleUnit && (
           <button
             type="button"
@@ -105,6 +129,7 @@ export default function PeoplePicker({
         )}
         <button type="button" className="pp-unit-name" onClick={() => setFocus(unit.id)}>
           <span title={unit.name}>{unit.short_name || unit.name}</span>
+          {hiddenPicks > 0 && <em className="pp-hidden-picks">{hiddenPicks} nhóm</em>}
           <small>{countIn(unit.id)}</small>
         </button>
       </div>
@@ -129,7 +154,7 @@ export default function PeoplePicker({
               <small>{people.length}</small>
             </button>
           </div>
-          {roots.map((root) => [unitRow(root, false), ...units.filter((u) => u.parent_id === root.id).map((u) => unitRow(u, true))])}
+          {roots.map((root) => [unitRow(root, false), ...(expanded.includes(root.id) ? childrenOf(root.id).map((u) => unitRow(u, true)) : [])])}
           {!units.length && <p className="pp-empty">Chưa có tổ / nhóm.</p>}
         </nav>
         <div className="pp-people">
