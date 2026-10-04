@@ -3,6 +3,7 @@ import {
   Activity,
   CalendarClock,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
@@ -40,8 +41,6 @@ import TaskActionFilters, {
 } from "./TaskActionToolbar";
 import "./TaskManagementOverrides.css";
 import "./TaskAssignmentMode.css";
-import "./TaskFormLayout.css";
-import "./TaskFormGridFix.css";
 import "./TaskComposeLayout.css";
 import "./TaskAttachmentPicker.css";
 import "./RichEditorToolbar.css";
@@ -127,6 +126,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
   const [formBaseline, setFormBaseline] = useState(null);
   const [, setFormTick] = useState(0);
   const [viewDraft, setViewDraft] = useState(false);
+  const [showSupport, setShowSupport] = useState(false);
   const [loading, setLoading] = useState(true),
     [error, setError] = useState(""),
     [success, setSuccess] = useState(""),
@@ -486,7 +486,13 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
     if (editing && formBaseline === null && formRef.current) setFormBaseline(taskFormSnapshot(formRef.current, editing));
     if (!editing && formBaseline !== null) setFormBaseline(null);
   }, [editing, formBaseline]);
+  useEffect(() => {
+    if (editing) setShowSupport((editing.document_ids?.length || 0) + (editing.attachments?.length || 0) > 0);
+  }, [editing?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const formDirty = formBaseline !== null && taskFormSnapshot(formRef.current, editing) !== formBaseline;
+  const attachmentCount = editing
+    ? editing.document_ids.length + (editing.pending_files?.length || 0) + (editing.attachments?.length || 0) - (editing.removed_attachment_ids?.length || 0)
+    : 0;
   const formMissing = editing
     ? [
         !formRef.current?.elements.title?.value.trim() && "tên công việc",
@@ -804,109 +810,111 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
             <form ref={formRef} onSubmit={save} onInput={() => setFormTick((tick) => tick + 1)} onChange={() => setFormTick((tick) => tick + 1)}>
               <div className="task-compose-body">
                 <div className="task-compose-main">
-                  <div className="task-form-section content-section">
-                    <h4>
-                      <span>1</span> Nội dung công việc
-                    </h4>
-                    <div className="task-form-grid">
-                      <label className="wide">
-                        <span>
-                          Tên công việc <span className="required-mark">*</span>
-                        </span>
-                        <input
-                          name="title"
-                          required
-                          defaultValue={editing.title}
-                          placeholder="Nhập tên công việc ngắn gọn..."
-                        />
-                      </label>
-                      <div className="wide">
-                        <b className="editor-label">Mô tả</b>
-                        <RichTextEditor
-                          value={editing.description || ""}
-                          onChange={(description) =>
-                            setEditing({ ...editing, description })
-                          }
-                        />
-                        <input
-                          type="hidden"
-                          name="description"
-                          value={editing.description || ""}
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="task-form-section document-link-section documents-section">
-                    <h4>
-                      <span>5</span> Tài liệu hỗ trợ{" "}
-                      <em>{editing.document_ids.length} đã chọn</em>
-                    </h4>
-                    <b className="support-label">Văn bản liên quan</b>
-                    <p>
-                      Liên kết văn bản để giáo viên xem đúng căn cứ và tải tài
-                      liệu gốc khi thực hiện.
-                    </p>
-                    <label className="document-search">
-                      <Search size={16} />
+                  <section className="form-block">
+                    <label className="field">
+                      <span className="field-label">
+                        Tên công việc <span className="required-mark">*</span>
+                      </span>
                       <input
-                        value={documentSearch}
-                        onChange={(event) =>
-                          setDocumentSearch(event.target.value)
-                        }
-                        placeholder="Tìm theo số, tên hoặc đơn vị ban hành..."
+                        name="title"
+                        required
+                        defaultValue={editing.title}
+                        placeholder="Nhập tên công việc ngắn gọn..."
                       />
                     </label>
-                    <div className="document-picker">
-                      {refs.documents
-                        .filter((document) =>
-                          `${document.document_number} ${document.title} ${document.issuer}`
-                            .toLowerCase()
-                            .includes(documentSearch.toLowerCase()),
-                        )
-                        .map((document) => (
-                          <label key={document.id}>
-                            <input
-                              type="checkbox"
-                              checked={editing.document_ids.includes(
-                                document.id,
-                              )}
-                              onChange={() =>
-                                toggle("document_ids", document.id)
-                              }
-                            />
-                            <span>
-                              <b>{document.document_number}</b>
-                              <strong>{document.title}</strong>
-                              <small>
-                                {document.type} · {document.issuer}
-                                {document.issued_on
-                                  ? ` · ${new Date(document.issued_on).toLocaleDateString("vi-VN")}`
-                                  : ""}
-                              </small>
-                            </span>
-                            {document.has_file && <Paperclip size={15} />}
-                          </label>
-                        ))}
+                    <div className="field">
+                      <span className="field-label">Mô tả</span>
+                      <RichTextEditor
+                        value={editing.description || ""}
+                        onChange={(description) =>
+                          setEditing({ ...editing, description })
+                        }
+                      />
+                      <input
+                        type="hidden"
+                        name="description"
+                        value={editing.description || ""}
+                      />
                     </div>
-                    {!refs.documents.length && (
-                      <div className="no-documents">
-                        Chưa có văn bản trong mục Quản lý văn bản.
+                  </section>
+                  <section className="form-block">
+                    <button
+                      type="button"
+                      className="block-toggle"
+                      aria-expanded={showSupport}
+                      onClick={() => setShowSupport(!showSupport)}
+                    >
+                      <Paperclip size={15} />
+                      <span>
+                        Văn bản & file đính kèm
+                        {attachmentCount > 0 && <em>{attachmentCount}</em>}
+                      </span>
+                      <ChevronDown size={16} className={showSupport ? "open" : ""} />
+                    </button>
+                    {showSupport && (
+                      <div className="block-body">
+                        <span className="field-label">Văn bản liên quan</span>
+                        <label className="document-search">
+                          <Search size={16} />
+                          <input
+                            value={documentSearch}
+                            onChange={(event) =>
+                              setDocumentSearch(event.target.value)
+                            }
+                            placeholder="Tìm theo số, tên hoặc đơn vị ban hành..."
+                          />
+                        </label>
+                        <div className="document-picker">
+                          {refs.documents
+                            .filter((document) =>
+                              `${document.document_number} ${document.title} ${document.issuer}`
+                                .toLowerCase()
+                                .includes(documentSearch.toLowerCase()),
+                            )
+                            .map((document) => (
+                              <label key={document.id}>
+                                <input
+                                  type="checkbox"
+                                  checked={editing.document_ids.includes(
+                                    document.id,
+                                  )}
+                                  onChange={() =>
+                                    toggle("document_ids", document.id)
+                                  }
+                                />
+                                <span>
+                                  <b>{document.document_number}</b>
+                                  <strong>{document.title}</strong>
+                                  <small>
+                                    {document.type} · {document.issuer}
+                                    {document.issued_on
+                                      ? ` · ${new Date(document.issued_on).toLocaleDateString("vi-VN")}`
+                                      : ""}
+                                  </small>
+                                </span>
+                                {document.has_file && <Paperclip size={15} />}
+                              </label>
+                            ))}
+                        </div>
+                        {!refs.documents.length && (
+                          <div className="no-documents">
+                            Chưa có văn bản trong mục Quản lý văn bản.
+                          </div>
+                        )}
+                        <span className="field-label">File đính kèm</span>
+                        <FileAttachmentPicker
+                          editing={editing}
+                          setEditing={setEditing}
+                        />
                       </div>
                     )}
-                    <b className="support-label">File đính kèm</b>
-                    <FileAttachmentPicker
-                      editing={editing}
-                      setEditing={setEditing}
-                    />
-                  </div>
+                  </section>
                 </div>
                 <div className="task-compose-aside">
-                  <div
-                    className={`task-form-section assignment-section ${editing.assignment_mode === "self" ? "personal-assignment" : ""}`}
+                  <section
+                    className={`form-block ${editing.assignment_mode === "self" ? "personal-assignment" : ""}`}
                   >
-                    <h4>
-                      <span>2</span> Phân công
-                    </h4>
+                    <h4>Phân công</h4>
                     {!editing.id && canAssign && canUpdate && refs.current_teacher && (
                       <div className="assignment-mode-picker" role="group" aria-label="Cách phân công">
                         <button
@@ -955,16 +963,16 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                         </div>
                       </div>
                     ) : (
-                      <>
-                      <b className="assignee-label">
-                        Người thực hiện <span className="required-mark">*</span>
-                      </b>
-                      <CompactAssignees
-                        editing={editing}
-                        refs={refs}
-                        toggle={toggle}
-                      />
-                      </>
+                      <div className="field">
+                        <span className="field-label">
+                          Người thực hiện <span className="required-mark">*</span>
+                        </span>
+                        <CompactAssignees
+                          editing={editing}
+                          refs={refs}
+                          toggle={toggle}
+                        />
+                      </div>
                     )}
                     <ReviewerPicker
                       reviewers={refs.reviewers.filter((r) => editing.assignment_mode === "self" ? r.id !== refs.current_teacher?.user_id : !editing.teacher_ids.includes(r.teacher_id))}
@@ -974,31 +982,30 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                         setEditing((c) => ({ ...c, reviewer_ids: update(c.reviewer_ids || []) }))
                       }
                     />
-                  </div>
-                  <div className="task-form-section timing-section">
-                    <h4>
-                      <span>3</span> Thời hạn & ưu tiên
-                    </h4>
-                    <div className="task-form-grid">
-                      <label>
-                        Bắt đầu
+                  </section>
+                  <section className="form-block">
+                    <h4>Thời hạn & ưu tiên</h4>
+                    <div className="field-row">
+                      <label className="field">
+                        <span className="field-label">Bắt đầu</span>
                         <input
                           name="starts_at"
                           type="datetime-local"
                           defaultValue={editing.starts_at}
                         />
                       </label>
-                      <label>
-                        Hạn hoàn thành
+                      <label className="field">
+                        <span className="field-label">Hạn hoàn thành</span>
                         <input
                           name="due_at"
                           type="datetime-local"
                           defaultValue={editing.due_at}
                         />
                       </label>
-
-                      <label className="wide">
-                        <span>
+                    </div>
+                    <div className="field-row">
+                      <label className="field">
+                        <span className="field-label">
                           Mức ưu tiên <span className="required-mark">*</span>
                         </span>
                         <select name="priority" defaultValue={editing.priority}>
@@ -1011,15 +1018,8 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                           )}
                         </select>
                       </label>
-                    </div>
-                  </div>
-                  <div className="task-form-section type-section">
-                    <h4>
-                      <span>4</span> Loại nhiệm vụ <ClipboardCheck size={17} />
-                    </h4>
-                    <div className="task-form-grid">
-                      <label className="wide">
-                        Loại nhiệm vụ
+                      <label className="field">
+                        <span className="field-label">Loại nhiệm vụ</span>
                         <select name="category_id" defaultValue={editing.category_id || ""}>
                           <option value="">— Không phân loại —</option>
                           {refs.categories.map((type) => (
@@ -1033,10 +1033,11 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                         </select>
                       </label>
                     </div>
-                  </div>
+                  </section>
                 </div>
               </div>
               <div className="modal-actions">
+                {formBlocked && <span className="form-blocked-hint">{formBlocked}</span>}
                 <button
                   type="button"
                   className="secondary-btn"
@@ -1044,7 +1045,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                 >
                   Hủy bỏ
                 </button>
-                <button className="primary-btn" disabled={saving || !!formBlocked} title={formBlocked || undefined}>
+                <button className="primary-btn" disabled={saving || !!formBlocked}>
                   <Send size={15} />
                   {saving
                     ? "Đang lưu..."
@@ -1753,9 +1754,6 @@ function FileAttachmentPicker({ editing, setEditing }) {
           </article>
         ))}
       </div>
-      {!existing.length && !(editing.pending_files || []).length && (
-        <p className="attachment-empty">Chưa có file đính kèm.</p>
-      )}
     </div>
   );
 }
