@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   Building2,
@@ -48,6 +48,13 @@ export default function PersonnelManagement() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [editing, setEditing] = useState(null);
+  const tableWrapRef = useRef(null);
+  const [scrollEdges, setScrollEdges] = useState({ left: false, right: false });
+  const updateScrollEdges = useCallback(() => {
+    const el = tableWrapRef.current;
+    if (!el) return;
+    setScrollEdges({ left: el.scrollLeft > 0, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 1 });
+  }, []);
 
   const load = async () => {
     setLoading(true);
@@ -63,6 +70,11 @@ export default function PersonnelManagement() {
   useEffect(() => {
     load();
   }, []);
+  useEffect(() => {
+    updateScrollEdges();
+    window.addEventListener("resize", updateScrollEdges);
+    return () => window.removeEventListener("resize", updateScrollEdges);
+  }, [updateScrollEdges, data.data, page, pageSize, tab, keyword, unitFilter, roleFilter, statusFilter]);
   useEffect(() => {
     if (!success) return undefined;
     const timeout = setTimeout(() => setSuccess(""), 4000);
@@ -287,8 +299,12 @@ export default function PersonnelManagement() {
           </section>
 
           <section className="teacher-table-card">
-            <div className="table-wrap">
-              <table>
+            <div
+              ref={tableWrapRef}
+              onScroll={updateScrollEdges}
+              className={`table-wrap personnel-table-wrap ${scrollEdges.left ? "shadow-left" : ""} ${scrollEdges.right ? "shadow-right" : ""}`}
+            >
+              <table className="personnel-table">
                 <thead>
                   <tr>
                     <th>Nhân sự</th>
