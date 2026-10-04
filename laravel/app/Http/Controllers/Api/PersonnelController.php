@@ -10,7 +10,6 @@ use App\Models\User;
 use App\Services\RoleAssignments;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -25,13 +24,12 @@ class PersonnelController extends Controller
     {
         $actor = $request->user();
         $unitIds = $actor->managedUnitIds();
-        $kpi = $this->lifetimeKpiMap();
         $users = User::with(['roles', 'teacher' => fn ($q) => $q->withTrashed(), 'teacher.departments' => fn ($q) => $q->wherePivotNull('ends_on')])
             ->when($unitIds !== null, fn ($q) => $q->whereHas('teacher', fn ($t) => $t->inUnits($unitIds)))
             ->orderBy('name')->get();
 
         return response()->json([
-            'data' => $users->map(fn (User $user) => $this->serialize($user, $kpi))->values(),
+            'data' => $users->map(fn (User $user) => $this->serialize($user))->values(),
             'roles' => Role::all()->sortBy(fn (Role $role) => $this->roleOrder($role->code))->map(fn (Role $role) => $role->only(['id', 'code', 'name', 'scope', 'unit_type']))->values(),
             'units' => Department::ordered($unitIds)->values(),
             'can_manage' => $actor->hasPermission('teachers.manage'),
@@ -61,7 +59,7 @@ class PersonnelController extends Controller
             return [$user, $this->applyRolesAndUnits($actor, $user, $data, $roles)];
         });
 
-        return response()->json(['message' => $this->savedMessage('Đã thêm nhân sự.', $added), 'data' => $this->serialize($this->reload($user), $this->lifetimeKpiMap())], 201);
+        return response()->json(['message' => $this->savedMessage('Đã thêm nhân sự.', $added), 'data' => $this->serialize($this->reload($user))], 201);
     }
 
     public function update(Request $request, User $user): JsonResponse
@@ -90,7 +88,7 @@ class PersonnelController extends Controller
             return $this->applyRolesAndUnits($actor, $user->fresh(), $data, $roles);
         });
 
-        return response()->json(['message' => $this->savedMessage('Đã cập nhật nhân sự.', $added), 'data' => $this->serialize($this->reload($user), $this->lifetimeKpiMap())]);
+        return response()->json(['message' => $this->savedMessage('Đã cập nhật nhân sự.', $added), 'data' => $this->serialize($this->reload($user))]);
     }
 
     public function destroy(Request $request, User $user): JsonResponse
@@ -233,7 +231,7 @@ class PersonnelController extends Controller
         return User::with(['roles', 'teacher' => fn ($q) => $q->withTrashed(), 'teacher.departments' => fn ($q) => $q->wherePivotNull('ends_on')])->findOrFail($user->id);
     }
 
-    private function serialize(User $user, Collection $kpi): array
+    private function serialize(User $user): array
     {
         $teacher = $user->teacher;
         $units = $teacher ? $teacher->departments->map(fn ($d) => ['id' => $d->id, 'label' => Department::pathLabel($d->id)])->values() : collect();
@@ -256,7 +254,6 @@ class PersonnelController extends Controller
                 'department_id' => $role->pivot->department_id,
                 'label' => $role->pivot->department_id ? $role->name.' — '.Department::pathLabel((int) $role->pivot->department_id) : $role->name,
             ])->values(),
-            'kpi' => $teacher ? $kpi->get($teacher->id, 0) : null,
         ];
     }
 
@@ -268,23 +265,5 @@ class PersonnelController extends Controller
     private function roleOrder(string $code): int
     {
         return (int) array_search($code, [Role::ADMIN, Role::HIEU_TRUONG, Role::THU_KY, Role::TO_TRUONG, Role::TO_PHO, Role::NHOM_TRUONG, Role::GIAO_VIEN], true);
-    }
-
-    private function lifetimeKpiMap(): Collection
-    {
-        $latestApproved = DB::table('task_evaluations')->where('status', 'approved')->selectRaw('MAX(id) as id')->groupBy('task_id', 'teacher_id');
-
-        return DB::table('task_evaluations as e')
-            ->joinSub($latestApproved, 'latest', fn ($join) => $join->on('latest.id', '=', 'e.id'))
-            ->join('tasks as t', 't.id', '=', 'e.task_id')
-            ->leftJoin('task_catalog_items as ci', 'ci.id', '=', 't.task_catalog_item_id')
-            ->whereNull('t.deleted_at')
-            ->groupBy('e.teacher_id')
-            ->select('e.teacher_id', DB::raw('SUM(e.score) as earned'), DB::raw('SUM(COALESCE(ci.score, t.maximum_score)) as maximum'))
-            ->get()->mapWithKeys(function ($row) {
-                $maximum = (float) $row->maximum;
-
-                return [(int) $row->teacher_id => $maximum > 0 ? round(min(100, (float) $row->earned / $maximum * 100), 1) : 0];
-            });
     }
 }
