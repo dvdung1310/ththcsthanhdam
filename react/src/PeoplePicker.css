@@ -39,6 +39,7 @@
   flex: 1;
   display: grid;
   grid-template-columns: 230px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .pp-tree {
@@ -340,4 +341,14 @@
   margin-left: 2px;
   color: #e14452;
   font-weight: 700;
+}
+
+.pp-tree,
+.pp-people {
+  min-height: 0;
+}
+
+.pp-tree,
+.pp-list {
+  overscroll-behavior: contain;
 }
