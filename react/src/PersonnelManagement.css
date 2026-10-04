@@ -1,0 +1,122 @@
+.personnel-tabs {
+  margin-bottom: 6px;
+  display: flex;
+  gap: 6px;
+  padding: 5px;
+  width: fit-content;
+  border: 1px solid #eceef4;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.personnel-tabs button {
+  height: 36px;
+  padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 9px;
+  color: #68728c;
+  background: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.personnel-tabs button.active {
+  color: #fff;
+  background: #6b50df;
+  box-shadow: 0 6px 16px rgba(107, 80, 223, 0.25);
+}
+
+.filters.personnel-filters {
+  grid-template-columns: minmax(240px, 1fr) 210px 180px 170px auto;
+}
+
+.staff-badge {
+  padding: 3px 9px;
+  border-radius: 999px;
+  color: #3d6fd9;
+  background: #eaf1ff;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.unit-cell {
+  display: grid;
+  gap: 3px;
+}
+
+.unit-cell span {
+  color: #34405e;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.muted-cell {
+  color: #a2a9ba;
+  font-size: 12px;
+}
+
+.chip-list span.soft {
+  color: #6b748c;
+  background: #f0f1f6;
+}
+
+@media (max-width: 1200px) {
+  .filters.personnel-filters {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .filters.personnel-filters {
+    grid-template-columns: 1fr;
+  }
+}
+
+.personnel-table th:first-child,
+.personnel-table td:first-child,
+.personnel-table th:last-child,
+.personnel-table td:last-child {
+  position: sticky;
+  z-index: 1;
+  transition: box-shadow 0.15s ease;
+}
+
+.personnel-table th:first-child,
+.personnel-table td:first-child {
+  left: 0;
+}
+
+.personnel-table th:last-child,
+.personnel-table td:last-child {
+  right: 0;
+}
+
+.personnel-table td:first-child,
+.personnel-table td:last-child {
+  background: #fff;
+}
+
+.personnel-table th:first-child,
+.personnel-table th:last-child {
+  background: #fafbfc;
+}
+
+.personnel-table tbody tr:hover td:first-child,
+.personnel-table tbody tr:hover td:last-child {
+  background: #faf9ff;
+}
+
+.personnel-table-wrap.shadow-left th:first-child,
+.personnel-table-wrap.shadow-left td:first-child {
+  box-shadow: 8px 0 10px -8px rgba(31, 42, 72, 0.22);
+}
+
+.personnel-table-wrap.shadow-right th:last-child,
+.personnel-table-wrap.shadow-right td:last-child {
+  box-shadow: -8px 0 10px -8px rgba(31, 42, 72, 0.22);
+}

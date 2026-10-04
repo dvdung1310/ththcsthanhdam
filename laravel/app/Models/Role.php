@@ -14,6 +14,8 @@ class Role extends Model
     public const NHOM_TRUONG = 'nhom_truong';
     public const GIAO_VIEN = 'giao_vien';
 
+    public const SINGLE_HOLDER = [self::TO_TRUONG, self::NHOM_TRUONG];
+
     public const SCOPE_SYSTEM = 'system';
     public const SCOPE_SCHOOL = 'school';
     public const SCOPE_UNIT = 'unit';
