@@ -568,10 +568,10 @@ class TaskController extends Controller
 
     private function assigneeTeachers(Task $task): Collection
     {
-        $task->loadMissing(['teachers.user', 'departments']);
+        $task->loadMissing(['teachers.user', 'teachers.departments', 'departments']);
         $teachers = $task->teachers;
         if ($task->departments->isNotEmpty()) {
-            $teachers = $teachers->concat(Teacher::with('user')->where('employment_status', 'working')->inUnits($task->departments->pluck('id'))->whereNotIn('id', $teachers->pluck('id'))->get());
+            $teachers = $teachers->concat(Teacher::with(['user', 'departments'])->where('employment_status', 'working')->inUnits($task->departments->pluck('id'))->whereNotIn('id', $teachers->pluck('id'))->get());
         }
 
         return $teachers->unique('id')->values();
@@ -699,6 +699,10 @@ class TaskController extends Controller
             'documents' => $task->documents->map(fn ($document) => ['id' => $document->id, 'document_number' => $document->document_number, 'title' => $document->title, 'issuer' => $document->issuer, 'issued_on' => $document->issued_on?->format('Y-m-d'), 'type' => $document->type?->name, 'file_name' => $document->file?->original_name, 'download_url' => $document->file ? route('documents.download', $document) : null]),
             'assignees' => $assignees->map(fn (Teacher $t) => ['id' => $t->id, 'name' => $t->user->name, 'avatar_url' => $t->user->avatar_path ? route('avatars.show', ['filename' => basename($t->user->avatar_path)]) : null, 'direct' => $task->teachers->contains('id', $t->id), 'reminder_count' => (int) ($reminders->get($t->id)?->reminder_count ?? 0), 'last_reminded_at' => $reminders->get($t->id)?->last_reminded_at])->values(),
             'departments' => $task->departments->map(fn ($d) => Department::pathLabel($d->id))->values(),
+            'units' => $task->departments->map(fn ($d) => [
+                'id' => $d->id, 'name' => Department::pathLabel($d->id), 'short_name' => $d->name,
+                'members' => $assignees->filter(fn (Teacher $t) => in_array($d->id, $t->unitIds(), true))->map(fn (Teacher $t) => ['id' => $t->id, 'name' => $t->user->name])->values(),
+            ])->values(),
             'assignee_count' => $assignees->count(), 'department_count' => $task->departments->count(),
             'submission_count' => $task->submissions_count ?? $task->submissions()->count(),
             'is_overdue' => $task->due_at?->isPast() && in_array($task->status, [Task::NOT_STARTED, Task::IN_PROGRESS], true),
