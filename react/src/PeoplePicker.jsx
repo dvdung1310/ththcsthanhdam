@@ -119,7 +119,6 @@ export default function PeoplePicker({
               <span>
                 {selectedUnits.includes(focusedUnit.id) ? "Đã giao cho cả " : "Giao cho cả "}
                 {focusedUnit.short_name || focusedUnit.name}
-                <small>Thành viên vào sau cũng nhận được việc</small>
               </span>
               {selectedUnits.includes(focusedUnit.id) && <CheckCircle2 size={16} />}
             </button>

@@ -810,7 +810,9 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                     </h4>
                     <div className="task-form-grid">
                       <label className="wide">
-                        Tên công việc
+                        <span>
+                          Tên công việc <span className="required-mark">*</span>
+                        </span>
                         <input
                           name="title"
                           required
@@ -891,7 +893,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                         Chưa có văn bản trong mục Quản lý văn bản.
                       </div>
                     )}
-                    <b className="support-label">File đính kèm nếu có</b>
+                    <b className="support-label">File đính kèm</b>
                     <FileAttachmentPicker
                       editing={editing}
                       setEditing={setEditing}
@@ -953,11 +955,16 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                         </div>
                       </div>
                     ) : (
+                      <>
+                      <b className="assignee-label">
+                        Người thực hiện <span className="required-mark">*</span>
+                      </b>
                       <CompactAssignees
                         editing={editing}
                         refs={refs}
                         toggle={toggle}
                       />
+                      </>
                     )}
                     <ReviewerPicker
                       reviewers={refs.reviewers.filter((r) => editing.assignment_mode === "self" ? r.id !== refs.current_teacher?.user_id : !editing.teacher_ids.includes(r.teacher_id))}
@@ -982,7 +989,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                         />
                       </label>
                       <label>
-                        Hạn hoàn thành <small>(bỏ trống nếu không thời hạn)</small>
+                        Hạn hoàn thành
                         <input
                           name="due_at"
                           type="datetime-local"
@@ -991,7 +998,9 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                       </label>
 
                       <label className="wide">
-                        Mức ưu tiên
+                        <span>
+                          Mức ưu tiên <span className="required-mark">*</span>
+                        </span>
                         <select name="priority" defaultValue={editing.priority}>
                           {Object.entries(labels.priority).map(
                             ([value, text]) => (
@@ -1010,7 +1019,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                     </h4>
                     <div className="task-form-grid">
                       <label className="wide">
-                        Loại nhiệm vụ (không bắt buộc)
+                        Loại nhiệm vụ
                         <select name="category_id" defaultValue={editing.category_id || ""}>
                           <option value="">— Không phân loại —</option>
                           {refs.categories.map((type) => (
@@ -1620,7 +1629,7 @@ function ReviewerPicker({ reviewers, units, value, onChange }) {
   return (
     <div className="reviewer-picker wide" ref={ref}>
       <b>
-        Người duyệt <small>(không bắt buộc · một người duyệt là đủ)</small>
+        Người duyệt
       </b>
       {selected.map((item) => (
         <input key={item.id} type="hidden" name="reviewer_ids[]" value={item.id} />
