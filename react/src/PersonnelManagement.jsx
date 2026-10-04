@@ -448,7 +448,6 @@ export default function PersonnelManagement() {
           units={data.units}
           canAssignRoles={data.can_assign_roles}
           people={data.data}
-          scope={data.management_scope}
           onClose={() => setEditing(null)}
           onSaved={afterSave}
           onDeleted={afterSave}

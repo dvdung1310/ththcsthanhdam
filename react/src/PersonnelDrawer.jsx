@@ -31,7 +31,6 @@ const emptyPerson = {
   email: "",
   phone: "",
   is_active: true,
-  is_teacher: true,
   employee_code: "",
   employment_status: "working",
   unit_ids: [],
@@ -44,7 +43,6 @@ export default function PersonnelDrawer({
   units,
   canAssignRoles,
   people,
-  scope,
   onClose,
   onSaved,
   onDeleted,
@@ -54,7 +52,6 @@ export default function PersonnelDrawer({
     isNew
       ? {
           ...emptyPerson,
-          is_teacher: true,
           roles: roles
             .filter((role) => role.code === "giao_vien")
             .map((role) => ({ role_id: role.id, department_id: "" })),
@@ -79,6 +76,9 @@ export default function PersonnelDrawer({
   const set = (key, value) => setForm((current) => ({ ...current, [key]: value }));
 
   const schoolRoles = roles.filter((role) => role.scope !== "unit");
+  const giaoVienId = roles.find((role) => role.code === "giao_vien")?.id;
+  const lockedTeacher = !isNew && person.is_teacher;
+  const isTeacher = canAssignRoles ? form.roles.some((row) => row.role_id === giaoVienId) : isNew || person.is_teacher;
   const toggleRole = (role) =>
     set(
       "roles",
@@ -97,15 +97,14 @@ export default function PersonnelDrawer({
       email: form.email,
       phone: form.phone || null,
       is_active: form.is_active,
-      is_teacher: form.is_teacher,
-      employee_code: form.is_teacher ? form.employee_code : null,
-      employment_status: form.is_teacher ? form.employment_status : null,
-      unit_ids: form.is_teacher ? unitIdsInScope : [],
+      employee_code: isTeacher ? form.employee_code : null,
+      employment_status: isTeacher ? form.employment_status : null,
+      unit_ids: isTeacher ? unitIdsInScope : [],
       ...(password ? { password } : {}),
       ...(canAssignRoles
         ? {
             roles: form.roles
-              .filter((row) => form.is_teacher || !teacherOnly(roleById[row.role_id]))
+              .filter((row) => isTeacher || !teacherOnly(roleById[row.role_id]))
               .map((row) => ({
                 role_id: row.role_id,
                 department_id: row.department_id || null,
@@ -113,7 +112,7 @@ export default function PersonnelDrawer({
           }
         : {}),
     };
-    const conflicts = canAssignRoles && form.is_teacher ? findHolderConflicts(form.roles, roles, people, person?.id) : [];
+    const conflicts = canAssignRoles && isTeacher ? findHolderConflicts(form.roles, roles, people, person?.id) : [];
     if (conflicts.length) {
       const lines = conflicts.map((c) => `• ${units.find((u) => u.id === c.department_id)?.label}: thay ${c.role} ${c.holder}`).join("\n");
       if (!window.confirm(`Các đơn vị sau đã có người giữ chức vụ:\n${lines}\n\nThay thế bằng ${form.name}?`)) {
@@ -220,18 +219,44 @@ export default function PersonnelDrawer({
                   <span />
                   Tài khoản đang hoạt động
                 </label>
-                <label className={`switch ${!isNew && person.is_teacher ? "disabled" : ""}`}>
-                  <input
-                    type="checkbox"
-                    checked={form.is_teacher}
-                    disabled={(!isNew && person.is_teacher) || scope !== "school"}
-                    onChange={(e) => set("is_teacher", e.target.checked)}
-                  />
-                  <span />
-                  Là giáo viên
-                </label>
               </div>
-              {form.is_teacher && (
+            </section>
+
+            <section>
+              <h4>Vai trò</h4>
+              {canAssignRoles ? (
+                <div className="role-picker">
+                  {schoolRoles.map((role) => {
+                    const checked = form.roles.some((row) => row.role_id === role.id);
+                    const locked = role.id === giaoVienId && lockedTeacher;
+                    return (
+                      <div key={role.id} className={`role-pick ${checked ? "selected" : ""}`} title={locked ? "Nhân sự đã có dữ liệu công việc. Dùng “Cho nghỉ & khóa” nếu không còn là giáo viên." : undefined}>
+                        <label>
+                          <input type="checkbox" checked={checked} disabled={locked} onChange={() => toggleRole(role)} />
+                          <b>{role.name}</b>
+                          <small>{role.id === giaoVienId ? "Có hồ sơ giảng dạy, thuộc tổ/nhóm" : scopeLabel(role)}</small>
+                        </label>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="role-readonly">
+                  {person?.roles?.filter((role) => !role.department_id).length ? (
+                    person.roles
+                      .filter((role) => !role.department_id)
+                      .map((role) => <span key={role.role_id}>{role.label}</span>)
+                  ) : (
+                    <em>Giáo viên</em>
+                  )}
+                  <small>Chỉ người có quyền quản lý vai trò mới thay đổi được mục này.</small>
+                </div>
+              )}
+            </section>
+
+            {isTeacher && (
+              <section>
+                <h4>Thông tin giáo viên</h4>
                 <div className="drawer-grid">
                   <label>
                     Mã giáo viên
@@ -255,10 +280,10 @@ export default function PersonnelDrawer({
                     </select>
                   </label>
                 </div>
-              )}
-            </section>
+              </section>
+            )}
 
-            {form.is_teacher && (
+            {isTeacher && (
               <section>
                 <h4>Tổ / nhóm & chức vụ</h4>
                 <UnitMembershipEditor
@@ -274,37 +299,6 @@ export default function PersonnelDrawer({
               </section>
             )}
 
-            <section>
-              <h4>Vai trò</h4>
-              {canAssignRoles ? (
-                <div className="role-picker">
-                  {schoolRoles.map((role) => {
-                    const checked = form.roles.some((row) => row.role_id === role.id);
-                    const unavailable = !form.is_teacher && teacherOnly(role);
-                    return (
-                      <div key={role.id} className={`role-pick ${checked && !unavailable ? "selected" : ""} ${unavailable ? "unavailable" : ""}`}>
-                        <label>
-                          <input type="checkbox" checked={checked && !unavailable} disabled={unavailable} onChange={() => toggleRole(role)} />
-                          <b>{role.name}</b>
-                          <small>{scopeLabel(role)}</small>
-                        </label>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="role-readonly">
-                  {person?.roles?.filter((role) => !role.department_id).length ? (
-                    person.roles
-                      .filter((role) => !role.department_id)
-                      .map((role) => <span key={role.role_id}>{role.label}</span>)
-                  ) : (
-                    <em>Giáo viên</em>
-                  )}
-                  <small>Chỉ người có quyền quản lý vai trò mới thay đổi được mục này.</small>
-                </div>
-              )}
-            </section>
           </div>
           <footer>
             {!isNew && (
