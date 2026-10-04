@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { CheckCircle2, Clock3, Layers3, ListChecks, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { apiFetch } from './api'
+import { useConfirm } from './ConfirmDialog'
 import './TaskConfiguration.css'
 import './TaskConfigurationOverrides.css'
 import './LatePenaltyConfiguration.css'
@@ -13,6 +14,7 @@ const emptyLateRule = { from_day: 1, to_day: '', penalty_percent: 5 }
 
 export default function TaskConfiguration({ canManage, initialTab = 'groups' }) {
   const [tab, setTab] = useState(initialTab)
+  const confirm = useConfirm()
   const [data, setData] = useState({ groups: [], catalog_items: [], departments: [], users: [], late_penalty_rules: [] })
   const [editingGroup, setEditingGroup] = useState(null)
   const [editingItem, setEditingItem] = useState(null)
@@ -47,7 +49,8 @@ export default function TaskConfiguration({ canManage, initialTab = 'groups' }) 
   }
 
   const remove = async (type, id) => {
-    if (!window.confirm('Bạn có chắc muốn xóa mục này?')) return
+    const label = type === 'group' ? 'phân nhóm nhiệm vụ' : type === 'item' ? 'nhiệm vụ trong danh mục' : 'mức trừ điểm trễ hạn'
+    if (!(await confirm({ tone: 'danger', title: `Xóa ${label}?`, message: 'Thao tác này không thể hoàn tác.', confirmText: 'Xóa' }))) return
     const response = await apiFetch(`/api/${type === 'group' ? 'task-groups' : type === 'item' ? 'task-catalog-items' : 'late-penalty-rules'}/${id}`, { method: 'DELETE', headers: { Accept: 'application/json' } })
     const payload = await response.json(); if (!response.ok) return setError(payload.message)
     setMessage(payload.message); await load()
