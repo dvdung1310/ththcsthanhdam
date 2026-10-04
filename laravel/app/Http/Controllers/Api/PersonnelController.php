@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class PersonnelController extends Controller
 {
@@ -147,9 +148,8 @@ class PersonnelController extends Controller
             'phone' => ['nullable', 'string', 'max:20', Rule::unique('users', 'phone')->ignore($user?->id)],
             'password' => [$user ? 'nullable' : 'required', 'string', 'min:8'],
             'is_active' => ['required', 'boolean'],
-            'is_teacher' => ['required', 'boolean'],
-            'employee_code' => ['required_if:is_teacher,true', 'nullable', 'string', 'max:30', Rule::unique('teachers', 'employee_code')->ignore($teacherId)],
-            'employment_status' => ['required_if:is_teacher,true', 'nullable', Rule::in(self::EMPLOYMENT_STATUSES)],
+            'employee_code' => ['nullable', 'string', 'max:30', Rule::unique('teachers', 'employee_code')->ignore($teacherId)],
+            'employment_status' => ['nullable', Rule::in(self::EMPLOYMENT_STATUSES)],
             'unit_ids' => ['nullable', 'array'],
             'unit_ids.*' => ['integer', Rule::exists('departments', 'id')->where('is_active', true)],
             'roles' => ['sometimes', 'array'],
@@ -157,13 +157,18 @@ class PersonnelController extends Controller
             'roles.*.department_id' => ['nullable', 'exists:departments,id'],
             'replace_holders' => ['nullable', 'boolean'],
         ], [
-            'employee_code.required_if' => 'Vui lòng nhập mã giáo viên.',
             'employee_code.unique' => 'Mã giáo viên đã tồn tại.',
             'email.unique' => 'Email đã được sử dụng.',
             'phone.unique' => 'Số điện thoại đã được sử dụng.',
         ]);
         $data['unit_ids'] = collect($data['unit_ids'] ?? [])->map(fn ($id) => (int) $id)->unique()->values()->all();
-        abort_if($user?->teacher && ! $data['is_teacher'], 422, 'Không thể bỏ hồ sơ giáo viên của nhân sự đã có dữ liệu công việc. Hãy cho nghỉ việc thay vì vậy.');
+        $data['is_teacher'] = array_key_exists('roles', $data)
+            ? collect($data['roles'])->pluck('role_id')->map(fn ($id) => (int) $id)->contains((int) Role::where('code', Role::GIAO_VIEN)->value('id'))
+            : ($user ? (bool) $user->teacher : true);
+        if ($data['is_teacher'] && (blank($data['employee_code'] ?? null) || blank($data['employment_status'] ?? null))) {
+            throw ValidationException::withMessages(['employee_code' => 'Vui lòng nhập mã giáo viên và trạng thái công tác.']);
+        }
+        abort_if($user?->teacher && ! $data['is_teacher'], 422, 'Không thể bỏ vai trò Giáo viên của nhân sự đã có dữ liệu công việc. Hãy cho nghỉ việc thay vì vậy.');
         abort_if(! $data['is_teacher'] && $data['unit_ids'] !== [], 422, 'Chỉ giáo viên mới thuộc tổ, nhóm.');
 
         return $data;
