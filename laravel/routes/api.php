@@ -4,7 +4,7 @@ use App\Http\Controllers\Api\DocumentController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\TaskController;
-use App\Http\Controllers\Api\TaskConfigurationController;
+use App\Http\Controllers\Api\TaskTypeController;
 use App\Http\Controllers\Api\PersonnelController;
 use App\Http\Controllers\Api\UnitController;
 use App\Http\Controllers\Api\KpiController;
@@ -30,8 +30,7 @@ Route::middleware('api.token')->group(function(){
  Route::post('tasks/{task}/submit-completion',[TaskController::class,'submitCompletion'])->middleware('permission:tasks.update');Route::post('tasks/{task}/review-completion',[TaskController::class,'reviewCompletion'])->middleware('permission:tasks.view');
  Route::put('tasks/{task}/comments/{update}',[TaskController::class,'updateComment'])->middleware('permission:tasks.view');
  Route::post('tasks/{task}/comments',[TaskController::class,'storeComment'])->middleware('permission:tasks.view');
- Route::get('task-configuration',[TaskConfigurationController::class,'index'])->middleware('permission:tasks.assign');Route::post('task-groups',[TaskConfigurationController::class,'storeGroup'])->middleware('permission:tasks.assign');Route::match(['put','patch'],'task-groups/{taskGroup}',[TaskConfigurationController::class,'updateGroup'])->middleware('permission:tasks.assign');Route::delete('task-groups/{taskGroup}',[TaskConfigurationController::class,'destroyGroup'])->middleware('permission:tasks.assign');Route::post('task-catalog-items',[TaskConfigurationController::class,'storeItem'])->middleware('permission:tasks.assign');Route::match(['put','patch'],'task-catalog-items/{taskCatalogItem}',[TaskConfigurationController::class,'updateItem'])->middleware('permission:tasks.assign');Route::delete('task-catalog-items/{taskCatalogItem}',[TaskConfigurationController::class,'destroyItem'])->middleware('permission:tasks.assign');
- Route::post('late-penalty-rules',[TaskConfigurationController::class,'storeLatePenaltyRule'])->middleware('permission:tasks.assign');Route::match(['put','patch'],'late-penalty-rules/{latePenaltyRule}',[TaskConfigurationController::class,'updateLatePenaltyRule'])->middleware('permission:tasks.assign');Route::delete('late-penalty-rules/{latePenaltyRule}',[TaskConfigurationController::class,'destroyLatePenaltyRule'])->middleware('permission:tasks.assign');
+ Route::get('task-types',[TaskTypeController::class,'index'])->middleware('permission:tasks.assign');Route::post('task-types',[TaskTypeController::class,'store'])->middleware('permission:tasks.assign');Route::put('task-types/{taskType}',[TaskTypeController::class,'update'])->middleware('permission:tasks.assign');Route::delete('task-types/{taskType}',[TaskTypeController::class,'destroy'])->middleware('permission:tasks.assign');
  Route::get('kpi-report',[KpiController::class,'index'])->middleware('permission:kpi.view');
  Route::get('roles',[RoleController::class,'index'])->middleware('permission:roles.manage');Route::put('roles/{role}/permissions',[RoleController::class,'updatePermissions'])->middleware('permission:roles.manage');
 });
