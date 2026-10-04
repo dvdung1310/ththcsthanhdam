@@ -86,6 +86,7 @@ class TaskStatsController extends Controller
 
                 return ['period' => $from->format('m/Y'), ...$metrics($cohort($from))];
             }),
+            'no_deadline_open' => $tasks->filter(fn (Task $t) => ! $t->due_at && in_array($t->status, Task::OPEN, true))->count(),
             'data' => $rows, 'departments' => $departments,
             'references' => [
                 'teachers' => $allTeachers->map(fn ($t) => ['id' => $t->id, 'name' => $t->user?->name, 'department_ids' => $t->unitIds()])->values(),

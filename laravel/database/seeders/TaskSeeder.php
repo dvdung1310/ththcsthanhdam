@@ -45,6 +45,7 @@ class TaskSeeder extends Seeder
             ['Tự học bồi dưỡng chuyên đề STEM', 'Chuyên môn', 'huong.vt', null, 'normal', Task::IN_PROGRESS, 14 * 24, ['huong.vt'], []],
             ['Hoàn thiện sáng kiến kinh nghiệm', 'Chuyên môn', 'huong.vt', 'nam.tv', 'high', Task::WAITING_APPROVAL, 5 * 24, ['huong.vt'], [], ['submissions' => [['huong.vt', 'Bản thảo sáng kiến, nhờ tổ trưởng góp ý.', [], null, -12]]]],
             ['Sắp xếp lại tủ hồ sơ lớp chủ nhiệm', 'Công tác chủ nhiệm', 'an.lh', null, 'low', Task::COMPLETED, -24, ['an.lh'], []],
+            ['Cập nhật tủ sách tham khảo của tổ', 'Chuyên môn', 'nam.tv', null, 'low', Task::IN_PROGRESS, null, [], ['Tổ tự nhiên']],
         ];
 
         foreach ($tasks as $index => $row) {
@@ -52,7 +53,7 @@ class TaskSeeder extends Seeder
         }
     }
 
-    private function createTask(int $number, string $title, string $type, string $creator, ?string $reviewer, string $priority, string $status, int $dueInHours, array $teachers, array $units, array $extra = []): void
+    private function createTask(int $number, string $title, string $type, string $creator, ?string $reviewer, string $priority, string $status, ?int $dueInHours, array $teachers, array $units, array $extra = []): void
     {
         $code = 'CV-DEMO-'.str_pad($number, 3, '0', STR_PAD_LEFT);
         if (Task::withTrashed()->where('code', $code)->exists()) {
@@ -60,9 +61,9 @@ class TaskSeeder extends Seeder
         }
         $creatorUser = $this->user($creator);
         $createdAt = now()->subDays(8)->addHours($number);
-        $due = now()->addHours($dueInHours)->setTime(17, 0);
+        $due = $dueInHours === null ? null : now()->addHours($dueInHours)->setTime(17, 0);
         $submissions = $extra['submissions'] ?? [];
-        $completedAt = $status === Task::COMPLETED ? ($submissions ? now()->addHours(end($submissions)[4])->addHour() : $due->copy()->subHours(5)) : null;
+        $completedAt = $status === Task::COMPLETED ? ($submissions ? now()->addHours(end($submissions)[4])->addHour() : ($due?->copy()->subHours(5) ?? now()->subDay())) : null;
 
         $task = Task::create([
             'code' => $code, 'title' => $title, 'description' => 'Thực hiện "'.$title.'" theo kế hoạch chung của nhà trường.',

@@ -386,7 +386,7 @@ class TaskController extends Controller
             'reviewer_id' => ['nullable', Rule::exists('users', 'id')->where('status', 'active')],
             'priority' => ['required', Rule::in(['low', 'normal', 'high', 'urgent'])],
             'starts_at' => ['nullable', 'date'],
-            'due_at' => ['required', 'date', 'after_or_equal:starts_at'],
+            'due_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
             'teacher_ids' => ['required_without:department_ids', 'array'],
             'teacher_ids.*' => ['integer', 'exists:teachers,id'],
             'department_ids' => ['required_without:teacher_ids', 'array'],

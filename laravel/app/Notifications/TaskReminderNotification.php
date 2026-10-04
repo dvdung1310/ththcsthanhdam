@@ -27,7 +27,7 @@ class TaskReminderNotification extends Notification implements ShouldQueue
             ->line('Bạn có một công việc chưa thực hiện trên hệ thống.')
             ->line('Mã công việc: '.$this->task->code)
             ->line('Nội dung: '.$this->task->title)
-            ->line('Hạn hoàn thành: '.$this->task->due_at?->format('d/m/Y H:i'))
+            ->line('Hạn hoàn thành: '.($this->task->due_at?->format('d/m/Y H:i') ?? 'Không thời hạn'))
             ->action('Mở hệ thống quản lý', config('app.url'))
             ->line('Vui lòng kiểm tra và bắt đầu thực hiện công việc đúng hạn.');
     }
