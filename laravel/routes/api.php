@@ -7,7 +7,7 @@ use App\Http\Controllers\Api\TaskController;
 use App\Http\Controllers\Api\TaskTypeController;
 use App\Http\Controllers\Api\PersonnelController;
 use App\Http\Controllers\Api\UnitController;
-use App\Http\Controllers\Api\KpiController;
+use App\Http\Controllers\Api\TaskStatsController;
 use App\Http\Controllers\Api\AiAssistantController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Broadcasting\BroadcastController;
@@ -31,7 +31,7 @@ Route::middleware('api.token')->group(function(){
  Route::put('tasks/{task}/comments/{update}',[TaskController::class,'updateComment'])->middleware('permission:tasks.view');
  Route::post('tasks/{task}/comments',[TaskController::class,'storeComment'])->middleware('permission:tasks.view');
  Route::get('task-types',[TaskTypeController::class,'index'])->middleware('permission:tasks.assign');Route::post('task-types',[TaskTypeController::class,'store'])->middleware('permission:tasks.assign');Route::put('task-types/{taskType}',[TaskTypeController::class,'update'])->middleware('permission:tasks.assign');Route::delete('task-types/{taskType}',[TaskTypeController::class,'destroy'])->middleware('permission:tasks.assign');
- Route::get('kpi-report',[KpiController::class,'index'])->middleware('permission:kpi.view');
+ Route::get('task-stats',[TaskStatsController::class,'index'])->middleware('permission:kpi.view');
  Route::get('roles',[RoleController::class,'index'])->middleware('permission:roles.manage');Route::put('roles/{role}/permissions',[RoleController::class,'updatePermissions'])->middleware('permission:roles.manage');
 });
 
