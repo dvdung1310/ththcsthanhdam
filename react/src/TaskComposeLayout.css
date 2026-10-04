@@ -125,6 +125,8 @@
   gap: 12px;
   position: sticky;
   bottom: 0;
+  z-index: 2;
+  background: #fff;
 }
 
 .form-blocked-hint {
@@ -142,6 +144,14 @@
   .form-blocked-hint {
     width: 100%;
     margin: 0 0 4px;
+  }
+
+  .task-modal form:has(.task-compose-body) > .modal-actions {
+    flex-wrap: wrap;
+  }
+
+  .task-modal form:has(.task-compose-body) > .modal-actions > button {
+    white-space: nowrap;
   }
 }
 
