@@ -1759,9 +1759,11 @@ function formatFileSize(bytes) {
 
 function taskFormSnapshot(element, editing) {
   if (!element || !editing) return null;
-  const values = [...new FormData(element).entries()].filter(([, value]) => typeof value === "string");
+  const values = [...new FormData(element).entries()].filter(([key, value]) => typeof value === "string" && !["description", "reviewer_ids", "teacher_ids", "department_ids", "document_ids"].includes(key.replace(/\[\]$/, "")));
   return JSON.stringify([
     values,
+    editing.description || "",
+    editing.reviewer_ids || [],
     editing.assignment_mode,
     editing.teacher_ids,
     editing.department_ids,
