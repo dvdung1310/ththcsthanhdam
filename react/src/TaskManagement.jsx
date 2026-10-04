@@ -1834,7 +1834,7 @@ function TaskWorkflowPanel({ task, saving, error, onStart, onSubmit, onReview, o
             Ghi chú
             <textarea name="comment" rows="3" disabled={saving} placeholder="Mô tả kết quả đã làm..." />
           </label>
-          <button className="primary-btn workflow-btn" disabled={saving || !drafts.submit} title={drafts.submit ? undefined : "Thêm file, link hoặc ghi chú kết quả"}>
+          <button className="primary-btn workflow-btn" disabled={saving}>
             <Send size={15} /> Nộp & đề nghị duyệt
           </button>
         </form>
@@ -1856,7 +1856,7 @@ function TaskWorkflowPanel({ task, saving, error, onStart, onSubmit, onReview, o
             <button name="decision" value="approved" className="approve-completion" disabled={saving}>
               <CheckCircle2 size={16} /> Xác nhận hoàn thành
             </button>
-            <button name="decision" value="revision_required" className="revision-completion" disabled={saving || !drafts.review} title={drafts.review ? undefined : "Nhập nhận xét để người thực hiện biết cần sửa gì"}>
+            <button name="decision" value="revision_required" className="revision-completion" disabled={saving}>
               <RotateCcw size={16} /> Yêu cầu chỉnh sửa
             </button>
           </div>
