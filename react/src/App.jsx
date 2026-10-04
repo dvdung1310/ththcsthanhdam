@@ -36,7 +36,7 @@ import "./Typography.css";
 import "./ApiStates.css";
 import TaskManagement from "./TaskManagement";
 import TaskConfiguration from "./TaskConfiguration";
-import RoleManagement from "./RoleManagement";
+import RolePermissionMatrix from "./RolePermissionMatrix";
 import PersonnelManagement from "./PersonnelManagement";
 import KpiReport from "./KpiReport";
 import ManagementDashboard from "./ManagementDashboard";
@@ -476,7 +476,7 @@ function App() {
         ) : active === "Dữ liệu dùng chung" ? (
           <DocumentManagement canManage={can("documents.manage")} />
         ) : active === "Vai trò & quyền" ? (
-          <RoleManagement />
+          <RolePermissionMatrix />
         ) : active === "Thông tin cá nhân" ? (
           <PersonalProfile user={authUser} onUserChanged={setAuthUser} />
         ) : (
