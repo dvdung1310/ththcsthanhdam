@@ -7,15 +7,21 @@ import "./KpiAnalytics.css";
 const n = (v) =>
   v == null
     ? "—"
-    : Number(v).toLocaleString("vi-VN", { maximumFractionDigits: 2 });
-export default function KpiReport({ onTask }) {
+    : Number(v).toLocaleString("vi-VN", { maximumFractionDigits: 1 });
+const statusLabels = {
+  not_started: "Chưa thực hiện",
+  in_progress: "Đang thực hiện",
+  waiting_approval: "Chờ duyệt",
+  completed: "Hoàn thành",
+};
+export default function TaskStats({ onTask }) {
   const now = new Date();
   const [filters, setFilters] = useState({
     year: now.getFullYear(),
     month: now.getMonth() + 1,
     department_id: "",
     teacher_id: "",
-    task_catalog_item_id: "",
+    category_id: "",
     compare: "previous",
   });
   const [report, setReport] = useState(null),
@@ -30,7 +36,7 @@ export default function KpiReport({ onTask }) {
     const params = new URLSearchParams(
       Object.entries(filters).filter(([, v]) => v !== ""),
     );
-    apiFetch("/api/kpi-report?" + params, { signal: controller.signal })
+    apiFetch("/api/task-stats?" + params, { signal: controller.signal })
       .then(async (r) => {
         const p = await r.json();
         if (!r.ok) throw new Error(p.message || "Không thể tải thống kê");
@@ -54,13 +60,27 @@ export default function KpiReport({ onTask }) {
     current = report?.current || {},
     previous = report?.previous;
   const cards = [
-    ["kpi", "KPI trung bình", "/ 10"],
-    ["on_time", "Tỷ lệ đúng hạn", "%"],
-    ["completion", "Tỷ lệ hoàn thành", "%"],
-    ["first_approval", "Được duyệt lần đầu", "%"],
-    ["late_penalty", "Điểm bị trừ do trễ hạn", "điểm"],
+    ["assigned", "Công việc có hạn trong tháng", "việc"],
+    ["completed", "Đã hoàn thành", "việc"],
+    ["waiting", "Đang chờ duyệt", "việc"],
+    ["overdue", "Quá hạn chưa nộp", "việc"],
+    ["completion_rate", "Tỷ lệ hoàn thành", "%"],
+    ["on_time_rate", "Hoàn thành đúng hạn", "%"],
   ];
-  const loss = report?.losses.reduce((s, r) => s + r.points, 0) || 0;
+  const lowerIsBetter = ["overdue", "waiting"];
+  const open = Math.max(
+    0,
+    (current.assigned || 0) -
+      (current.completed || 0) -
+      (current.waiting || 0) -
+      (current.overdue || 0),
+  );
+  const breakdown = [
+    ["Hoàn thành", current.completed || 0],
+    ["Chờ duyệt", current.waiting || 0],
+    ["Đang thực hiện / chưa đến hạn", open],
+    ["Quá hạn chưa nộp", current.overdue || 0],
+  ];
   const options = (key, label, rows) => (
     <label>
       {label}
@@ -81,15 +101,15 @@ export default function KpiReport({ onTask }) {
     <div className="kpi-page kpi-analysis" aria-busy={loading}>
       <header className="kpi-header">
         <div>
-          <h2>KPI & Thống kê</h2>
-          <p>Phân tích hiệu suất, chất lượng và nguyên nhân mất điểm</p>
+          <h2>Thống kê công việc</h2>
+          <p>Tình hình giao, thực hiện và hoàn thành công việc theo tháng</p>
         </div>
         <span>
           {report?.scope === "school"
             ? "Toàn trường"
             : report?.scope === "department"
-              ? "Phạm vi tổ quản lý"
-              : "Kết quả cá nhân"}
+              ? "Phạm vi đơn vị quản lý"
+              : "Cá nhân"}
         </span>
       </header>
       <section className="kpi-analysis-filters">
@@ -117,7 +137,7 @@ export default function KpiReport({ onTask }) {
             />
           </div>
         </label>
-        {options("department_id", "Tổ chuyên môn", refs.departments)}
+        {options("department_id", "Tổ / nhóm", refs.departments)}
         {options(
           "teacher_id",
           "Giáo viên",
@@ -127,7 +147,7 @@ export default function KpiReport({ onTask }) {
               t.department_ids.includes(+filters.department_id),
           ),
         )}
-        {options("task_catalog_item_id", "Loại nhiệm vụ", refs.task_types)}
+        {options("category_id", "Loại nhiệm vụ", refs.task_types)}
         <label>
           So sánh với
           <select
@@ -150,7 +170,7 @@ export default function KpiReport({ onTask }) {
             <p className="kpi-period-caption">
               Tháng {report.period} ·{" "}
               {refs.departments?.find((d) => d.id === +filters.department_id)
-                ?.name || "Tất cả tổ trong phạm vi"}{" "}
+                ?.name || "Tất cả đơn vị trong phạm vi"}{" "}
               ·{" "}
               {refs.teachers?.find((t) => t.id === +filters.teacher_id)?.name ||
                 "Tất cả giáo viên"}
@@ -160,23 +180,28 @@ export default function KpiReport({ onTask }) {
               {cards.map(([key, label, unit]) => {
                 const delta =
                   previous?.[key] != null && current[key] != null
-                    ? +(current[key] - previous[key]).toFixed(2)
+                    ? +(current[key] - previous[key]).toFixed(1)
                     : null;
-                const good = key === "late_penalty" ? delta <= 0 : delta >= 0;
+                const good = lowerIsBetter.includes(key)
+                  ? delta <= 0
+                  : delta >= 0;
                 return (
                   <article
                     key={key}
-                    className={key === "late_penalty" ? "loss-card" : ""}
+                    className={key === "overdue" && current[key] > 0 ? "loss-card" : ""}
                   >
                     <span>{label}</span>
                     <b>
-                      {key === "late_penalty" && current[key] > 0 ? "−" : ""}
                       {n(current[key])} <small>{unit}</small>
                     </b>
                     {previous && (
                       <small
                         className={
-                          delta == null ? "" : good ? "delta-good" : "delta-bad"
+                          delta == null || delta === 0
+                            ? ""
+                            : good
+                              ? "delta-good"
+                              : "delta-bad"
                         }
                       >
                         {delta == null
@@ -194,60 +219,54 @@ export default function KpiReport({ onTask }) {
             </section>
             <section className="kpi-chart-grid">
               <article className="kpi-analysis-panel">
-                <h3>Xu hướng KPI · 6 tháng</h3>
+                <h3>Tỷ lệ hoàn thành · 6 tháng</h3>
                 <div
                   className="kpi-trend"
                   role="img"
                   aria-label={report.trend
-                    .map((r) => r.period + ": " + n(r.kpi))
+                    .map((r) => r.period + ": " + n(r.completion_rate) + "%")
                     .join("; ")}
                 >
                   {report.trend.map((r) => (
                     <div key={r.period}>
-                      <b>{n(r.kpi)}</b>
+                      <b>{r.completion_rate == null ? "—" : n(r.completion_rate) + "%"}</b>
                       <div className="kpi-trend-track">
-                        <span style={{ height: (r.kpi || 0) * 10 + "%" }} />
+                        <span style={{ height: (r.completion_rate || 0) + "%" }} />
                       </div>
-                      <small>{r.period}</small>
+                      <small>
+                        {r.period} · {r.assigned} việc
+                      </small>
                     </div>
                   ))}
                 </div>
-                <p>
-                  KPI thang 10 · Chưa có điểm chấm hiển thị “—”, không tính là
-                  0.
-                </p>
+                <p>Tháng không có công việc đến hạn hiển thị “—”.</p>
               </article>
               <article className="kpi-analysis-panel">
-                <h3>Phân bổ điểm bị mất</h3>
-                <strong className="kpi-loss-total">{n(loss)} điểm</strong>
-                {report.losses.map((r) => (
-                  <div className="kpi-loss-row" key={r.name}>
+                <h3>Tình trạng công việc trong tháng</h3>
+                <strong className="kpi-loss-total">{n(current.assigned)} việc</strong>
+                {breakdown.map(([name, count]) => (
+                  <div className="kpi-loss-row" key={name}>
                     <div>
-                      <span>{r.name}</span>
+                      <span>{name}</span>
                       <b>
-                        {n(r.points)} điểm ·{" "}
-                        {loss ? n((r.points / loss) * 100) : 0}%
+                        {count} việc ·{" "}
+                        {current.assigned ? n((count / current.assigned) * 100) : 0}%
                       </b>
                     </div>
                     <div className="kpi-loss-track">
                       <span
                         style={{
-                          width: (loss ? (r.points / loss) * 100 : 0) + "%",
+                          width: (current.assigned ? (count / current.assigned) * 100 : 0) + "%",
                         }}
                       />
                     </div>
                   </div>
                 ))}
-                <p>
-                  Chưa có mã nguyên nhân để tách giảm điểm chấm thành thiếu yêu
-                  cầu, chỉnh sửa hay khác. Yêu cầu làm lại không tự động đồng
-                  nghĩa với bị trừ điểm.
-                </p>
               </article>
             </section>
             <article className="kpi-analysis-panel">
               <h3>
-                KPI theo tổ <small>Bấm vào tổ để xem giáo viên</small>
+                Theo tổ / nhóm <small>Bấm để lọc theo đơn vị</small>
               </h3>
               <div className="kpi-department-grid">
                 {report.departments.map((d) => (
@@ -258,23 +277,23 @@ export default function KpiReport({ onTask }) {
                     <span>
                       {d.name}
                       <small>
-                        {d.teachers} giáo viên · Trừ trễ hạn:{" "}
-                        {n(d.late_penalty)} điểm
+                        {d.teachers} giáo viên · {d.completed}/{d.assigned} việc hoàn thành
+                        {d.overdue > 0 && ` · ${d.overdue} quá hạn`}
                       </small>
                     </span>
                     <b>
-                      {n(d.kpi)} / 10 <ArrowRight size={16} />
+                      {d.completion_rate == null ? "—" : n(d.completion_rate) + "%"} <ArrowRight size={16} />
                     </b>
                   </button>
                 ))}
                 {!report.departments.length && (
-                  <p>Không có dữ liệu tổ phù hợp.</p>
+                  <p>Không có dữ liệu đơn vị phù hợp.</p>
                 )}
               </div>
             </article>
             <section className="kpi-table-card">
               <div className="kpi-filters">
-                <h3>Kết quả giáo viên</h3>
+                <h3>Theo giáo viên</h3>
                 <span className="kpi-result-count">
                   {report.data.length} giáo viên
                 </span>
@@ -284,11 +303,13 @@ export default function KpiReport({ onTask }) {
                   <thead>
                     <tr>
                       <th>Giáo viên</th>
-                      <th>Tổ chuyên môn</th>
+                      <th>Tổ / nhóm</th>
                       <th>Công việc</th>
-                      <th>Điểm đạt / tối đa</th>
-                      <th>KPI / 10</th>
-                      <th>Trừ trễ hạn</th>
+                      <th>Hoàn thành</th>
+                      <th>Chờ duyệt</th>
+                      <th>Quá hạn</th>
+                      <th>Tỷ lệ hoàn thành</th>
+                      <th>Đúng hạn</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -303,24 +324,22 @@ export default function KpiReport({ onTask }) {
                             <small>{r.employee_code} · Xem công việc</small>
                           </button>
                         </td>
-                        <td>{r.department || "Chưa phân tổ"}</td>
-                        <td>{r.task_count}</td>
-                        <td>
-                          {n(r.task_earned)} / {n(r.task_maximum)}
-                        </td>
+                        <td>{r.department || "Chưa thuộc đơn vị"}</td>
+                        <td>{r.assigned}</td>
+                        <td>{r.completed}</td>
+                        <td>{r.waiting}</td>
+                        <td className={r.overdue > 0 ? "delta-bad" : ""}>{r.overdue}</td>
                         <td>
                           <strong className="kpi-total">
-                            {n(r.final_score)}
+                            {r.completion_rate == null ? "—" : n(r.completion_rate) + "%"}
                           </strong>
                         </td>
-                        <td className={r.late_penalty > 0 ? "delta-bad" : ""}>
-                          {n(r.late_penalty)} điểm
-                        </td>
+                        <td>{r.on_time_rate == null ? "—" : n(r.on_time_rate) + "%"}</td>
                       </tr>
                     ))}
                     {!report.data.length && (
                       <tr>
-                        <td colSpan="6" className="kpi-empty">
+                        <td colSpan="8" className="kpi-empty">
                           Không có giáo viên phù hợp.
                         </td>
                       </tr>
@@ -330,12 +349,10 @@ export default function KpiReport({ onTask }) {
               </div>
             </section>
             <p className="kpi-methodology">
-              KPI: trung bình giáo viên có điểm, tính điểm đạt / tối đa × 10.
-              Hoàn thành: công việc có hạn trong tháng. Đúng hạn: lần nộp cuối
-              (hoặc thời điểm hoàn thành nếu không có bản nộp) không vượt hạn.
-              Duyệt lần đầu: công việc có bản nộp được xét duyệt trong kỳ, bản
-              nộp đầu được chấp thuận. Điểm trừ: kết quả chấm mới nhất của công
-              việc hoàn thành trong kỳ.
+              Thống kê theo công việc có hạn trong tháng, không tính công việc
+              đã hủy. Công việc giao cho tổ / nhóm được tính cho mọi thành viên
+              của đơn vị. Đúng hạn: lần nộp cuối (hoặc thời điểm hoàn thành nếu
+              không có bản nộp) không vượt hạn.
             </p>
           </>
         )
@@ -365,37 +382,20 @@ export default function KpiReport({ onTask }) {
                   <div className="kpi-task-main">
                     <code>{t.code}</code>
                     <b>{t.title}</b>
+                    <small>{t.category || "Chưa có loại nhiệm vụ"}</small>
                     <small>
-                      {t.task_type || "Chưa có loại nhiệm vụ"}
-                      {t.product && " · " + t.product}
-                    </small>
-                    <small>
-                      {{
-                        not_started: "Chưa làm",
-                        in_progress: "Đang thực hiện",
-                        completed: "Hoàn thành",
-                      }[t.status] || t.status}{" "}
-                      · Hạn:{" "}
+                      {statusLabels[t.status] || t.status} · Hạn:{" "}
                       {t.due_at
                         ? new Date(t.due_at).toLocaleString("vi-VN")
                         : "—"}
                     </small>
-                    {t.comment && <small>Nhận xét: {t.comment}</small>}
                     {t.revision_count > 0 && (
                       <small>Yêu cầu làm lại: {t.revision_count} lần</small>
                     )}
                   </div>
                   <div className="kpi-task-score">
-                    <b>
-                      {t.score == null
-                        ? "Chưa có điểm trong kỳ"
-                        : n(t.score) + " / " + n(t.maximum_score) + " điểm"}
-                    </b>
-                    {t.late_penalty > 0 && (
-                      <small>
-                        Trễ hạn: trừ {n(t.late_penalty_percent)}% ={" "}
-                        {n(t.late_penalty)} điểm
-                      </small>
+                    {t.status === "completed" && (
+                      <b>{t.is_late ? "Hoàn thành trễ hạn" : "Hoàn thành đúng hạn"}</b>
                     )}
                     {onTask && (
                       <button

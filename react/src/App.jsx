@@ -38,7 +38,7 @@ import TaskManagement from "./TaskManagement";
 import TaskConfiguration from "./TaskConfiguration";
 import RolePermissionMatrix from "./RolePermissionMatrix";
 import PersonnelManagement from "./PersonnelManagement";
-import KpiReport from "./KpiReport";
+import TaskStats from "./TaskStats";
 import ManagementDashboard from "./ManagementDashboard";
 import LoginPage from "./LoginPage";
 import NotificationCenter from "./NotificationCenter";
@@ -53,7 +53,7 @@ import "./NotificationTaskStates.css";
 
 const navItems = [
   ["Tổng quan", LayoutDashboard],
-  ["KPI & Thống kê", ChartNoAxesColumnIncreasing],
+  ["Thống kê", ChartNoAxesColumnIncreasing],
   ["Giao việc", ClipboardCheck],
   ["Dữ liệu dùng chung", Database],
   ["Quản lý nhân sự", Users],
@@ -361,7 +361,7 @@ function App() {
   const can = (permission) => authUser.permissions.includes(permission);
   const canConfigureTasks = authUser.access_scope === "school" && authUser.permissions.includes("tasks.assign");
   const navPermissions = {
-    "KPI & Thống kê": "kpi.view",
+    "Thống kê": "kpi.view",
     "Quản lý nhân sự": "teachers.view",
     "Giao việc": "tasks.view",
     "Dữ liệu dùng chung": "documents.view",
@@ -461,8 +461,8 @@ function App() {
           </div>
         </header>
 
-        {active === "KPI & Thống kê" ? (
-          <KpiReport canManage={can("kpi.manage")} onTask={(id) => { setSelectedTask({ id, token: Date.now() }); setActive("Giao việc"); }} />
+        {active === "Thống kê" ? (
+          <TaskStats onTask={(id) => { setSelectedTask({ id, token: Date.now() }); setActive("Giao việc"); }} />
         ) : active === "Quản lý nhân sự" ? (
           <PersonnelManagement />
         ) : active === "Cấu hình giao việc" ? (
@@ -480,7 +480,7 @@ function App() {
         ) : active === "Thông tin cá nhân" ? (
           <PersonalProfile user={authUser} onUserChanged={setAuthUser} />
         ) : (
-          <ManagementDashboard onTask={(id) => { setSelectedTask({ id, token: Date.now() }); setActive("Giao việc"); }} onKpi={() => setActive("KPI & Thống kê")} />
+          <ManagementDashboard onTask={(id) => { setSelectedTask({ id, token: Date.now() }); setActive("Giao việc"); }} onKpi={() => setActive("Thống kê")} />
         )}
       </main>
       {authUser.has_ai_assistant && <AiAssistant />}
