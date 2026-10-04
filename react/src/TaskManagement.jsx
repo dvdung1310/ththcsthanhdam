@@ -948,7 +948,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                       />
                     )}
                     <ReviewerPicker
-                      reviewers={refs.reviewers}
+                      reviewers={editing.assignment_mode === "self" ? refs.reviewers.filter((r) => r.id !== refs.current_teacher?.user_id) : refs.reviewers}
                       units={refs.units || []}
                       value={editing.reviewer_id || ""}
                       onChange={(reviewer_id) =>

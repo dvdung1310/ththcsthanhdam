@@ -80,7 +80,7 @@ class TaskController extends Controller
             'departments' => $canAssign ? Department::ordered($unitIds)->map($unitOption)->values() : [],
             'units' => Department::ordered()->map($unitOption)->values(),
             'reviewers' => User::with(['roles' => $activeRoles, 'teacher.departments' => fn ($q) => $q->wherePivotNull('ends_on')])->where('status', 'active')->orderBy('name')->get()->map(fn ($u) => ['id' => $u->id, 'name' => $u->name, 'avatar_url' => $avatar($u), 'department_ids' => $u->teacher?->unitIds() ?? [], 'roles' => $roles($u)]),
-            'current_teacher' => $user->teacher ? ['id' => $user->teacher->id, 'name' => $user->name, 'avatar_url' => $avatar($user)] : null,
+            'current_teacher' => $user->teacher ? ['id' => $user->teacher->id, 'user_id' => $user->id, 'name' => $user->name, 'avatar_url' => $avatar($user)] : null,
             'can_assign' => $canAssign,
             'documents' => OfficialDocument::with(['type', 'file'])->latest('issued_on')->limit(200)->get()->map(fn ($document) => [
                 'id' => $document->id, 'document_number' => $document->document_number,
