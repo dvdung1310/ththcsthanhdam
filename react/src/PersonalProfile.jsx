@@ -65,7 +65,7 @@ export default function PersonalProfile({ user, onUserChanged }) {
         </div>
         <h3>{user.name}</h3><p>{user.current_position || user.roles[0]?.name || "Người dùng"}</p>
         <div className="personal-info-row"><Mail size={17}/><span><small>Email đăng nhập</small><b>{user.email}</b></span></div>
-        <div className="personal-info-row"><UserRound size={17}/><span><small>Chức vụ hiện tại</small><b>{user.current_position || "Chưa cập nhật"}</b></span></div>
+        <div className="personal-info-row"><UserRound size={17}/><span><small>Vai trò hiện tại</small><b>{user.role_labels?.join(", ") || "Chưa cập nhật"}</b></span></div>
         <input ref={fileRef} hidden type="file" accept="image/jpeg,image/png,image/webp" onChange={chooseAvatar}/>
         <button className="personal-upload" type="button" onClick={() => fileRef.current?.click()}><Camera size={17}/> Chọn ảnh mới</button>
         {avatar && <button className="personal-save" type="button" disabled={savingAvatar} onClick={saveAvatar}>{savingAvatar ? "Đang lưu..." : "Lưu ảnh đại diện"}</button>}
