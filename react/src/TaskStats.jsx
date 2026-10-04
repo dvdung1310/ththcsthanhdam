@@ -175,6 +175,8 @@ export default function TaskStats({ onTask }) {
               {refs.teachers?.find((t) => t.id === +filters.teacher_id)?.name ||
                 "Tất cả giáo viên"}
               {previous && " · So với " + report.comparison_period}
+              {report.no_deadline_open > 0 &&
+                ` · ${report.no_deadline_open} việc không thời hạn đang mở (không tính vào thống kê tháng)`}
             </p>
             <section className="kpi-analytic-cards">
               {cards.map(([key, label, unit]) => {
@@ -387,7 +389,7 @@ export default function TaskStats({ onTask }) {
                       {statusLabels[t.status] || t.status} · Hạn:{" "}
                       {t.due_at
                         ? new Date(t.due_at).toLocaleString("vi-VN")
-                        : "—"}
+                        : "Không thời hạn"}
                     </small>
                     {t.revision_count > 0 && (
                       <small>Yêu cầu làm lại: {t.revision_count} lần</small>

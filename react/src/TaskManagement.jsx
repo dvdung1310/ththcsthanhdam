@@ -633,10 +633,12 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                   <td>
                     <span className={t.is_overdue ? "due overdue" : "due"}>
                       <CalendarClock size={14} />
-                      {new Date(t.due_at).toLocaleString("vi-VN", {
-                        dateStyle: "short",
-                        timeStyle: "short",
-                      })}
+                      {t.due_at
+                        ? new Date(t.due_at).toLocaleString("vi-VN", {
+                            dateStyle: "short",
+                            timeStyle: "short",
+                          })
+                        : "Không thời hạn"}
                     </span>
                   </td>
                   <td>
@@ -932,10 +934,9 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                         />
                       </label>
                       <label>
-                        Hạn hoàn thành
+                        Hạn hoàn thành <small>(bỏ trống nếu không thời hạn)</small>
                         <input
                           name="due_at"
-                          required
                           type="datetime-local"
                           defaultValue={editing.due_at}
                         />
@@ -1043,7 +1044,9 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                     <div className="detail-highlight-deadline">
                       <dt>Hạn hoàn thành</dt>
                       <dd>
-                        {new Date(viewing.due_at).toLocaleString("vi-VN")}
+                        {viewing.due_at
+                          ? new Date(viewing.due_at).toLocaleString("vi-VN")
+                          : "Không thời hạn"}
                       </dd>
                     </div>
                     <div className="detail-highlight-reviewer">
