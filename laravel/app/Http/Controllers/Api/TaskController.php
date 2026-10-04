@@ -30,7 +30,7 @@ class TaskController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $query = Task::with(['category', 'creator', 'reviewer', 'teachers.user', 'departments', 'documents.type', 'documents.file'])
+        $query = Task::with(['category', 'creator', 'reviewers', 'teachers.user', 'departments', 'documents.type', 'documents.file'])
             ->withCount(['teachers', 'departments', 'submissions'])
             ->when($request->string('search')->toString(), fn ($q, $search) => $q->where(fn ($b) => $b->where('code', 'like', "%{$search}%")->orWhere('title', 'like', "%{$search}%")->orWhere('description', 'like', "%{$search}%")))
             ->when($request->string('status')->toString(), fn ($q, $status) => $q->where('status', $status))
@@ -98,6 +98,7 @@ class TaskController extends Controller
         $task = DB::transaction(function () use ($request, $data) {
             $task = Task::create([...$this->taskAttributes($data), 'code' => $this->nextCode(), 'created_by' => $request->user()->id, 'status' => Task::NOT_STARTED]);
             $this->syncAssignees($task, $data, $request->user());
+            $this->syncReviewers($task, $data);
             $task->documents()->sync($data['document_ids'] ?? []);
             $this->storeAttachments($request, $task);
             $this->recordStatus($task, null, Task::NOT_STARTED, 'Khởi tạo và giao công việc', $request->user());
@@ -105,7 +106,7 @@ class TaskController extends Controller
             return $task;
         });
         $this->notifyAssignees($task);
-        $this->notifyReviewer($task);
+        $this->notifyReviewers($task);
 
         return response()->json(['message' => 'Đã giao công việc thành công.', 'data' => $this->serialize($this->loadTask($task))], 201);
     }
@@ -116,17 +117,17 @@ class TaskController extends Controller
         abort_unless($teacher, 422, 'Tài khoản của bạn chưa được liên kết với hồ sơ giáo viên.');
         $request->merge(['teacher_ids' => [$teacher->id], 'department_ids' => []]);
         $data = $this->validateTask($request);
-        abort_if(($data['reviewer_id'] ?? null) === $request->user()->id, 422, 'Người duyệt phải là người khác.');
         $task = DB::transaction(function () use ($request, $data) {
             $task = Task::create([...$this->taskAttributes($data), 'code' => $this->nextCode(), 'created_by' => $request->user()->id, 'status' => Task::NOT_STARTED]);
             $this->syncAssignees($task, $data, $request->user());
+            $this->syncReviewers($task, $data);
             $task->documents()->sync($data['document_ids'] ?? []);
             $this->storeAttachments($request, $task);
             $this->recordStatus($task, null, Task::NOT_STARTED, 'Tự tạo công việc cá nhân', $request->user());
 
             return $task;
         });
-        $this->notifyReviewer($task);
+        $this->notifyReviewers($task);
 
         return response()->json(['message' => 'Đã tạo công việc cá nhân thành công.', 'data' => $this->serialize($this->loadTask($task))], 201);
     }
@@ -167,13 +168,16 @@ class TaskController extends Controller
         abort_if(in_array($task->status, Task::CLOSED, true), 422, 'Công việc đã kết thúc, không thể sửa.');
         $data = $this->validateTask($request);
         $this->ensureAssignmentScope($request, $data);
-        DB::transaction(function () use ($request, $data, $task) {
+        $added = DB::transaction(function () use ($request, $data, $task) {
             $task->update($this->taskAttributes($data));
             $this->syncAssignees($task, $data, $request->user());
             $task->documents()->sync($data['document_ids'] ?? []);
             $this->storeAttachments($request, $task);
             $this->removeAttachments($task, $data['remove_attachment_ids'] ?? []);
+
+            return $this->syncReviewers($task, $data);
         });
+        $this->notifyReviewers($task, $added);
 
         return response()->json(['message' => 'Đã cập nhật công việc thành công.', 'data' => $this->serialize($this->loadTask($task))]);
     }
@@ -184,13 +188,15 @@ class TaskController extends Controller
         abort_if(in_array($task->status, Task::CLOSED, true), 422, 'Công việc đã kết thúc, không thể sửa.');
         $request->merge(['teacher_ids' => [$request->user()->teacher->id], 'department_ids' => []]);
         $data = $this->validateTask($request);
-        abort_if(($data['reviewer_id'] ?? null) === $request->user()->id, 422, 'Người duyệt phải là người khác.');
-        DB::transaction(function () use ($request, $data, $task) {
+        $added = DB::transaction(function () use ($request, $data, $task) {
             $task->update($this->taskAttributes($data));
             $task->documents()->sync($data['document_ids'] ?? []);
             $this->storeAttachments($request, $task);
             $this->removeAttachments($task, $data['remove_attachment_ids'] ?? []);
+
+            return $this->syncReviewers($task, $data);
         });
+        $this->notifyReviewers($task, $added);
 
         return response()->json(['message' => 'Đã cập nhật công việc cá nhân thành công.', 'data' => $this->serialize($this->loadTask($task))]);
     }
@@ -227,7 +233,7 @@ class TaskController extends Controller
             }
         });
         if (! empty($data['content'])) {
-            $this->notify(collect([$task->reviewer ?: $task->creator]), $task, $request->user()->name.' đã cập nhật công việc '.$task->title.': '.$data['content'], 'progress_comment', $request->user());
+            $this->notify($this->reviewersOrCreator($task), $task, $request->user()->name.' đã cập nhật công việc '.$task->title.': '.$data['content'], 'progress_comment', $request->user());
         }
 
         return response()->json(['message' => 'Đã cập nhật trạng thái công việc.', 'data' => $this->serialize($this->loadTask($task))]);
@@ -257,7 +263,7 @@ class TaskController extends Controller
             $task->updates()->create(['teacher_id' => $teacher->id, 'created_by' => $request->user()->id, 'status' => Task::WAITING_APPROVAL, 'content' => $data['comment'] ?? 'Đã gửi bài nộp.']);
             $this->recordStatus($task, $old, Task::WAITING_APPROVAL, 'Gửi đề nghị hoàn thành', $request->user());
         });
-        $this->notify(collect([$task->creator, $task->reviewer]), $task, $request->user()->name.' đã gửi đề nghị xác nhận hoàn thành: '.$task->title, 'completion_submitted', $request->user());
+        $this->notify(collect([$task->creator])->concat($task->reviewers), $task, $request->user()->name.' đã gửi đề nghị xác nhận hoàn thành: '.$task->title, 'completion_submitted', $request->user());
 
         return response()->json(['message' => 'Đã gửi đề nghị hoàn thành và thông báo cho người giao việc, người duyệt.']);
     }
@@ -374,7 +380,7 @@ class TaskController extends Controller
         }
         $isAssignee = $this->isTaskAssignee($request, $task);
         $task->updates()->create(['teacher_id' => $isAssignee ? $request->user()->teacher->id : null, 'created_by' => $request->user()->id, 'status' => $task->status, 'content' => $data['content']]);
-        $recipients = $isAssignee ? collect([$task->reviewer ?: $task->creator]) : $this->assigneeUsers($task);
+        $recipients = $isAssignee ? $this->reviewersOrCreator($task) : $this->assigneeUsers($task);
         $this->notify($recipients, $task, $request->user()->name.' đã gửi nhận xét về công việc '.$task->title.': '.$data['content'], 'task_comment', $request->user());
 
         return response()->json(['message' => 'Đã lưu nhận xét và gửi thông báo.']);
@@ -382,11 +388,12 @@ class TaskController extends Controller
 
     private function validateTask(Request $request): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'category_id' => ['nullable', Rule::exists('task_categories', 'id')->where('is_active', true)],
-            'reviewer_id' => ['nullable', Rule::exists('users', 'id')->where('status', 'active')],
+            'reviewer_ids' => ['nullable', 'array', 'max:10'],
+            'reviewer_ids.*' => ['integer', 'distinct', Rule::exists('users', 'id')->where('status', 'active')],
             'priority' => ['required', Rule::in(['low', 'normal', 'high', 'urgent'])],
             'starts_at' => ['nullable', 'date'],
             'due_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
@@ -401,11 +408,16 @@ class TaskController extends Controller
             'remove_attachment_ids' => ['nullable', 'array'],
             'remove_attachment_ids.*' => ['integer', 'exists:files,id'],
         ]);
+        $reviewerIds = collect($data['reviewer_ids'] ?? [])->map(fn ($id) => (int) $id);
+        abort_if($reviewerIds->contains($request->user()->id) && in_array($request->user()->teacher?->id, array_map('intval', $data['teacher_ids'] ?? []), true), 422, 'Bạn không thể tự duyệt công việc của chính mình.');
+        abort_if($reviewerIds->isNotEmpty() && Teacher::whereIn('id', $data['teacher_ids'] ?? [])->whereIn('user_id', $reviewerIds)->exists(), 422, 'Người duyệt không được đồng thời là người thực hiện được chọn.');
+
+        return $data;
     }
 
     private function taskAttributes(array $data): array
     {
-        return collect($data)->only(['title', 'description', 'category_id', 'reviewer_id', 'priority', 'starts_at', 'due_at'])->all();
+        return collect($data)->only(['title', 'description', 'category_id', 'priority', 'starts_at', 'due_at'])->all();
     }
 
     private function ensureTaskAccess(Request $request, Task $task): void
@@ -427,7 +439,7 @@ class TaskController extends Controller
             ->orWhereHas('departments', fn ($d) => $d->whereIn('departments.id', $units ?: [0]))
             ->when($managed, fn ($b) => $b->orWhereHas('teachers', fn ($t) => $t->inUnits($managed)))
             ->orWhere('created_by', $user->id)
-            ->orWhere('reviewer_id', $user->id));
+            ->orWhereHas('reviewers', fn ($r) => $r->where('users.id', $user->id)));
     }
 
     private function ensureAssignmentScope(Request $request, array $data): void
@@ -447,7 +459,7 @@ class TaskController extends Controller
     private function abilities(Request $request, Task $task): array
     {
         return [
-            'is_reviewer' => $task->reviewer_id === $request->user()->id,
+            'is_reviewer' => $this->isReviewer($task, $request->user()->id),
             'is_personal' => $this->isPersonal($task),
             'can_manage' => $this->canManageTask($request, $task),
             'can_edit_personal' => $this->isPersonalTaskFor($request, $task),
@@ -477,11 +489,11 @@ class TaskController extends Controller
 
     private function canSubmit(Request $request, Task $task): bool
     {
-        if (! $this->canUpdateProgress($request, $task) || $task->reviewer_id === $request->user()->id) {
+        if (! $this->canUpdateProgress($request, $task) || $this->isReviewer($task, $request->user()->id)) {
             return false;
         }
 
-        return ! ($this->isPersonal($task) && ! $task->reviewer_id);
+        return ! ($this->isPersonal($task) && ! $this->hasReviewers($task));
     }
 
     private function canReviewTask(Request $request, Task $task): bool
@@ -489,7 +501,7 @@ class TaskController extends Controller
         if ($task->status !== Task::WAITING_APPROVAL) {
             return false;
         }
-        if ($task->reviewer_id === $request->user()->id) {
+        if ($this->isReviewer($task, $request->user()->id)) {
             return true;
         }
         if ($this->isTaskAssignee($request, $task)) {
@@ -501,7 +513,7 @@ class TaskController extends Controller
 
     private function canSelfComplete(Request $request, Task $task): bool
     {
-        return $this->isPersonalTaskFor($request, $task) && ! $task->reviewer_id && ! in_array($task->status, Task::CLOSED, true);
+        return $this->isPersonalTaskFor($request, $task) && ! $this->hasReviewers($task) && ! in_array($task->status, Task::CLOSED, true);
     }
 
     private function canCancel(Request $request, Task $task): bool
@@ -519,7 +531,7 @@ class TaskController extends Controller
         $units = $user->memberUnitIds();
 
         return $query->where('status', Task::WAITING_APPROVAL)
-            ->where(fn ($q) => $q->where('reviewer_id', $user->id)->orWhere(function ($b) use ($user, $units, $request) {
+            ->where(fn ($q) => $q->whereHas('reviewers', fn ($r) => $r->where('users.id', $user->id))->orWhere(function ($b) use ($user, $units, $request) {
                 $b->whereDoesntHave('teachers', fn ($t) => $t->where('teachers.id', $user->teacher?->id ?? 0))
                     ->whereDoesntHave('departments', fn ($d) => $d->whereIn('departments.id', $units ?: [0]));
                 if (! $this->hasSchoolWideTaskAuthority($request)) {
@@ -563,7 +575,36 @@ class TaskController extends Controller
 
     private function authorRole(Task $task, int $userId): string
     {
-        return $userId === $task->reviewer_id ? 'reviewer' : ($userId === $task->created_by ? 'assigner' : 'assignee');
+        return $this->isReviewer($task, $userId) ? 'reviewer' : ($userId === $task->created_by ? 'assigner' : 'assignee');
+    }
+
+    private function isReviewer(Task $task, int $userId): bool
+    {
+        $task->loadMissing('reviewers');
+
+        return $task->reviewers->contains('id', $userId);
+    }
+
+    private function hasReviewers(Task $task): bool
+    {
+        $task->loadMissing('reviewers');
+
+        return $task->reviewers->isNotEmpty();
+    }
+
+    private function reviewersOrCreator(Task $task): Collection
+    {
+        $task->loadMissing(['reviewers', 'creator']);
+
+        return $task->reviewers->isNotEmpty() ? $task->reviewers : collect([$task->creator]);
+    }
+
+    private function syncReviewers(Task $task, array $data): array
+    {
+        $changes = $task->reviewers()->sync(collect($data['reviewer_ids'] ?? [])->map(fn ($id) => (int) $id)->unique()->values()->all());
+        $task->unsetRelation('reviewers');
+
+        return $changes['attached'];
     }
 
     private function assigneeTeachers(Task $task): Collection
@@ -614,11 +655,12 @@ class TaskController extends Controller
         });
     }
 
-    private function notifyReviewer(Task $task): void
+    private function notifyReviewers(Task $task, ?array $onlyIds = null): void
     {
-        if ($task->reviewer && ! $this->assigneeUsers($task)->contains('id', $task->reviewer->id)) {
-            $this->notify(collect([$task->reviewer]), $task, 'Bạn được chỉ định duyệt công việc: '.$task->title, 'reviewer_assigned');
-        }
+        $task->loadMissing('reviewers');
+        $assignees = $this->assigneeUsers($task)->pluck('id');
+        $recipients = $task->reviewers->filter(fn (User $u) => ($onlyIds === null || in_array($u->id, $onlyIds, true)) && ! $assignees->contains($u->id));
+        $this->notify($recipients->values(), $task, 'Bạn được chỉ định duyệt công việc: '.$task->title, 'reviewer_assigned');
     }
 
     private function syncAssignees(Task $task, array $data, User $actor): void
@@ -674,7 +716,7 @@ class TaskController extends Controller
 
     private function loadTask(Task $task): Task
     {
-        return $task->load(['category', 'creator.teacher', 'reviewer', 'teachers.user', 'departments', 'documents.type', 'documents.file'])->loadCount(['teachers', 'departments', 'submissions']);
+        return $task->load(['category', 'creator.teacher', 'reviewers', 'teachers.user', 'departments', 'documents.type', 'documents.file'])->loadCount(['teachers', 'departments', 'submissions']);
     }
 
     private function serialize(Task $task): array
@@ -692,7 +734,8 @@ class TaskController extends Controller
             'starts_at' => $task->starts_at?->format('Y-m-d\TH:i'), 'due_at' => $task->due_at?->format('Y-m-d\TH:i'),
             'completed_at' => $task->completed_at?->toIso8601String(),
             'created_at' => $task->created_at?->toIso8601String(),
-            'reviewer_id' => $task->reviewer_id, 'reviewer' => $task->reviewer?->name,
+            'reviewer_ids' => $task->reviewers->pluck('id')->values(),
+            'reviewers' => $task->reviewers->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name])->values(),
             'created_by' => $task->created_by, 'creator' => $task->creator?->name,
             'teacher_ids' => $task->teachers->pluck('id'), 'department_ids' => $task->departments->pluck('id'),
             'document_ids' => $task->documents->pluck('id'),
