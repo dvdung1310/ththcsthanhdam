@@ -48,6 +48,7 @@ class TaskController extends Controller
             'meta' => ['current_page' => $paginator->currentPage(), 'last_page' => $paginator->lastPage(), 'per_page' => $paginator->perPage(), 'total' => $paginator->total()],
             'stats' => [
                 'total' => (clone $base)->count(),
+                'pending' => (clone $base)->whereIn('status', Task::OPEN)->count(),
                 'not_started' => (clone $base)->where('status', Task::NOT_STARTED)->count(),
                 'in_progress' => (clone $base)->where('status', Task::IN_PROGRESS)->count(),
                 'waiting_approval' => (clone $base)->where('status', Task::WAITING_APPROVAL)->count(),
