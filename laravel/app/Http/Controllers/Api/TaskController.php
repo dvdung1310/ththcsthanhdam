@@ -147,7 +147,7 @@ class TaskController extends Controller
             return $update;
         });
         $attachments = DB::table('file_attachments')->join('files', 'files.id', '=', 'file_attachments.file_id')->where('attachable_type', Task::class)->where('attachable_id', $task->id)->select('files.id', 'files.original_name', 'files.mime_type', 'files.size')->get();
-        $submissions = TaskSubmission::with('teacher.user')->where('task_id', $task->id)->latest('submitted_at')->latest('id')->get()->map(fn (TaskSubmission $submission) => [
+        $submissions = TaskSubmission::with(['teacher.user', 'reviewer:id,name'])->where('task_id', $task->id)->latest('submitted_at')->latest('id')->get()->map(fn (TaskSubmission $submission) => [
             'id' => $submission->id,
             'version' => $submission->version,
             'submitter' => $submission->teacher?->user?->name,
@@ -159,6 +159,7 @@ class TaskController extends Controller
             'submitted_at' => $submission->submitted_at?->toIso8601String(),
             'review_comment' => $submission->review_comment,
             'reviewed_at' => $submission->reviewed_at?->toIso8601String(),
+            'reviewer' => $submission->reviewer?->name,
         ]);
 
         return response()->json(['data' => [...$this->serialize($task), ...$this->abilities($request, $task), 'creator_card' => $task->creator ? $this->personCard($task->creator) : null, 'reviewer_cards' => $task->reviewers->map(fn (User $u) => $this->personCard($u))->values(), 'description' => $task->description, 'submissions' => $submissions, 'latest_submission' => $submissions->first(), 'updates' => $updates, 'attachments' => $attachments]]);
@@ -748,6 +749,7 @@ class TaskController extends Controller
             'needs_revision' => $task->status === Task::IN_PROGRESS && $latest?->status === 'revision_required',
             'starts_at' => $task->starts_at?->format('Y-m-d\TH:i'), 'due_at' => $task->due_at?->format('Y-m-d\TH:i'),
             'completed_at' => $task->completed_at?->toIso8601String(),
+            'finished_at' => $finishedAt?->toIso8601String(),
             'created_at' => $task->created_at?->toIso8601String(),
             'reviewer_ids' => $task->reviewers->pluck('id')->values(),
             'reviewers' => $task->reviewers->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name])->values(),
