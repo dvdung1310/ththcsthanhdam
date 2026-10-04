@@ -115,21 +115,21 @@ class PersonnelController extends Controller
 
     private function applyRolesAndUnits(User $actor, User $user, array $data, ?array $roles): array
     {
-        $unitIds = $data['unit_ids'];
         if ($roles !== null) {
             $assignments = $this->assignments->normalize($roles, $data['is_teacher']);
             $this->assignments->guardAdmin($actor, $user, $assignments->pluck('role_id'));
             $this->assignments->sync($user, $assignments, $actor);
-            $roleUnits = $assignments->where('requires_unit', true)->pluck('department_id')->all();
-        } else {
-            $roleUnits = [];
         }
-
         if (! $data['is_teacher']) {
             return [];
         }
-        $added = array_values(array_diff($roleUnits, $unitIds));
-        $this->syncUnits($user->teacher()->first(), array_values(array_unique([...$unitIds, ...$roleUnits])));
+
+        $teacher = $user->teacher()->first();
+        $roleUnits = $user->roles()->whereNotNull('role_user.department_id')->pluck('role_user.department_id')->map(fn ($id) => (int) $id)->all();
+        $managed = $actor->managedUnitIds();
+        $outOfScope = $managed === null ? [] : array_diff($teacher->directUnitIds(), $managed);
+        $added = $roles === null ? [] : array_values(array_diff($roleUnits, $data['unit_ids'], $teacher->directUnitIds()));
+        $this->syncUnits($teacher, array_values(array_unique([...$data['unit_ids'], ...$roleUnits, ...$outOfScope])));
 
         return array_map(fn ($id) => Department::pathLabel((int) $id), $added);
     }
