@@ -116,3 +116,9 @@
   min-width: 0;
   position: relative;
 }
+.task-modal .modal-actions .primary-btn:disabled,
+.workflow-form button:disabled {
+  opacity: 0.5;
+  box-shadow: none;
+  cursor: not-allowed;
+}
