@@ -26,3 +26,102 @@
   background: #fff;
   box-shadow: 0 0 0 4px rgba(115, 89, 233, 0.12);
 }
+
+.teacher-role-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.teacher-role-chips span {
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: #5a43c9;
+  background: #f1edff;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.teacher-unit-picker {
+  margin: 0 20px 14px;
+  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 14px;
+  border: 1px solid #e3e6ef;
+  border-radius: 10px;
+}
+
+.teacher-unit-picker legend {
+  padding: 0 6px;
+  color: #4c5773;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.teacher-unit-picker label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #34405e;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.teacher-unit-picker label.is-child {
+  padding-left: 20px;
+  font-weight: 500;
+}
+
+.teacher-unit-picker p,
+.teacher-unit-picker small {
+  grid-column: 1 / -1;
+  color: #9299ab;
+  font-size: 11px;
+}
+
+.teacher-config-form.unit-form {
+  display: grid;
+  grid-template-columns: 1fr 220px;
+  align-items: end;
+}
+
+.teacher-config-form.unit-form > label {
+  display: grid;
+  gap: 7px;
+  color: #4c5773;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.teacher-config-form.unit-form select {
+  height: 42px;
+  padding: 0 10px;
+  border: 1px solid #d8ddea;
+  border-radius: 10px;
+  background: #fff;
+  font-size: 12px;
+}
+
+.teacher-config-form.unit-form .manager-check {
+  display: flex;
+  grid-column: 1 / -1;
+}
+
+.unit-form-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 8px;
+}
+
+.unit-tree > div.is-child {
+  padding-left: 34px;
+  background: #fafbfd;
+}
+
+.unit-tree > div.is-inactive b {
+  color: #a2a9ba;
+  text-decoration: line-through;
+}
