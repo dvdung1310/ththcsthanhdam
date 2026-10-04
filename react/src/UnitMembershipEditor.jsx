@@ -39,8 +39,8 @@ export default function UnitMembershipEditor({ units, unitIds, roles, roleCatalo
     const close = (event) => {
       if (pickerRef.current && !pickerRef.current.contains(event.target)) setPickerOpen(false);
     };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
+    document.addEventListener("mousedown", close, true);
+    return () => document.removeEventListener("mousedown", close, true);
   }, [pickerOpen]);
 
   const unitById = useMemo(() => Object.fromEntries(units.map((unit) => [unit.id, unit])), [units]);
