@@ -126,6 +126,9 @@ export default function PersonnelDrawer({
         ),
       ]
     : [];
+  const unitGroups = units
+    .filter((unit) => !units.some((parent) => parent.id === unit.parent_id))
+    .map((root) => [root, ...units.filter((unit) => unit.parent_id === root.id)]);
   const unitLabel = (id) => units.find((unit) => unit.id === id)?.label ?? "";
 
   const save = async (event) => {
@@ -293,15 +296,19 @@ export default function PersonnelDrawer({
               <section>
                 <h4>Thuộc tổ / nhóm</h4>
                 <div className="unit-checklist">
-                  {units.map((unit) => (
-                    <label key={unit.id} className={unit.parent_id ? "is-child" : ""}>
-                      <input
-                        type="checkbox"
-                        checked={form.unit_ids.includes(unit.id)}
-                        onChange={() => toggleUnit(unit.id)}
-                      />
-                      {unit.name}
-                    </label>
+                  {unitGroups.map((group) => (
+                    <div className="unit-group" key={group[0].id}>
+                      {group.map((unit) => (
+                        <label key={unit.id} className={unit.parent_id && unit !== group[0] ? "is-child" : ""}>
+                          <input
+                            type="checkbox"
+                            checked={form.unit_ids.includes(unit.id)}
+                            onChange={() => toggleUnit(unit.id)}
+                          />
+                          {unit === group[0] && unit.parent_id ? unit.label : unit.name}
+                        </label>
+                      ))}
+                    </div>
                   ))}
                   {!units.length && <p>Chưa có tổ, nhóm nào.</p>}
                 </div>

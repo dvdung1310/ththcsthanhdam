@@ -184,12 +184,16 @@
   border-radius: 10px;
 }
 
+.unit-group {
+  margin-bottom: 8px;
+  break-inside: avoid;
+}
+
 .unit-checklist label {
   margin-bottom: 7px;
   display: flex;
   align-items: center;
   gap: 8px;
-  break-inside: avoid;
   color: #34405e;
   font-size: 13px;
   font-weight: 600;
@@ -210,6 +214,7 @@
 .role-picker {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
   gap: 8px;
 }
 
