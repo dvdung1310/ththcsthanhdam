@@ -117,7 +117,9 @@ class PersonnelController extends Controller
     {
         if ($roles !== null) {
             $assignments = $this->assignments->normalize($roles, $data['is_teacher']);
+            $this->assignments->ensureOnePositionPerUnit($assignments);
             $this->assignments->guardAdmin($actor, $user, $assignments->pluck('role_id'));
+            $this->assignments->resolveSingleHolders($user, $assignments, (bool) ($data['replace_holders'] ?? false));
             $this->assignments->sync($user, $assignments, $actor);
         }
         if (! $data['is_teacher']) {
@@ -153,6 +155,7 @@ class PersonnelController extends Controller
             'roles' => ['sometimes', 'array'],
             'roles.*.role_id' => ['required', 'exists:roles,id'],
             'roles.*.department_id' => ['nullable', 'exists:departments,id'],
+            'replace_holders' => ['nullable', 'boolean'],
         ], [
             'employee_code.required_if' => 'Vui lòng nhập mã giáo viên.',
             'employee_code.unique' => 'Mã giáo viên đã tồn tại.',
