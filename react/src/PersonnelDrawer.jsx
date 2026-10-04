@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Trash2, X } from "lucide-react";
 import { apiJson } from "./api";
+import { useConfirm } from "./ConfirmDialog";
 import UnitMembershipEditor, { findHolderConflicts } from "./UnitMembershipEditor";
 import "./PersonnelDrawer.css";
 
@@ -48,6 +49,7 @@ export default function PersonnelDrawer({
   onDeleted,
 }) {
   const isNew = !person?.id;
+  const confirm = useConfirm();
   const [form, setForm] = useState(() =>
     isNew
       ? {
@@ -106,8 +108,18 @@ export default function PersonnelDrawer({
     isTeacher && !(form.employee_code ?? "").trim() && "Mã giáo viên",
   ].filter(Boolean);
   const blockedReason = missing.length ? `Còn thiếu: ${missing.join(", ")}` : !isNew && !dirty ? "Chưa có thay đổi" : "";
-  const requestClose = () => {
-    if (dirty && !window.confirm("Bỏ các thay đổi chưa lưu?")) return;
+  const requestClose = async () => {
+    if (
+      dirty &&
+      !(await confirm({
+        tone: "warning",
+        title: "Bỏ các thay đổi chưa lưu?",
+        message: "Những gì bạn vừa nhập trong hồ sơ này sẽ không được lưu.",
+        confirmText: "Bỏ thay đổi",
+        cancelText: "Tiếp tục chỉnh sửa",
+      }))
+    )
+      return;
     onClose();
   };
   const unitIdsInScope = form.unit_ids.filter((id) => units.some((unit) => unit.id === id));
@@ -138,8 +150,15 @@ export default function PersonnelDrawer({
     };
     const conflicts = canAssignRoles && isTeacher ? findHolderConflicts(form.roles, roles, people, person?.id) : [];
     if (conflicts.length) {
-      const lines = conflicts.map((c) => `• ${units.find((u) => u.id === c.department_id)?.label}: thay ${c.role} ${c.holder}`).join("\n");
-      if (!window.confirm(`Các đơn vị sau đã có người giữ chức vụ:\n${lines}\n\nThay thế bằng ${form.name}?`)) {
+      const replace = await confirm({
+        tone: "warning",
+        title: "Thay người giữ chức vụ?",
+        message: `${form.name || "Nhân sự này"} sẽ thay thế:`,
+        details: conflicts.map((c) => `${units.find((u) => u.id === c.department_id)?.label}: ${c.role} ${c.holder}`),
+        confirmText: "Thay thế và lưu",
+        cancelText: "Xem lại",
+      });
+      if (!replace) {
         setSaving(false);
         return;
       }
@@ -159,12 +178,14 @@ export default function PersonnelDrawer({
   };
 
   const remove = async () => {
-    if (
-      !window.confirm(
-        `Cho nghỉ và khóa tài khoản “${person.name}”? Lịch sử công việc vẫn được giữ lại.`,
-      )
-    )
-      return;
+    const ok = await confirm({
+      tone: "danger",
+      title: `Cho nghỉ và khóa ${person.name}?`,
+      message: "Tài khoản sẽ bị khóa và hồ sơ chuyển sang trạng thái đã nghỉ việc. Lịch sử công việc và KPI vẫn được giữ lại.",
+      confirmText: "Cho nghỉ & khóa",
+      cancelText: "Hủy",
+    });
+    if (!ok) return;
     try {
       const payload = await apiJson(`/api/personnel/${person.id}`, {
         method: "DELETE",

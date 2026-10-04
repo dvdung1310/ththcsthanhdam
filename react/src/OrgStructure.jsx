@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Building2, FolderTree, Pencil, Plus, Power, Trash2, Users } from "lucide-react";
 import { apiJson } from "./api";
+import { useConfirm } from "./ConfirmDialog";
 import { EMPLOYMENT_LABELS } from "./PersonnelDrawer";
 import "./OrgStructure.css";
 
@@ -10,6 +11,7 @@ export default function OrgStructure({ onChanged, onError }) {
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [editing, setEditing] = useState(null);
+  const confirm = useConfirm();
 
   const loadUnits = async () => {
     try {
@@ -86,7 +88,13 @@ export default function OrgStructure({ onChanged, onError }) {
   };
 
   const remove = async () => {
-    if (!window.confirm(`Xóa “${selected.label}”?`)) return;
+    const ok = await confirm({
+      tone: "danger",
+      title: `Xóa ${selected.parent_id ? "nhóm" : "tổ"} “${selected.name}”?`,
+      message: "Chỉ xóa được đơn vị không còn nhóm con, thành viên, công việc hay chức vụ. Nếu đơn vị đã có dữ liệu, hãy dùng “Ngưng” thay vì xóa.",
+      confirmText: "Xóa",
+    });
+    if (!ok) return;
     try {
       const payload = await apiJson(`/api/units/${selected.id}`, { method: "DELETE" });
       setSelectedId(null);
