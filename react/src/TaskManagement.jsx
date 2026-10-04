@@ -10,7 +10,7 @@ import {
   Eye,
   FileText,
   Filter,
-  Flag,
+  MessageSquare,
   Paperclip,
   Pencil,
   Plus,
@@ -45,7 +45,6 @@ import "./TaskFormGridFix.css";
 import "./TaskComposeLayout.css";
 import "./TaskAttachmentPicker.css";
 import "./RichEditorToolbar.css";
-import "./TaskTypePicker.css";
 import "./TaskDepartmentTabs.css";
 import "./ReviewerTaskBadge.css";
 import "./TaskDetailRedesign.css";
@@ -53,17 +52,17 @@ import "./TaskDetailHighlights.css";
 import "./TaskTableAssignees.css";
 import "./TaskAttachmentViewer.css";
 import "./TaskCompletionWorkflow.css";
-import "./LatePenaltyDisplay.css";
 import "./ActionLoading.css";
-import "./TaskReviewStatus.css";
+import "./TaskWorkflowPanel.css";
 import "./TaskComments.css";
 import "./TaskDetailSidebar.css";
 import "./TaskAvatars.css";
 import { apiFetch } from "./api";
+import { useConfirm } from "./ConfirmDialog";
 
 const labels = {
   status: {
-    not_started: "Chưa làm",
+    not_started: "Chưa thực hiện",
     in_progress: "Đang thực hiện",
     waiting_approval: "Chờ duyệt",
     completed: "Hoàn thành",
@@ -75,23 +74,15 @@ const labels = {
     high: "Cao",
     urgent: "Khẩn cấp",
   },
-  review: {
-    not_requested: "Chưa gửi duyệt",
-    waiting_approval: "Chờ kiểm duyệt",
-    approved: "Đã xác nhận",
-    revision_required: "Yêu cầu làm lại",
-  },
 };
 const emptyTask = {
   title: "",
   description: "",
-  task_catalog_item_id: "",
+  category_id: "",
   priority: "normal",
   starts_at: new Date().toISOString().slice(0, 16),
   due_at: "",
   reviewer_id: "",
-  maximum_score: 100,
-  requires_approval: false,
   teacher_ids: [],
   department_ids: [],
   document_ids: [],
@@ -102,6 +93,7 @@ const emptyTask = {
 };
 
 export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
+  const confirm = useConfirm();
   const [tasks, setTasks] = useState([]),
     [meta, setMeta] = useState({
       current_page: 1,
@@ -118,8 +110,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
     });
   const [refs, setRefs] = useState({
       categories: [],
-      catalog_items: [],
-      product_types: [],
+      filter_categories: [],
       teachers: [],
       departments: [],
       reviewers: [],
@@ -140,12 +131,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
     [workflowError, setWorkflowError] = useState(""),
     [editingComment, setEditingComment] = useState(null),
     [deleting, setDeleting] = useState(null),
-    [progressing, setProgressing] = useState(null),
     [highlightedTaskId, setHighlightedTaskId] = useState(null),
-    [statusPreview, setStatusPreview] = useState("not_started"),
-    [progressPreview, setProgressPreview] = useState(0),
-    [scorePreview, setScorePreview] = useState(0),
-    [scoreError, setScoreError] = useState(""),
     [reminding, setReminding] = useState(""),
     [saving, setSaving] = useState(false);
   const loadTasks = useCallback(
@@ -257,7 +243,6 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
     editing.removed_attachment_ids?.forEach((id) =>
       f.append("remove_attachment_ids[]", id),
     );
-    f.set("requires_approval", "0");
     if (editing.id) f.append("_method", "PUT");
     try {
       const endpoint =
@@ -293,15 +278,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
         d = await r.json();
       if (!r.ok) throw new Error(d.message);
       setViewing(d.data);
-      setStatusPreview(d.data.status || "not_started");
-      setProgressPreview(Number(d.data.progress || 0));
-      setScorePreview(
-        d.data.evaluation?.score_before_penalty ??
-          d.data.catalog_score ??
-          d.data.maximum_score ??
-          0,
-      );
-      setScoreError("");
+      setWorkflowError("");
       setViewingDocument(null);
     } catch (e) {
       setError(e.message);
@@ -321,7 +298,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
   };
   const remove = async () => {
     try {
-      const r = await apiFetch(`/api/tasks/${deleting.id}`, {
+      const r = await apiFetch(`/api/${deleting.can_edit_personal ? "personal-tasks" : "tasks"}/${deleting.id}`, {
           method: "DELETE",
           headers: { Accept: "application/json" },
         }),
@@ -333,28 +310,6 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
     } catch (e) {
       setDeleting(null);
       setError(e.message);
-    }
-  };
-  const saveProgress = async (e) => {
-    e.preventDefault();
-    const body = Object.fromEntries(new FormData(e.currentTarget));
-    try {
-      const r = await apiFetch(`/api/tasks/${progressing.id}/progress`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify(body),
-        }),
-        d = await r.json();
-      if (!r.ok)
-        throw new Error(Object.values(d.errors ?? {}).flat()[0] ?? d.message);
-      setProgressing(null);
-      setSuccess(d.message);
-      await loadTasks();
-    } catch (x) {
-      setError(x.message);
     }
   };
   const downloadDocument = async (document) => {
@@ -454,148 +409,72 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
     setSuccess(payload.message);
     await show(viewing);
   };
-  const saveDetailUpdate = async (event) => {
+  const runWorkflow = async (path, options, fallbackError) => {
+    setWorkflowSaving(true);
+    setWorkflowError("");
+    try {
+      const response = await apiFetch(`/api/tasks/${viewing.id}/${path}`, {
+        method: "POST",
+        headers: { Accept: "application/json", ...(options.json ? { "Content-Type": "application/json" } : {}) },
+        body: options.json ? JSON.stringify(options.json) : options.body,
+      });
+      const payload = await response.json();
+      if (!response.ok)
+        throw new Error(Object.values(payload.errors || {}).flat()[0] || payload.message);
+      setSuccess(payload.message);
+      await show(viewing);
+      await loadTasks(true);
+      return true;
+    } catch (workflowException) {
+      setWorkflowError(workflowException.message || fallbackError);
+      return false;
+    } finally {
+      setWorkflowSaving(false);
+    }
+  };
+  const startTask = () =>
+    runWorkflow("progress", { json: { status: "in_progress" } }, "Không thể cập nhật trạng thái.");
+  const submitCompletion = async (event) => {
     event.preventDefault();
     const formElement = event.currentTarget;
-    const form = Object.fromEntries(new FormData(formElement));
-    const workflowDecision = event.nativeEvent.submitter?.value;
-    if (
-      viewing.can_review_completion &&
-      !["approved", "revision_required"].includes(workflowDecision)
-    ) {
-      setWorkflowError(
-        "Vui lòng chọn Xác nhận hoàn thành hoặc Yêu cầu làm lại.",
-      );
-      return;
-    }
-    const scoreLimit = Number(
-      viewing.catalog_score || viewing.maximum_score || 0,
-    );
-    if (viewing.can_review_completion && Number(form.score) > scoreLimit) {
-      setScoreError(`Điểm không được vượt quá ${scoreLimit}.`);
-      return;
-    }
-    if (
-      ["submit", "approved", "revision_required"].includes(workflowDecision)
-    ) {
-      setWorkflowSaving(true);
-      setWorkflowError("");
-      try {
-        const reviewing = workflowDecision !== "submit";
-        let requestOptions;
-        if (reviewing) {
-          requestOptions = {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Accept: "application/json",
-            },
-            body: JSON.stringify({
-              decision: workflowDecision,
-              comment: form.content,
-              score: form.score,
-            }),
-          };
-        } else {
-          const submissionData = new FormData(formElement);
-          submissionData.delete("submission_links");
-          submissionData.set("comment", form.content || "");
-          String(form.submission_links || "")
-            .split(/\r?\n/)
-            .map((link) => link.trim())
-            .filter(Boolean)
-            .forEach((link) => submissionData.append("links[]", link));
-          requestOptions = {
-            method: "POST",
-            headers: { Accept: "application/json" },
-            body: submissionData,
-          };
-        }
-        const response = await apiFetch(
-          `/api/tasks/${viewing.id}/${reviewing ? "review-completion" : "submit-completion"}`,
-          requestOptions,
-        );
-        const payload = await response.json();
-        if (!response.ok)
-          throw new Error(
-            Object.values(payload.errors || {}).flat()[0] || payload.message,
-          );
-        formElement.reset();
-        setSuccess(payload.message);
-        await show(viewing);
-        await loadTasks();
-      } catch (workflowException) {
-        setWorkflowError(
-          workflowException.message || "Không thể xử lý yêu cầu.",
-        );
-      } finally {
-        setWorkflowSaving(false);
-      }
-      return;
-    }
-    const managerSide = viewing.can_manage || viewing.is_reviewer;
-    if (
-      !managerSide &&
-      Number(form.progress_percent) === 100 &&
-      viewing.can_submit_completion
-    ) {
-      setWorkflowSaving(true);
-      setWorkflowError("");
-      try {
-        const submissionData = new FormData(formElement);
-        submissionData.delete("submission_links");
-        submissionData.set("comment", form.content || "");
-        String(form.submission_links || "")
-          .split(/\r?\n/)
-          .map((link) => link.trim())
-          .filter(Boolean)
-          .forEach((link) => submissionData.append("links[]", link));
-        const response = await apiFetch(
-          `/api/tasks/${viewing.id}/submit-completion`,
-          {
-            method: "POST",
-            headers: { Accept: "application/json" },
-            body: submissionData,
-          },
-        );
-        const payload = await response.json();
-        if (!response.ok)
-          throw new Error(
-            Object.values(payload.errors || {}).flat()[0] || payload.message,
-          );
-        formElement.reset();
-        setSuccess(payload.message);
-        await show(viewing);
-        await loadTasks();
-      } catch (workflowException) {
-        setWorkflowError(
-          workflowException.message || "Không thể gửi đề nghị hoàn thành.",
-        );
-      } finally {
-        setWorkflowSaving(false);
-      }
-      return;
-    }
-    const response = await apiFetch(
-      `/api/tasks/${viewing.id}/${managerSide ? "comments" : "progress"}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
-        body: JSON.stringify(managerSide ? { content: form.content } : form),
-      },
-    );
-    const payload = await response.json();
-    if (!response.ok)
-      return setError(
-        Object.values(payload.errors || {}).flat()[0] || payload.message,
-      );
-    formElement.reset();
-    setSuccess(payload.message);
-    await show(viewing);
-    await loadTasks();
+    const form = new FormData(formElement);
+    const links = String(form.get("submission_links") || "");
+    form.delete("submission_links");
+    links
+      .split(/\r?\n/)
+      .map((link) => link.trim())
+      .filter(Boolean)
+      .forEach((link) => form.append("links[]", link));
+    if (await runWorkflow("submit-completion", { body: form }, "Không thể gửi đề nghị hoàn thành."))
+      formElement.reset();
+  };
+  const reviewCompletion = async (event) => {
+    event.preventDefault();
+    const decision = event.nativeEvent.submitter?.value;
+    const comment = new FormData(event.currentTarget).get("comment");
+    await runWorkflow("review-completion", { json: { decision, comment } }, "Không thể duyệt công việc.");
+  };
+  const selfComplete = () =>
+    runWorkflow("complete", { json: {} }, "Không thể đánh dấu hoàn thành.");
+  const cancelTask = async () => {
+    const ok = await confirm({
+      tone: "danger",
+      title: `Hủy công việc ${viewing.code}?`,
+      message: viewing.is_personal
+        ? "Công việc sẽ chuyển sang trạng thái Đã hủy."
+        : "Công việc sẽ chuyển sang trạng thái Đã hủy và người thực hiện sẽ nhận được thông báo.",
+      confirmText: "Hủy công việc",
+      cancelText: "Giữ lại",
+    });
+    if (ok) await runWorkflow("cancel", { json: {} }, "Không thể hủy công việc.");
+  };
+  const postComment = async (event) => {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const content = new FormData(formElement).get("content");
+    if (!String(content || "").trim()) return;
+    if (await runWorkflow("comments", { json: { content } }, "Không thể gửi trao đổi."))
+      formElement.reset();
   };
   const toggle = (field, id) =>
     setEditing((c) => ({
@@ -682,8 +561,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                 <th>Người thực hiện</th>
                 <th>Thời hạn</th>
                 <th>Ưu tiên</th>
-                <th>Trạng thái người nhận</th>
-                <th>Trạng thái kiểm duyệt</th>
+                <th>Trạng thái</th>
                 <th>Thao tác</th>
               </tr>
             </thead>
@@ -710,9 +588,8 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                   <td>
                     <div className="task-type-cell">
                       <span className="task-type-name">
-                        {t.task_type || t.category || "Chưa xác định"}
+                        {t.category || "—"}
                       </span>
-                      {t.product && <small>{t.product}</small>}
                     </div>
                   </td>
                   <td>
@@ -735,7 +612,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                         {!t.assignees?.length && !t.departments?.length && (
                           <span>Chưa phân công</span>
                         )}
-                        {canAssign && t.can_manage && t.status === "not_started" && t.assignees?.length > 0 && (
+                        {t.can_manage && ["not_started", "in_progress"].includes(t.status) && t.assignees?.length > 0 && (
                           <button
                             className="group-reminder-button"
                             type="button"
@@ -769,43 +646,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                     </span>
                   </td>
                   <td>
-                    <div className="receiver-status">
-                      <span className={`task-status ${t.status}`}>
-                        {labels.status[t.status]}
-                      </span>
-                      <b>{t.progress}%</b>
-                    </div>
-                  </td>
-                  <td>
-                    <div className="review-cell">
-                      <span
-                        className={`review-status ${t.review_status || "not_requested"}`}
-                      >
-                        {labels.review[t.review_status || "not_requested"]}
-                      </span>
-                      {t.review_status === "approved" &&
-                        t.evaluation_score !== null && (
-                          <small>
-                            Điểm:{" "}
-                            <b>
-                              {t.evaluation_score}/{t.evaluation_max_score}
-                            </b>
-                            {t.late_penalty > 0 && (
-                              <span className="late-penalty-note">
-                                Trễ {t.late_days} ngày · trừ{" "}
-                                {t.late_penalty_percent}% ({t.late_penalty}{" "}
-                                điểm)
-                              </span>
-                            )}
-                            <span>·</span>
-                            Hệ số:{" "}
-                            <b>
-                              {t.evaluation_conversion}/
-                              {t.evaluation_max_conversion}
-                            </b>
-                          </small>
-                        )}
-                    </div>
+                    <TaskStatusBadges task={t} />
                   </td>
                   <td>
                     <div className="row-actions">
@@ -1119,39 +960,20 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                       <span>4</span> Loại nhiệm vụ <ClipboardCheck size={17} />
                     </h4>
                     <div className="task-form-grid">
-                      <TaskTypePicker
-                        items={refs.catalog_items}
-                        value={editing.task_catalog_item_id || ""}
-                        onChange={(task_catalog_item_id) =>
-                          setEditing({ ...editing, task_catalog_item_id })
-                        }
-                      />
-
-                      {(() => {
-                        const item = refs.catalog_items.find(
-                          (value) =>
-                            value.id === Number(editing.task_catalog_item_id),
-                        );
-                        return (
-                          <div className="task-type-summary wide">
-                            <span>
-                              <FileText size={16} />
-                              <small>Công việc</small>
-                              <b>{item?.product || "—"}</b>
-                            </span>
-                            <span>
-                              <Flag size={16} />
-                              <small>Điểm</small>
-                              <b>{item?.score ?? "—"}</b>
-                            </span>
-                            <span>
-                              <Activity size={16} />
-                              <small>Hệ số quy đổi</small>
-                              <b>{item?.conversion ?? "—"}</b>
-                            </span>
-                          </div>
-                        );
-                      })()}
+                      <label className="wide">
+                        Loại nhiệm vụ (không bắt buộc)
+                        <select name="category_id" defaultValue={editing.category_id || ""}>
+                          <option value="">— Không phân loại —</option>
+                          {refs.categories.map((type) => (
+                            <option key={type.id} value={type.id}>
+                              {type.name}
+                            </option>
+                          ))}
+                          {editing.category_id && !refs.categories.some((type) => type.id === Number(editing.category_id)) && (
+                            <option value={editing.category_id}>{editing.category} (ngưng sử dụng)</option>
+                          )}
+                        </select>
+                      </label>
                     </div>
                   </div>
                 </div>
@@ -1179,66 +1001,6 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
           </div>
         </div>
       )}
-      {progressing && (
-        <div className="modal-backdrop">
-          <div className="progress-modal">
-            <div className="modal-head">
-              <div>
-                <h3>Cập nhật tiến độ</h3>
-                <p>
-                  {progressing.code} · {progressing.title}
-                </p>
-              </div>
-              <button onClick={() => setProgressing(null)}>
-                <X size={20} />
-              </button>
-            </div>
-            <form onSubmit={saveProgress}>
-              <label>
-                Trạng thái
-                <select name="status" defaultValue={progressing.status}>
-                  {Object.entries(labels.status)
-                    .filter(([value]) => value !== "waiting_approval")
-                    .map(([v, l]) => (
-                      <option value={v} key={v}>
-                        {l}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              <label>
-                Phần trăm hoàn thành
-                <input
-                  name="progress_percent"
-                  type="range"
-                  min="0"
-                  max="100"
-                  defaultValue={progressing.progress}
-                />
-                <span className="range-label">0% — 100%</span>
-              </label>
-              <label>
-                Nội dung cập nhật
-                <textarea
-                  name="content"
-                  rows="4"
-                  placeholder="Mô tả kết quả, khó khăn hoặc ghi chú..."
-                />
-              </label>
-              <div className="modal-actions">
-                <button
-                  type="button"
-                  className="secondary-btn"
-                  onClick={() => setProgressing(null)}
-                >
-                  Hủy
-                </button>
-                <button className="primary-btn">Lưu tiến độ</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
       {viewing && (
         <div className="modal-backdrop">
           <div className="task-detail">
@@ -1258,63 +1020,13 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                     <span className={`priority ${viewing.priority}`}>
                       {labels.priority[viewing.priority]}
                     </span>
-                    <span className={`task-status ${statusPreview}`}>
-                      {labels.status[statusPreview]}
-                    </span>
+                    <TaskStatusBadges task={viewing} />
                   </div>
                   <h2>{viewing.title}</h2>
-                  {viewing.late_penalty_preview?.late_seconds > 0 &&
-                    viewing.late_penalty_preview?.penalty_percent > 0 && (
-                      <div className="task-late-alert" role="alert">
-                        <TriangleAlert size={19} />
-                        <div>
-                          <b>
-                            {viewing.latest_submission
-                              ? "Đã nộp muộn"
-                              : "Công việc đang muộn"}{" "}
-                            {formatLateDuration(
-                              viewing.late_penalty_preview.late_seconds,
-                            )}
-                          </b>
-                          <span>
-                            Áp dụng mức trừ{" "}
-                            {Number(
-                              viewing.late_penalty_preview.penalty_percent,
-                            )}
-                            % — dự kiến trừ{" "}
-                            {Number(viewing.late_penalty_preview.penalty_score)}{" "}
-                            điểm.
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  <div
-                    className={`detail-progress ${progressPreview >= 100 ? "complete" : progressPreview >= 80 ? "high" : progressPreview >= 30 ? "medium" : "low"}`}
-                  >
-                    <span>
-                      <i style={{ width: `${progressPreview}%` }} />
-                    </span>
-                    <b>{progressPreview}% hoàn thành</b>
-                  </div>
                   <dl>
                     <div>
                       <dt>Loại nhiệm vụ</dt>
-                      <dd>
-                        {viewing.task_type ||
-                          viewing.category ||
-                          "Chưa xác định"}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>Sản phẩm</dt>
-                      <dd>{viewing.product || "—"}</dd>
-                    </div>
-                    <div>
-                      <dt>Điểm / Hệ số</dt>
-                      <dd>
-                        {viewing.catalog_score || 0} điểm ·{" "}
-                        {viewing.conversion || 0}
-                      </dd>
+                      <dd>{viewing.category || "Không phân loại"}</dd>
                     </div>
                     <div className="detail-highlight-assigner">
                       <dt>Người giao</dt>
@@ -1336,14 +1048,21 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                     </div>
                     <div className="detail-highlight-reviewer">
                       <dt>Người duyệt</dt>
-                      <dd>{viewing.reviewer || "Không chỉ định"}</dd>
+                      <dd>
+                        {viewing.reviewer ||
+                          (viewing.is_personal ? "Không có — tự đánh dấu hoàn thành" : "Người giao việc")}
+                      </dd>
                     </div>
                     <div className="detail-highlight-role">
                       <dt>Vai trò của bạn</dt>
                       <dd>
                         {viewing.is_reviewer
-                          ? "Người kiểm duyệt"
-                          : "Người thực hiện / theo dõi"}
+                          ? "Người duyệt"
+                          : viewing.can_update_progress || viewing.can_self_complete
+                            ? "Người thực hiện"
+                            : viewing.can_manage
+                              ? "Người giao việc"
+                              : "Theo dõi"}
                       </dd>
                     </div>
                   </dl>
@@ -1487,7 +1206,6 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                             <i>{x.name?.charAt(0)}</i>
                           )}
                           {x.name}
-                          <small>{x.progress}%</small>
                         </span>
                       ))}
                       {viewing.departments.map((x) => (
@@ -1599,250 +1317,17 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                   </section>
                 </main>
                 <aside className="task-detail-side">
-                  {(!(viewing.can_manage || viewing.is_reviewer) ||
-                    viewing.can_review_completion) && (
-                    <div className="detail-update-sidebar">
-                      <div className="detail-update-title">
-                        <span>
-                          <Activity size={18} />
-                        </span>
-                        <div>
-                          <b>
-                            {viewing.can_review_completion
-                              ? "Chấm điểm & xác nhận"
-                              : "Cập nhật công việc"}
-                          </b>
-                        </div>
-                      </div>
-                      <form onSubmit={saveDetailUpdate}>
-                        {!(viewing.can_manage || viewing.is_reviewer) && (
-                          <>
-                            <label>
-                              Trạng thái
-                              <select
-                                name="status"
-                                value={statusPreview}
-                                onChange={(event) =>
-                                  setStatusPreview(event.target.value)
-                                }
-                              >
-                                {Object.entries(labels.status)
-                                  .filter(
-                                    ([value]) =>
-                                      ![
-                                        "waiting_approval",
-                                        "completed",
-                                        "cancelled",
-                                      ].includes(value),
-                                  )
-                                  .map(([value, text]) => (
-                                    <option value={value} key={value}>
-                                      {text}
-                                    </option>
-                                  ))}
-                              </select>
-                            </label>
-                            <label>
-                              Phần trăm hoàn thành
-                              <input
-                                name="progress_percent"
-                                type="number"
-                                min="0"
-                                max="100"
-                                defaultValue={viewing.progress}
-                                onChange={(event) => {
-                                  const enteredValue =
-                                    Number(event.target.value) || 0;
-                                  const value = Math.min(
-                                    100,
-                                    Math.max(0, enteredValue),
-                                  );
-                                  if (enteredValue !== value)
-                                    event.target.value = String(value);
-                                  setProgressPreview(value);
-                                  if (value > 0)
-                                    setStatusPreview("in_progress");
-                                }}
-                              />
-                            </label>
-                            <div className="submission-inputs">
-                              <label>
-                                File bài nộp (có thể chọn nhiều file)
-                                <input
-                                  name="submission_files[]"
-                                  type="file"
-                                  multiple
-                                  accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.zip,.rar"
-                                  disabled={workflowSaving}
-                                />
-                              </label>
-                              <label>
-                                Đường link bài nộp (mỗi dòng một link)
-                                <textarea
-                                  name="submission_links"
-                                  rows="3"
-                                  disabled={workflowSaving}
-                                  placeholder={
-                                    "https://drive.google.com/...\nhttps://docs.google.com/..."
-                                  }
-                                />
-                              </label>
-                              <small>
-                                File và đường link sẽ được lưu khi tiến độ được
-                                cập nhật lên 100%.
-                              </small>
-                            </div>
-                          </>
-                        )}
-                        <label>
-                          {viewing.can_review_completion
-                            ? "Nhận xét đánh giá"
-                            : "Nhận xét gửi người giao việc / kiểm duyệt"}
-                          <textarea
-                            key={viewing.evaluation?.id || "new-evaluation"}
-                            name="content"
-                            rows="5"
-                            disabled={workflowSaving}
-                            placeholder="Nhập nội dung nhận xét..."
-                            defaultValue={viewing.evaluation?.comment || ""}
-                          />
-                        </label>
-                        {workflowError && (
-                          <div className="workflow-inline-error">
-                            <TriangleAlert size={17} />
-                            {workflowError}
-                          </div>
-                        )}
-                        {viewing.can_review_completion && (
-                          <div className="task-score-grid">
-                            {scoreError && (
-                              <div className="score-inline-error" role="alert">
-                                <TriangleAlert size={15} /> {scoreError}
-                              </div>
-                            )}
-                            <label>
-                              Điểm (tối đa{" "}
-                              {viewing.catalog_score || viewing.maximum_score})
-                              <input
-                                name="score"
-                                type="number"
-                                min="0"
-                                max={
-                                  viewing.catalog_score || viewing.maximum_score
-                                }
-                                step="0.01"
-                                defaultValue={
-                                  viewing.evaluation?.score_before_penalty ??
-                                  viewing.catalog_score ??
-                                  viewing.maximum_score
-                                }
-                                aria-invalid={Boolean(scoreError)}
-                                onChange={(event) => {
-                                  const value = Number(event.target.value) || 0;
-                                  const limit = Number(
-                                    viewing.catalog_score ||
-                                      viewing.maximum_score ||
-                                      0,
-                                  );
-                                  setScorePreview(value);
-                                  setScoreError(
-                                    value > limit
-                                      ? `Điểm không được vượt quá ${limit}.`
-                                      : "",
-                                  );
-                                }}
-                                required
-                              />
-                            </label>
-                            <small className="conversion-preview">
-                              Hệ số đạt được:{" "}
-                              <b>
-                                {viewing.catalog_score > 0
-                                  ? (
-                                      (scorePreview / viewing.catalog_score) *
-                                      viewing.conversion
-                                    ).toFixed(2)
-                                  : "0.00"}
-                              </b>
-                              {" / "}
-                              {Number(viewing.conversion || 0).toFixed(2)}
-                            </small>
-                            {viewing.late_penalty_preview?.penalty_percent >
-                              0 && (
-                              <div className="late-penalty-preview">
-                                <Clock3 size={15} />
-                                <span>
-                                  Nộp trễ{" "}
-                                  <b>
-                                    {viewing.late_penalty_preview.late_days}{" "}
-                                    ngày
-                                  </b>
-                                  : tự động trừ{" "}
-                                  <b>
-                                    {
-                                      viewing.late_penalty_preview
-                                        .penalty_percent
-                                    }
-                                    %
-                                  </b>{" "}
-                                  ={" "}
-                                  <b>
-                                    {(
-                                      (scorePreview *
-                                        viewing.late_penalty_preview
-                                          .penalty_percent) /
-                                      100
-                                    ).toFixed(2)}{" "}
-                                    điểm
-                                  </b>
-                                  . Điểm sau trừ:{" "}
-                                  <b>
-                                    {Math.max(
-                                      0,
-                                      scorePreview *
-                                        (1 -
-                                          viewing.late_penalty_preview
-                                            .penalty_percent /
-                                            100),
-                                    ).toFixed(2)}
-                                  </b>
-                                  .
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        {viewing.can_review_completion && (
-                          <div className="completion-actions">
-                            <button
-                              name="workflow_action"
-                              value="approved"
-                              className="approve-completion"
-                              disabled={workflowSaving || Boolean(scoreError)}
-                            >
-                              <CheckCircle2 size={16} /> Xác nhận hoàn thành
-                            </button>
-                            <button
-                              name="workflow_action"
-                              value="revision_required"
-                              className="revision-completion"
-                              disabled={workflowSaving || Boolean(scoreError)}
-                            >
-                              <RotateCcw size={16} /> Yêu cầu làm lại
-                            </button>
-                          </div>
-                        )}
-                        {!viewing.can_review_completion && (
-                          <button
-                            className="primary-btn"
-                            disabled={workflowSaving || Boolean(scoreError)}
-                          >
-                            <Send size={15} /> Cập nhật công việc
-                          </button>
-                        )}
-                      </form>
-                    </div>
-                  )}
+                  <TaskWorkflowPanel
+                    task={viewing}
+                    saving={workflowSaving}
+                    error={workflowError}
+                    onStart={startTask}
+                    onSubmit={submitCompletion}
+                    onReview={reviewCompletion}
+                    onSelfComplete={selfComplete}
+                    onCancel={cancelTask}
+                    onComment={postComment}
+                  />
                   <section className="comment-timeline">
                     <div className="comment-heading">
                       <b>
@@ -2309,77 +1794,6 @@ function DepartmentTabs({ departments, value, onChange }) {
   );
 }
 
-function TaskTypePicker({ items, value, onChange }) {
-  const selected = items.find((item) => item.id === Number(value));
-  const [scope, setScope] = useState(selected?.scope || "school");
-  const [search, setSearch] = useState("");
-  const visible = items.filter(
-    (item) =>
-      item.scope === scope &&
-      `${item.name} ${item.product} ${item.group || ""}`
-        .toLowerCase()
-        .includes(search.toLowerCase()),
-  );
-  const changeScope = (nextScope) => {
-    setScope(nextScope);
-    setSearch("");
-    if (selected?.scope !== nextScope) onChange("");
-  };
-  return (
-    <div className="task-type-picker wide">
-      <input type="hidden" name="task_catalog_item_id" value={value} />
-      <label className="task-type-search">
-        <Search size={16} />
-        <input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="Tìm kiếm loại nhiệm vụ"
-        />
-      </label>
-      <div className="task-type-tabs">
-        <button
-          type="button"
-          className={scope === "school" ? "active" : ""}
-          onClick={() => changeScope("school")}
-        >
-          Tổ chức
-        </button>
-        <button
-          type="button"
-          className={scope === "department" ? "active" : ""}
-          onClick={() => changeScope("department")}
-        >
-          Phòng ban
-        </button>
-      </div>
-      <div className="task-type-options">
-        {visible.map((item) => {
-          const checked = item.id === Number(value);
-          return (
-            <button
-              type="button"
-              className={checked ? "selected" : ""}
-              onClick={() => onChange(item.id)}
-              key={item.id}
-            >
-              <i />{" "}
-              <span>
-                <b>{item.name}</b>
-                <small>
-                  {item.group ? `${item.group} · ` : ""}
-                  {item.product}
-                </small>
-              </span>
-              {checked && <CheckCircle2 size={17} />}
-            </button>
-          );
-        })}
-        {!visible.length && <p>Không tìm thấy loại nhiệm vụ phù hợp.</p>}
-      </div>
-    </div>
-  );
-}
-
 function FileAttachmentPicker({ editing, setEditing }) {
   const inputRef = useRef(null);
   const addFiles = (fileList) => {
@@ -2490,18 +1904,117 @@ function formatFileSize(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function formatLateDuration(totalSeconds) {
-  let remaining = Math.max(1, Math.floor(Number(totalSeconds) || 0));
-  const days = Math.floor(remaining / 86400);
-  remaining %= 86400;
-  const hours = Math.floor(remaining / 3600);
-  remaining %= 3600;
-  const minutes = Math.floor(remaining / 60);
-  const seconds = remaining % 60;
-  const parts = [];
-  if (days) parts.push(`${days} ngày`);
-  if (hours) parts.push(`${hours} giờ`);
-  if (minutes) parts.push(`${minutes} phút`);
-  if (!parts.length && seconds) parts.push(`${seconds} giây`);
-  return parts.slice(0, 2).join(" ");
+function TaskStatusBadges({ task }) {
+  return (
+    <div className="task-status-badges">
+      <span className={`task-status ${task.status}`}>{labels.status[task.status]}</span>
+      {task.needs_revision && <span className="task-flag revision">Cần chỉnh sửa</span>}
+      {task.is_overdue && <span className="task-flag overdue">Quá hạn</span>}
+      {task.is_late && <span className="task-flag late">Hoàn thành trễ</span>}
+    </div>
+  );
+}
+
+function TaskWorkflowPanel({ task, saving, error, onStart, onSubmit, onReview, onSelfComplete, onCancel, onComment }) {
+  const latest = task.latest_submission;
+  return (
+    <div className="detail-update-sidebar task-workflow-panel">
+      <div className="detail-update-title">
+        <span>
+          <Activity size={18} />
+        </span>
+        <div>
+          <b>Xử lý công việc</b>
+          <small>{labels.status[task.status]}</small>
+        </div>
+      </div>
+      {error && (
+        <div className="workflow-inline-error">
+          <TriangleAlert size={17} />
+          {error}
+        </div>
+      )}
+      {task.needs_revision && latest?.review_comment && (
+        <div className="workflow-note revision">
+          <RotateCcw size={15} />
+          <span>
+            <b>Yêu cầu chỉnh sửa:</b> {latest.review_comment}
+          </span>
+        </div>
+      )}
+      {task.can_update_progress && task.status === "not_started" && (
+        <button type="button" className="primary-btn workflow-btn" disabled={saving} onClick={onStart}>
+          <Activity size={15} /> Bắt đầu thực hiện
+        </button>
+      )}
+      {task.can_submit_completion && (
+        <form className="workflow-form" onSubmit={onSubmit}>
+          <b>Nộp kết quả & đề nghị duyệt</b>
+          <label>
+            File kết quả (có thể chọn nhiều)
+            <input
+              name="submission_files[]"
+              type="file"
+              multiple
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.zip,.rar"
+              disabled={saving}
+            />
+          </label>
+          <label>
+            Đường link (mỗi dòng một link)
+            <textarea name="submission_links" rows="2" disabled={saving} placeholder="https://drive.google.com/..." />
+          </label>
+          <label>
+            Ghi chú
+            <textarea name="comment" rows="3" disabled={saving} placeholder="Mô tả kết quả đã làm..." />
+          </label>
+          <button className="primary-btn workflow-btn" disabled={saving}>
+            <Send size={15} /> Nộp & đề nghị duyệt
+          </button>
+        </form>
+      )}
+      {task.status === "waiting_approval" && !task.can_review_completion && (
+        <div className="workflow-note">
+          <Clock3 size={15} />
+          <span>Đang chờ {task.reviewer || task.creator || "người duyệt"} xác nhận.</span>
+        </div>
+      )}
+      {task.can_review_completion && (
+        <form className="workflow-form" onSubmit={onReview}>
+          <b>Duyệt kết quả</b>
+          <label>
+            Nhận xét
+            <textarea name="comment" rows="3" disabled={saving} placeholder="Nhận xét gửi người thực hiện..." />
+          </label>
+          <div className="completion-actions">
+            <button name="decision" value="approved" className="approve-completion" disabled={saving}>
+              <CheckCircle2 size={16} /> Xác nhận hoàn thành
+            </button>
+            <button name="decision" value="revision_required" className="revision-completion" disabled={saving}>
+              <RotateCcw size={16} /> Yêu cầu chỉnh sửa
+            </button>
+          </div>
+        </form>
+      )}
+      {task.can_self_complete && (
+        <button type="button" className="approve-completion workflow-btn" disabled={saving} onClick={onSelfComplete}>
+          <CheckCircle2 size={16} /> Đánh dấu hoàn thành
+        </button>
+      )}
+      <form className="workflow-form comment-form" onSubmit={onComment}>
+        <label>
+          Trao đổi
+          <textarea name="content" rows="2" disabled={saving} placeholder="Gửi ý kiến tới những người liên quan..." />
+        </label>
+        <button className="secondary-btn workflow-btn" disabled={saving}>
+          <MessageSquare size={15} /> Gửi trao đổi
+        </button>
+      </form>
+      {task.can_cancel && (
+        <button type="button" className="danger-link workflow-cancel" disabled={saving} onClick={onCancel}>
+          <Trash2 size={15} /> Hủy công việc
+        </button>
+      )}
+    </div>
+  );
 }
