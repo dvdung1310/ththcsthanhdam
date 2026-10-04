@@ -703,11 +703,10 @@ class TaskController extends Controller
                 ->where('employment_status', 'working')
                 ->inUnits($departmentIds)
                 ->get();
-            $directTeacherIds = $task->teachers->pluck('id');
-            $departmentTeachers
-                ->whereNotIn('id', $directTeacherIds)
+            $extraTeachers = $departmentTeachers
+                ->whereNotIn('id', $task->teachers->pluck('id'))
                 ->each(fn (Teacher $teacher) => $teacher->setRelation('pivot', (object) ['progress_percent' => 0]));
-            $task->setRelation('teachers', $task->teachers->merge($departmentTeachers)->unique('id')->values());
+            $task->setRelation('teachers', $task->teachers->concat($extraTeachers)->values());
         }
         $reminders = DB::table('task_reminders')
             ->where('task_id', $task->id)
