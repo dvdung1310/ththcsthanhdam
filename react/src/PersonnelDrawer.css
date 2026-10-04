@@ -1,7 +1,7 @@
 .drawer-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: 90;
   display: flex;
   justify-content: flex-end;
   background: rgba(17, 24, 48, 0.38);
