@@ -102,20 +102,9 @@
 
 .drawer-grid input,
 .drawer-grid select,
-.role-pick-units select {
-  height: 40px;
-  padding: 0 11px;
-  border: 1px solid #d8ddea;
-  border-radius: 9px;
-  outline: none;
-  color: #303b59;
-  background: #fff;
-  font-size: 13px;
-}
 
 .drawer-grid input:focus,
-.drawer-grid select:focus,
-.role-pick-units select:focus {
+.drawer-grid select:focus {
   border-color: #7359e9;
   box-shadow: 0 0 0 4px rgba(115, 89, 233, 0.12);
 }
@@ -176,41 +165,6 @@
   cursor: default;
 }
 
-.unit-checklist {
-  padding: 12px 14px;
-  columns: 2;
-  column-gap: 16px;
-  border: 1px solid #e3e6ef;
-  border-radius: 10px;
-}
-
-.unit-group {
-  margin-bottom: 8px;
-  break-inside: avoid;
-}
-
-.unit-checklist label {
-  margin-bottom: 7px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #34405e;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.unit-checklist label.is-child {
-  padding-left: 22px;
-  font-weight: 500;
-}
-
-.unit-checklist p {
-  margin: 0;
-  color: #9299ab;
-  font-size: 12px;
-}
-
 .role-picker {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -257,34 +211,6 @@
   font-size: 11px;
 }
 
-.role-pick-units {
-  padding: 0 12px 12px 34px;
-  display: grid;
-  gap: 6px;
-}
-
-.role-pick-units > div {
-  display: flex;
-  gap: 6px;
-}
-
-.role-pick-units select {
-  flex: 1;
-  height: 34px;
-  font-size: 12px;
-}
-
-.role-pick-units > div button {
-  width: 34px;
-  display: grid;
-  place-items: center;
-  border: 1px solid #e3e6ed;
-  border-radius: 8px;
-  color: #e44856;
-  background: #fff;
-  cursor: pointer;
-}
-
 .link-btn {
   justify-self: start;
   padding: 2px 0;
@@ -297,18 +223,6 @@
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-}
-
-.drawer-hint {
-  margin: 12px 0 0;
-  padding: 10px 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border-radius: 9px;
-  color: #5a43c9;
-  background: #f1edff;
-  font-size: 12px;
 }
 
 .role-readonly {
@@ -374,9 +288,5 @@
   .drawer-grid,
   .role-picker {
     grid-template-columns: 1fr;
-  }
-
-  .unit-checklist {
-    columns: 1;
   }
 }

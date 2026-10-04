@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Info, Plus, Trash2, X } from "lucide-react";
+import { Trash2, X } from "lucide-react";
 import { apiJson } from "./api";
+import UnitMembershipEditor, { findHolderConflicts } from "./UnitMembershipEditor";
 import "./PersonnelDrawer.css";
 
 export const EMPLOYMENT_LABELS = {
@@ -42,6 +43,7 @@ export default function PersonnelDrawer({
   roles,
   units,
   canAssignRoles,
+  people,
   scope,
   onClose,
   onSaved,
@@ -76,13 +78,7 @@ export default function PersonnelDrawer({
   const roleById = Object.fromEntries(roles.map((role) => [role.id, role]));
   const set = (key, value) => setForm((current) => ({ ...current, [key]: value }));
 
-  const toggleUnit = (id) =>
-    set(
-      "unit_ids",
-      form.unit_ids.includes(id)
-        ? form.unit_ids.filter((unitId) => unitId !== id)
-        : [...form.unit_ids, id],
-    );
+  const schoolRoles = roles.filter((role) => role.scope !== "unit");
   const toggleRole = (role) =>
     set(
       "roles",
@@ -90,46 +86,7 @@ export default function PersonnelDrawer({
         ? form.roles.filter((row) => row.role_id !== role.id)
         : [...form.roles, { role_id: role.id, department_id: "" }],
     );
-  const setRoleUnit = (index, departmentId) =>
-    set(
-      "roles",
-      form.roles.map((row, i) =>
-        i === index ? { ...row, department_id: departmentId } : row,
-      ),
-    );
-  const addRoleUnit = (role) =>
-    set("roles", [...form.roles, { role_id: role.id, department_id: "" }]);
-  const removeRoleRow = (index) =>
-    set(
-      "roles",
-      form.roles.filter((_, i) => i !== index),
-    );
-
-  const missingUnit = form.roles.some(
-    (row) => roleById[row.role_id]?.scope === "unit" && !row.department_id,
-  );
-  const autoAdded = form.is_teacher
-    ? [
-        ...new Set(
-          form.roles
-            .filter(
-              (row) =>
-                roleById[row.role_id]?.scope === "unit" &&
-                row.department_id &&
-                !form.unit_ids.some(
-                  (id) =>
-                    id === row.department_id ||
-                    units.find((unit) => unit.id === id)?.parent_id === row.department_id,
-                ),
-            )
-            .map((row) => row.department_id),
-        ),
-      ]
-    : [];
-  const unitGroups = units
-    .filter((unit) => !units.some((parent) => parent.id === unit.parent_id))
-    .map((root) => [root, ...units.filter((unit) => unit.parent_id === root.id)]);
-  const unitLabel = (id) => units.find((unit) => unit.id === id)?.label ?? "";
+  const unitIdsInScope = form.unit_ids.filter((id) => units.some((unit) => unit.id === id));
 
   const save = async (event) => {
     event.preventDefault();
@@ -143,7 +100,7 @@ export default function PersonnelDrawer({
       is_teacher: form.is_teacher,
       employee_code: form.is_teacher ? form.employee_code : null,
       employment_status: form.is_teacher ? form.employment_status : null,
-      unit_ids: form.is_teacher ? form.unit_ids : [],
+      unit_ids: form.is_teacher ? unitIdsInScope : [],
       ...(password ? { password } : {}),
       ...(canAssignRoles
         ? {
@@ -156,6 +113,15 @@ export default function PersonnelDrawer({
           }
         : {}),
     };
+    const conflicts = canAssignRoles && form.is_teacher ? findHolderConflicts(form.roles, roles, people, person?.id) : [];
+    if (conflicts.length) {
+      const lines = conflicts.map((c) => `• ${units.find((u) => u.id === c.department_id)?.label}: thay ${c.role} ${c.holder}`).join("\n");
+      if (!window.confirm(`Các đơn vị sau đã có người giữ chức vụ:\n${lines}\n\nThay thế bằng ${form.name}?`)) {
+        setSaving(false);
+        return;
+      }
+      body.replace_holders = true;
+    }
     try {
       const payload = await apiJson(
         isNew ? "/api/personnel" : `/api/personnel/${person.id}`,
@@ -294,113 +260,44 @@ export default function PersonnelDrawer({
 
             {form.is_teacher && (
               <section>
-                <h4>Thuộc tổ / nhóm</h4>
-                <div className="unit-checklist">
-                  {unitGroups.map((group) => (
-                    <div className="unit-group" key={group[0].id}>
-                      {group.map((unit) => (
-                        <label key={unit.id} className={unit.parent_id && unit !== group[0] ? "is-child" : ""}>
-                          <input
-                            type="checkbox"
-                            checked={form.unit_ids.includes(unit.id)}
-                            onChange={() => toggleUnit(unit.id)}
-                          />
-                          {unit === group[0] && unit.parent_id ? unit.label : unit.name}
-                        </label>
-                      ))}
-                    </div>
-                  ))}
-                  {!units.length && <p>Chưa có tổ, nhóm nào.</p>}
-                </div>
+                <h4>Tổ / nhóm & chức vụ</h4>
+                <UnitMembershipEditor
+                  units={units}
+                  unitIds={form.unit_ids}
+                  roles={form.roles}
+                  roleCatalog={roles}
+                  canAssignRoles={canAssignRoles}
+                  people={people}
+                  personId={person?.id}
+                  onChange={({ unit_ids, roles: nextRoles }) => setForm((current) => ({ ...current, unit_ids, roles: nextRoles }))}
+                />
               </section>
             )}
 
             <section>
               <h4>Vai trò</h4>
               {canAssignRoles ? (
-                <>
-                  <div className="role-picker">
-                    {roles.map((role) => {
-                      const rows = form.roles
-                        .map((row, index) => ({ ...row, index }))
-                        .filter((row) => row.role_id === role.id);
-                      const checked = rows.length > 0;
-                      const unavailable = !form.is_teacher && teacherOnly(role);
-                      return (
-                        <div
-                          key={role.id}
-                          className={`role-pick ${checked && !unavailable ? "selected" : ""} ${unavailable ? "unavailable" : ""}`}
-                        >
-                          <label>
-                            <input
-                              type="checkbox"
-                              checked={checked && !unavailable}
-                              disabled={unavailable}
-                              onChange={() => toggleRole(role)}
-                            />
-                            <b>{role.name}</b>
-                            <small>{scopeLabel(role)}</small>
-                          </label>
-                          {checked && !unavailable && role.scope === "unit" && (
-                            <div className="role-pick-units">
-                              {rows.map((row) => (
-                                <div key={row.index}>
-                                  <select
-                                    value={row.department_id}
-                                    onChange={(e) =>
-                                      setRoleUnit(
-                                        row.index,
-                                        e.target.value ? Number(e.target.value) : "",
-                                      )
-                                    }
-                                  >
-                                    <option value="">
-                                      {role.unit_type === "nhom" ? "Chọn nhóm..." : "Chọn tổ..."}
-                                    </option>
-                                    {units
-                                      .filter((unit) => unit.type === role.unit_type)
-                                      .map((unit) => (
-                                        <option key={unit.id} value={unit.id}>
-                                          {unit.label}
-                                        </option>
-                                      ))}
-                                  </select>
-                                  {rows.length > 1 && (
-                                    <button
-                                      type="button"
-                                      title="Bỏ đơn vị này"
-                                      onClick={() => removeRoleRow(row.index)}
-                                    >
-                                      <X size={14} />
-                                    </button>
-                                  )}
-                                </div>
-                              ))}
-                              <button
-                                type="button"
-                                className="link-btn"
-                                onClick={() => addRoleUnit(role)}
-                              >
-                                <Plus size={13} /> Thêm {role.unit_type === "nhom" ? "nhóm" : "tổ"}
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {autoAdded.length > 0 && (
-                    <p className="drawer-hint">
-                      <Info size={15} /> Sẽ tự thêm vào: {autoAdded.map(unitLabel).join(", ")}
-                    </p>
-                  )}
-                </>
+                <div className="role-picker">
+                  {schoolRoles.map((role) => {
+                    const checked = form.roles.some((row) => row.role_id === role.id);
+                    const unavailable = !form.is_teacher && teacherOnly(role);
+                    return (
+                      <div key={role.id} className={`role-pick ${checked && !unavailable ? "selected" : ""} ${unavailable ? "unavailable" : ""}`}>
+                        <label>
+                          <input type="checkbox" checked={checked && !unavailable} disabled={unavailable} onChange={() => toggleRole(role)} />
+                          <b>{role.name}</b>
+                          <small>{scopeLabel(role)}</small>
+                        </label>
+                      </div>
+                    );
+                  })}
+                </div>
               ) : (
                 <div className="role-readonly">
-                  {person?.roles?.length ? (
-                    person.roles.map((role) => (
-                      <span key={`${role.role_id}-${role.department_id}`}>{role.label}</span>
-                    ))
+                  {person?.roles?.filter((role) => !role.department_id).length ? (
+                    person.roles
+                      .filter((role) => !role.department_id)
+                      .map((role) => <span key={role.role_id}>{role.label}</span>)
                   ) : (
                     <em>Giáo viên</em>
                   )}
@@ -419,7 +316,7 @@ export default function PersonnelDrawer({
             <button type="button" className="secondary-btn" onClick={onClose}>
               Hủy
             </button>
-            <button className="primary-btn" disabled={saving || missingUnit}>
+            <button className="primary-btn" disabled={saving}>
               {saving ? "Đang lưu..." : isNew ? "Thêm nhân sự" : "Lưu thay đổi"}
             </button>
           </footer>
