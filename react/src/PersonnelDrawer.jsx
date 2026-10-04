@@ -70,6 +70,18 @@ export default function PersonnelDrawer({
         },
   );
   const [password, setPassword] = useState("");
+  const snapshot = (value) =>
+    JSON.stringify({
+      name: value.name.trim(),
+      email: value.email.trim(),
+      phone: (value.phone ?? "").trim(),
+      is_active: value.is_active,
+      employee_code: (value.employee_code ?? "").trim(),
+      employment_status: value.employment_status,
+      unit_ids: [...value.unit_ids].sort(),
+      roles: value.roles.map((row) => `${row.role_id}-${row.department_id || ""}`).sort(),
+    });
+  const [initialSnapshot] = useState(() => snapshot(form));
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const roleById = Object.fromEntries(roles.map((role) => [role.id, role]));
@@ -86,6 +98,19 @@ export default function PersonnelDrawer({
         ? form.roles.filter((row) => row.role_id !== role.id)
         : [...form.roles, { role_id: role.id, department_id: "" }],
     );
+  const dirty = password !== "" || snapshot(form) !== initialSnapshot;
+  const missing = [
+    !form.name.trim() && "Họ và tên",
+    !form.email.trim() && "Email đăng nhập",
+    (isNew ? password.length < 8 : password && password.length < 8) && "Mật khẩu (tối thiểu 8 ký tự)",
+    isTeacher && !(form.employee_code ?? "").trim() && "Mã giáo viên",
+  ].filter(Boolean);
+  const blockedReason = missing.length ? `Còn thiếu: ${missing.join(", ")}` : !isNew && !dirty ? "Chưa có thay đổi" : "";
+  const statusText = blockedReason || (!isNew && dirty ? "Có thay đổi chưa lưu" : "");
+  const requestClose = () => {
+    if (dirty && !window.confirm("Bỏ các thay đổi chưa lưu?")) return;
+    onClose();
+  };
   const unitIdsInScope = form.unit_ids.filter((id) => units.some((unit) => unit.id === id));
 
   const save = async (event) => {
@@ -152,7 +177,7 @@ export default function PersonnelDrawer({
   };
 
   return (
-    <div className="drawer-backdrop" onMouseDown={onClose}>
+    <div className="drawer-backdrop" onMouseDown={requestClose}>
       <aside
         className="personnel-drawer"
         onMouseDown={(event) => event.stopPropagation()}
@@ -162,7 +187,7 @@ export default function PersonnelDrawer({
             <h3>{isNew ? "Thêm nhân sự" : form.name}</h3>
             <p>{isNew ? "Tạo tài khoản và hồ sơ công tác" : form.email}</p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Đóng">
+          <button type="button" onClick={requestClose} aria-label="Đóng">
             <X size={20} />
           </button>
         </header>
@@ -306,11 +331,11 @@ export default function PersonnelDrawer({
                 <Trash2 size={15} /> <span>Cho nghỉ & khóa</span>
               </button>
             )}
-            <span />
-            <button type="button" className="secondary-btn" onClick={onClose}>
+            <span className={`drawer-status ${blockedReason ? "" : dirty ? "dirty" : ""}`}>{statusText}</span>
+            <button type="button" className="secondary-btn" onClick={requestClose}>
               Hủy
             </button>
-            <button className="primary-btn" disabled={saving}>
+            <button className="primary-btn" disabled={saving || Boolean(blockedReason)} title={blockedReason || undefined}>
               {saving ? "Đang lưu..." : isNew ? "Thêm nhân sự" : "Lưu thay đổi"}
             </button>
           </div>
