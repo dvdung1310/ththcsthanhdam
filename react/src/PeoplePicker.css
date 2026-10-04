@@ -4,11 +4,8 @@
 }
 
 .people-picker {
-  width: 100%;
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  z-index: 30;
+  position: fixed;
+  z-index: 120;
   display: flex;
   flex-direction: column;
   border: 1px solid #e3e6ee;
@@ -38,9 +35,10 @@
 }
 
 .pp-body {
-  height: 340px;
+  min-height: 0;
+  flex: 1;
   display: grid;
-  grid-template-columns: minmax(170px, 45%) minmax(0, 1fr);
+  grid-template-columns: 230px minmax(0, 1fr);
 }
 
 .pp-tree {
@@ -305,8 +303,8 @@
 
 @media (max-width: 640px) {
   .pp-body {
-    height: auto;
     grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .pp-tree {

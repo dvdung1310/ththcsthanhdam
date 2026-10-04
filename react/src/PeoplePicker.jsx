@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, CheckCircle2, Search, Users } from "lucide-react";
 import "./PeoplePicker.css";
 
@@ -30,13 +31,19 @@ export function useOutsideClose(open, onClose) {
   const ref = useRef(null);
   useEffect(() => {
     if (!open) return undefined;
-    const outside = (event) => !ref.current?.contains(event.target) && onClose();
+    const inside = (target) => target instanceof Node && (ref.current?.contains(target) || target.parentElement?.closest(".people-picker") || target.closest?.(".people-picker"));
+    const outside = (event) => !inside(event.target) && onClose();
     const escape = (event) => event.key === "Escape" && onClose();
+    const scroll = (event) => !inside(event.target) && onClose();
     document.addEventListener("mousedown", outside);
     document.addEventListener("keydown", escape);
+    document.addEventListener("scroll", scroll, true);
+    window.addEventListener("resize", onClose);
     return () => {
       document.removeEventListener("mousedown", outside);
       document.removeEventListener("keydown", escape);
+      document.removeEventListener("scroll", scroll, true);
+      window.removeEventListener("resize", onClose);
     };
   }, [open, onClose]);
   return ref;
@@ -50,8 +57,24 @@ export default function PeoplePicker({
   onTogglePerson,
   onToggleUnit,
   title,
+  anchorRef,
 }) {
   const [focus, setFocus] = useState(null);
+  const [position, setPosition] = useState(null);
+  useLayoutEffect(() => {
+    const anchor = anchorRef?.current;
+    if (!anchor) return;
+    const rect = anchor.getBoundingClientRect();
+    const width = Math.min(660, window.innerWidth - 16);
+    const ideal = 390;
+    const left = Math.max(8, Math.min(rect.left, rect.right - width, window.innerWidth - width - 8));
+    const spaceBelow = window.innerHeight - rect.bottom - 14;
+    const spaceAbove = rect.top - 14;
+    const placeBelow = spaceBelow >= ideal || spaceBelow >= spaceAbove;
+    const height = Math.max(220, Math.min(ideal, placeBelow ? spaceBelow : spaceAbove));
+    const top = placeBelow ? rect.bottom + 6 : rect.top - height - 6;
+    setPosition({ top, left, width, height });
+  }, [anchorRef, selectedPeople.length, selectedUnits.length]);
   const [search, setSearch] = useState("");
   const roots = units.filter((u) => !u.parent_id || !units.some((p) => p.id === u.parent_id));
   const countIn = (id) => people.filter((p) => p.department_ids?.includes(id)).length;
@@ -87,8 +110,13 @@ export default function PeoplePicker({
       </div>
     );
   };
-  return (
-    <div className="people-picker" role="dialog" aria-label={title}>
+  return createPortal(
+    <div
+      className="people-picker"
+      role="dialog"
+      aria-label={title}
+      style={position ? { top: position.top, left: position.left, width: position.width, height: position.height } : { visibility: "hidden" }}
+    >
       <label className="pp-search">
         <Search size={15} />
         <input autoFocus value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm theo tên hoặc mã giáo viên..." />
@@ -148,6 +176,7 @@ export default function PeoplePicker({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

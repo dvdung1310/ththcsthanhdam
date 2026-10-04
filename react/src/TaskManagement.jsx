@@ -1462,6 +1462,7 @@ function CompactAssignees({ editing, refs, toggle }) {
       {open && (
         <PeoplePicker
           title="Chọn người thực hiện"
+          anchorRef={ref}
           people={refs.teachers}
           units={refs.departments}
           selectedPeople={editing.teacher_ids}
@@ -1565,7 +1566,7 @@ function ReviewerPicker({ reviewers, units, value, onChange }) {
         ))}
       </div>
       {open && (
-        <PeoplePicker title="Chọn người duyệt" people={reviewers} units={units} selectedPeople={value} onTogglePerson={toggle} />
+        <PeoplePicker title="Chọn người duyệt" anchorRef={ref} people={reviewers} units={units} selectedPeople={value} onTogglePerson={toggle} />
       )}
     </div>
   );
