@@ -77,6 +77,8 @@ export function ColumnPicker({ state }) {
   );
 }
 
+const chipTones = ["#7b68df", "#2f7fe0", "#17a871", "#e0862f", "#d14d72", "#4b9aa8"];
+
 export function NameStack({ items, max = 2, empty = "—", details, title }) {
   const [anchor, setAnchor] = useState(null);
   const popoverRef = useRef(null);
@@ -99,7 +101,13 @@ export function NameStack({ items, max = 2, empty = "—", details, title }) {
   const chips = (
     <>
       {shown.map((item) => (
-        <span key={item.key} className={`name-chip ${item.kind || ""}`}>
+        <span key={item.key} className={`name-chip ${item.kind || ""} ${item.person ? "with-avatar" : ""}`}>
+          {item.person &&
+            (item.person.avatar_url ? (
+              <img src={item.person.avatar_url} alt="" />
+            ) : (
+              <i style={{ background: chipTones[(item.person.id || 0) % chipTones.length] }}>{item.person.name?.split(" ").at(-1)?.charAt(0)}</i>
+            ))}
           {item.label}
         </span>
       ))}

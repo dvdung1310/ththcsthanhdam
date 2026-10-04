@@ -1072,6 +1072,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                     {labels.priority[viewing.priority]}
                   </span>
                   <TaskStatusBadges task={viewing} />
+                  {viewing.category && <span className="task-drawer-type">{viewing.category}</span>}
                 </div>
                 <h2>{viewing.title}</h2>
               </div>
@@ -1087,56 +1088,38 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
               </div>
             </header>
             <div className="task-drawer-body">
-              <dl className="task-drawer-meta">
-                <div className={viewing.is_overdue ? "alert" : dueSoon(viewing) ? "warn" : ""}>
-                  <dt>Hạn hoàn thành</dt>
-                  <dd>{viewing.due_at ? new Date(viewing.due_at).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" }) : "Không thời hạn"}</dd>
+              <TaskTimeline task={viewing} />
+              <div className="task-drawer-people">
+                <div className="person-row">
+                  <span>Người giao</span>
+                  <PersonCards people={viewing.creator_card ? [viewing.creator_card] : []} empty="Quản trị" />
                 </div>
-                <div>
-                  <dt>Bắt đầu</dt>
-                  <dd>{viewing.starts_at ? new Date(viewing.starts_at).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" }) : "—"}</dd>
+                <div className="person-row">
+                  <span>Người duyệt</span>
+                  <PersonCards
+                    people={viewing.reviewer_cards || []}
+                    empty={viewing.is_personal ? "Tự hoàn thành" : "Người giao duyệt"}
+                  />
                 </div>
-                <div>
-                  <dt>Người giao</dt>
-                  <dd>{viewing.creator || "Quản trị"}</dd>
+                <div className="person-row">
+                  <span>Người thực hiện</span>
+                  <NameStack
+                    max={4}
+                    empty="Chưa phân công"
+                    title={`Người thực hiện · ${viewing.assignee_count} người`}
+                    items={[
+                      ...(viewing.units || []).map((unit) => ({ key: `d-${unit.id}`, label: `${unit.short_name} · ${unit.members.length}`, kind: "unit" })),
+                      ...(viewing.assignees || []).filter((person) => person.direct).map((person) => ({ key: `p-${person.id}`, label: person.name, person })),
+                    ]}
+                    details={[
+                      ...(viewing.units || []).map((unit) => ({ key: `d-${unit.id}`, title: unit.name, names: unit.members.map((member) => member.name) })),
+                      ...((viewing.assignees || []).some((person) => person.direct)
+                        ? [{ key: "direct", title: "Cá nhân", names: viewing.assignees.filter((person) => person.direct).map((person) => person.name) }]
+                        : []),
+                    ]}
+                  />
                 </div>
-                <div>
-                  <dt>Người duyệt</dt>
-                  <dd>
-                    {viewing.reviewers?.length
-                      ? viewing.reviewers.map((r) => r.name).join(", ")
-                      : viewing.is_personal
-                        ? "Tự hoàn thành"
-                        : "Người giao việc"}
-                  </dd>
-                </div>
-                <div className="wide">
-                  <dt>Người thực hiện</dt>
-                  <dd>
-                    <NameStack
-                      max={4}
-                      empty="Chưa phân công"
-                      title={`Người thực hiện · ${viewing.assignee_count} người`}
-                      items={[
-                        ...(viewing.units || []).map((unit) => ({ key: `d-${unit.id}`, label: `${unit.short_name} · ${unit.members.length}`, kind: "unit" })),
-                        ...(viewing.assignees || []).filter((person) => person.direct).map((person) => ({ key: `p-${person.id}`, label: person.name })),
-                      ]}
-                      details={[
-                        ...(viewing.units || []).map((unit) => ({ key: `d-${unit.id}`, title: unit.name, names: unit.members.map((member) => member.name) })),
-                        ...((viewing.assignees || []).some((person) => person.direct)
-                          ? [{ key: "direct", title: "Cá nhân", names: viewing.assignees.filter((person) => person.direct).map((person) => person.name) }]
-                          : []),
-                      ]}
-                    />
-                  </dd>
-                </div>
-                {viewing.category && (
-                  <div className="wide">
-                    <dt>Loại nhiệm vụ</dt>
-                    <dd>{viewing.category}</dd>
-                  </div>
-                )}
-              </dl>
+              </div>
               <TaskWorkflowPanel
                 task={viewing}
                 saving={workflowSaving}
@@ -1679,10 +1662,87 @@ function formatFileSize(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function dueSoon(task) {
-  if (!task.due_at || !["not_started", "in_progress"].includes(task.status)) return false;
-  const left = new Date(task.due_at).getTime() - Date.now();
-  return left > 0 && left <= 24 * 3600 * 1000;
+function humanSpan(ms) {
+  const minutes = Math.max(1, Math.round(Math.abs(ms) / 60000));
+  if (minutes < 60) return `${minutes} phút`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours} giờ`;
+  return `${Math.round(hours / 24)} ngày`;
+}
+
+function formatMoment(value) {
+  return new Date(value).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" });
+}
+
+function TaskTimeline({ task }) {
+  const start = task.starts_at || task.created_at;
+  const due = task.due_at ? new Date(task.due_at).getTime() : null;
+  const now = Date.now();
+  let tone = "neutral";
+  let label = "Không thời hạn";
+  if (task.status === "cancelled") {
+    label = "Đã hủy";
+  } else if (task.status === "completed") {
+    tone = task.is_late ? "warn" : "good";
+    label = task.is_late ? "Hoàn thành trễ hạn" : due ? "Hoàn thành đúng hạn" : "Đã hoàn thành";
+  } else if (due) {
+    const left = due - now;
+    tone = left < 0 ? "alert" : left <= 24 * 3600 * 1000 ? "warn" : "good";
+    label = left < 0 ? `Quá hạn ${humanSpan(left)}` : `Còn ${humanSpan(left)}`;
+  }
+  const startAt = start ? new Date(start).getTime() : null;
+  const progress = task.status === "completed" ? 100 : due && startAt && due > startAt ? Math.min(100, Math.max(0, ((now - startAt) / (due - startAt)) * 100)) : null;
+  return (
+    <section className={`task-timeline ${tone}`}>
+      <div className="task-timeline-top">
+        <div>
+          <span>Bắt đầu</span>
+          <b>{start ? formatMoment(start) : "—"}</b>
+        </div>
+        <em>
+          <CalendarClock size={14} /> {label}
+        </em>
+        <div className="end">
+          <span>Hạn hoàn thành</span>
+          <b>{task.due_at ? formatMoment(task.due_at) : "Không thời hạn"}</b>
+        </div>
+      </div>
+      {progress !== null && task.status !== "cancelled" && (
+        <div className="task-timeline-track">
+          <i style={{ width: `${progress}%` }} />
+        </div>
+      )}
+    </section>
+  );
+}
+
+const avatarTones = ["#7b68df", "#2f7fe0", "#17a871", "#e0862f", "#d14d72", "#4b9aa8"];
+
+function PersonAvatar({ person, size = 32 }) {
+  return person.avatar_url ? (
+    <img className="person-avatar" src={person.avatar_url} alt="" style={{ width: size, height: size }} />
+  ) : (
+    <i className="person-avatar" style={{ width: size, height: size, background: avatarTones[(person.id || 0) % avatarTones.length] }}>
+      {person.name?.split(" ").at(-1)?.charAt(0)}
+    </i>
+  );
+}
+
+function PersonCards({ people, empty }) {
+  if (!people.length) return <span className="person-empty">{empty}</span>;
+  return (
+    <div className="person-cards">
+      {people.map((person) => (
+        <div className="person-card" key={person.id}>
+          <PersonAvatar person={person} />
+          <div>
+            <b>{person.name}</b>
+            {person.role && <small>{person.role}</small>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function taskFormSnapshot(element, editing) {
@@ -1737,7 +1797,7 @@ function TaskWorkflowPanel({ task, saving, error, onStart, onSubmit, onReview, o
   const latest = task.latest_submission;
   const hasAction = task.can_update_progress || task.can_submit_completion || task.can_review_completion || task.can_self_complete;
   const waiting = task.status === "waiting_approval" && !task.can_review_completion;
-  if (!hasAction && !waiting && !task.needs_revision && !error && !task.can_cancel) return null;
+  if (!hasAction && !waiting && !task.needs_revision && !error) return null;
   return (
     <section className="drawer-actions">
       {error && (

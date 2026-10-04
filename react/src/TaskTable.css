@@ -302,3 +302,26 @@
   color: #9aa1b4;
   font-size: 12px;
 }
+
+.name-chip.with-avatar {
+  padding: 3px 9px 3px 3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 99px;
+}
+
+.name-chip.with-avatar > img,
+.name-chip.with-avatar > i {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  object-fit: cover;
+  color: #fff;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+}

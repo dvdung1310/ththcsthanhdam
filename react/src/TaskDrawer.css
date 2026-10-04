@@ -94,61 +94,6 @@
   overflow-y: auto;
 }
 
-.task-drawer-meta {
-  margin: 0;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1px;
-  overflow: hidden;
-  border: 1px solid #eceef3;
-  border-radius: 12px;
-  background: #eceef3;
-}
-
-.task-drawer-meta > div {
-  min-width: 0;
-  padding: 10px 14px;
-  background: #fff;
-}
-
-.task-drawer-meta > div.wide {
-  grid-column: 1 / -1;
-}
-
-.task-drawer-meta dt {
-  color: #8a92a8;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.task-drawer-meta dd {
-  margin: 4px 0 0;
-  color: #273250;
-  font-size: 13px;
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-
-.task-drawer-meta > div.warn {
-  background: #fff8eb;
-}
-
-.task-drawer-meta > div.warn dd {
-  color: #b45309;
-}
-
-.task-drawer-meta > div.alert {
-  background: #fff1f2;
-}
-
-.task-drawer-meta > div.alert dd {
-  color: #c2273a;
-}
-
-.task-drawer-meta .name-stack {
-  flex-wrap: wrap;
-}
-
 .drawer-actions {
   padding: 14px;
   display: flex;
@@ -340,12 +285,6 @@
   border-top: 1px solid #eceef3;
 }
 
-@media (max-width: 640px) {
-  .task-drawer-meta {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
 .drawer-backdrop:has(> .task-drawer) {
   backdrop-filter: none;
 }
@@ -402,4 +341,199 @@
 
 .task-drawer-body > * {
   flex: none;
+}
+
+.task-drawer-type {
+  padding: 3px 8px;
+  border-radius: 99px;
+  color: #4f46b8;
+  background: #eef0ff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.task-timeline {
+  padding: 14px 16px;
+  border: 1px solid #e6e9f0;
+  border-radius: 12px;
+  background: #fafbfd;
+}
+
+.task-timeline-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.task-timeline-top span {
+  display: block;
+  color: #8a92a8;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.task-timeline-top b {
+  display: block;
+  margin-top: 3px;
+  color: #273250;
+  font-size: 14px;
+}
+
+.task-timeline-top .end {
+  text-align: right;
+}
+
+.task-timeline-top em {
+  padding: 5px 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.task-timeline-track {
+  height: 6px;
+  margin-top: 12px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: #e8ebf2;
+}
+
+.task-timeline-track i {
+  height: 100%;
+  display: block;
+  border-radius: 99px;
+}
+
+.task-timeline.neutral em {
+  color: #59647e;
+  background: #eef0f5;
+}
+
+.task-timeline.good em {
+  color: #0f8a5f;
+  background: #e3f6ec;
+}
+
+.task-timeline.good .task-timeline-track i {
+  background: linear-gradient(90deg, #17a871, #57cd9c);
+}
+
+.task-timeline.warn em {
+  color: #b45309;
+  background: #fff1d9;
+}
+
+.task-timeline.warn .task-timeline-track i {
+  background: linear-gradient(90deg, #f0a43a, #f7c672);
+}
+
+.task-timeline.alert {
+  border-color: #f6cdd2;
+  background: #fff7f8;
+}
+
+.task-timeline.alert em {
+  color: #c2273a;
+  background: #fde3e6;
+}
+
+.task-timeline.alert .task-timeline-track i {
+  background: linear-gradient(90deg, #df5266, #f19da8);
+}
+
+.task-drawer-people {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e6e9f0;
+  border-radius: 12px;
+}
+
+.person-row {
+  min-height: 56px;
+  padding: 10px 16px;
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.person-row + .person-row {
+  border-top: 1px solid #f0f2f6;
+}
+
+.person-row > span {
+  color: #8a92a8;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.person-row .name-stack {
+  flex-wrap: wrap;
+  justify-self: start;
+}
+
+.person-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+}
+
+.person-card {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.person-card b {
+  display: block;
+  color: #273250;
+  font-size: 13px;
+}
+
+.person-card small {
+  display: block;
+  margin-top: 1px;
+  color: #8a92a8;
+  font-size: 11px;
+}
+
+.person-avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  object-fit: cover;
+  color: #fff;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.person-empty {
+  color: #8a92a8;
+  font-size: 13px;
+}
+
+@media (max-width: 640px) {
+  .task-timeline-top {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .task-timeline-top em {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    justify-self: start;
+  }
+
+  .person-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
 }
