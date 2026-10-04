@@ -65,7 +65,7 @@ class TaskController extends Controller
     {
         $user = $request->user();
         $unitIds = $user->managedUnitIds();
-        $unitOption = fn ($unit) => ['id' => $unit['id'], 'name' => $unit['label'], 'parent_id' => $unit['parent_id'], 'type' => $unit['type']];
+        $unitOption = fn ($unit) => ['id' => $unit['id'], 'name' => $unit['label'], 'short_name' => $unit['name'], 'parent_id' => $unit['parent_id'], 'type' => $unit['type']];
         $avatar = fn (?User $u) => $u?->avatar_path ? route('avatars.show', ['filename' => basename($u->avatar_path)]) : null;
         $canAssign = $user->hasPermission('tasks.assign');
         $activeRoles = fn ($q) => $q->where(fn ($r) => $r->whereNull('role_user.expires_at')->orWhere('role_user.expires_at', '>', now()));
@@ -78,6 +78,7 @@ class TaskController extends Controller
             'filter_departments' => Department::ordered($unitIds === null ? null : array_values(array_unique([...$unitIds, ...$user->memberUnitIds()])))->map($unitOption)->values(),
             'teachers' => $canAssign ? Teacher::with(['user.roles' => $activeRoles, 'departments' => fn ($q) => $q->wherePivotNull('ends_on')])->where('employment_status', 'working')->when($unitIds !== null, fn ($q) => $q->inUnits($unitIds))->orderBy('employee_code')->get()->map(fn ($t) => ['id' => $t->id, 'name' => $t->user->name, 'code' => $t->employee_code, 'avatar_url' => $avatar($t->user), 'department_ids' => $t->unitIds(), 'roles' => $roles($t->user)]) : [],
             'departments' => $canAssign ? Department::ordered($unitIds)->map($unitOption)->values() : [],
+            'units' => Department::ordered()->map($unitOption)->values(),
             'reviewers' => User::with(['roles' => $activeRoles, 'teacher.departments' => fn ($q) => $q->wherePivotNull('ends_on')])->where('status', 'active')->orderBy('name')->get()->map(fn ($u) => ['id' => $u->id, 'name' => $u->name, 'avatar_url' => $avatar($u), 'department_ids' => $u->teacher?->unitIds() ?? [], 'roles' => $roles($u)]),
             'current_teacher' => $user->teacher ? ['id' => $user->teacher->id, 'name' => $user->name, 'avatar_url' => $avatar($user)] : null,
             'can_assign' => $canAssign,
