@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Department;
 use App\Models\Task;
 use App\Models\TaskCatalogItem;
 use App\Models\Teacher;
@@ -23,9 +24,9 @@ class KpiAnalytics
         $previous = ($v['compare'] ?? 'previous') === 'year' ? $start->copy()->subYear() : $start->copy()->subMonth();
         $allTeachers = Teacher::with(['user:id,name', 'departments' => fn ($q) => $q->wherePivotNull('ends_on')])
             ->where('employment_status', 'working')->when($visibleIds !== null, fn ($q) => $q->whereIn('id', $visibleIds))->get();
-        $teachers = $allTeachers->filter(fn ($t) => (empty($v['department_id']) || $t->departments->contains('id', $v['department_id'])) && (empty($v['teacher_id']) || $t->id == $v['teacher_id']))->values();
+        $teachers = $allTeachers->filter(fn ($t) => (empty($v['department_id']) || in_array((int) $v['department_id'], $t->unitIds(), true)) && (empty($v['teacher_id']) || $t->id == $v['teacher_id']))->values();
         $ids = $teachers->pluck('id');
-        $departments = $teachers->flatMap->departments->pluck('id')->unique();
+        $departments = $teachers->flatMap(fn ($t) => $t->unitIds())->unique();
         $tasks = Task::with(['teachers', 'departments', 'catalogItem'])->where('status', '!=', 'cancelled')
             ->where(fn ($q) => $q->whereHas('teachers', fn ($t) => $t->whereIn('teachers.id', $ids))->orWhereHas('departments', fn ($d) => $d->whereIn('departments.id', $departments)))
             ->when(! empty($v['task_catalog_item_id']), fn ($q) => $q->where('task_catalog_item_id', $v['task_catalog_item_id']))->get();
@@ -68,10 +69,10 @@ class KpiAnalytics
         $rows = $teachers->map(function ($teacher) use ($currentScores, $tasks, $inPeriod, $start, $submissions) {
             $items = $currentScores->where('teacher_id', $teacher->id);
             $maximum = $items->sum('maximum_score');
-            $work = $tasks->filter(fn ($t) => ($t->teachers->contains('id', $teacher->id) || $teacher->departments->pluck('id')->intersect($t->departments->pluck('id'))->isNotEmpty()) && ($inPeriod($t->due_at, $start) || $items->contains('task_id', $t->id)));
+            $work = $tasks->filter(fn ($t) => ($t->teachers->contains('id', $teacher->id) || collect($teacher->unitIds())->intersect($t->departments->pluck('id'))->isNotEmpty()) && ($inPeriod($t->due_at, $start) || $items->contains('task_id', $t->id)));
 
             return ['teacher_id' => $teacher->id, 'teacher' => $teacher->user?->name, 'employee_code' => $teacher->employee_code,
-                'department' => $teacher->departments->pluck('name')->join(', '), 'department_ids' => $teacher->departments->pluck('id'),
+                'department' => $teacher->departments->map(fn ($d) => Department::pathLabel($d->id))->join(', '), 'department_ids' => collect($teacher->unitIds()),
                 'task_count' => $work->count(), 'task_earned' => round($items->sum('score'), 2), 'task_maximum' => $maximum,
                 'final_score' => $maximum > 0 ? round(min(10, $items->sum('score') / $maximum * 10), 2) : null,
                 'late_penalty' => round($items->sum('late_penalty'), 2),
@@ -85,11 +86,11 @@ class KpiAnalytics
                         'revision_count' => $submissions->get($t->id, collect())->where('status', 'revision_required')->count()];
                 })->values()];
         })->sortByDesc('final_score')->values();
-        $departmentRows = $teachers->flatMap->departments->unique('id')->map(function ($d) use ($rows) {
-            $members = $rows->filter(fn ($r) => $r['department_ids']->contains($d->id));
+        $departmentRows = Department::ordered($departments->values()->all())->map(function ($d) use ($rows) {
+            $members = $rows->filter(fn ($r) => $r['department_ids']->contains($d['id']));
             $evaluated = $members->whereNotNull('final_score');
 
-            return ['id' => $d->id, 'name' => $d->name, 'kpi' => $evaluated->isEmpty() ? null : round($evaluated->avg('final_score'), 2), 'teachers' => $members->count(), 'late_penalty' => round($members->sum('late_penalty'), 2)];
+            return ['id' => $d['id'], 'name' => $d['label'], 'kpi' => $evaluated->isEmpty() ? null : round($evaluated->avg('final_score'), 2), 'teachers' => $members->count(), 'late_penalty' => round($members->sum('late_penalty'), 2)];
         })->sortByDesc('kpi')->values();
         $loss = round($currentScores->sum(fn ($e) => max(0, $e->maximum_score - $e->score - $e->late_penalty)), 2);
         $late = round($currentScores->sum('late_penalty'), 2);
@@ -103,8 +104,8 @@ class KpiAnalytics
             'current' => $metrics($start), 'previous' => ($v['compare'] ?? 'previous') === 'none' ? null : $metrics($previous),
             'trend' => $trend, 'losses' => [['name' => 'Trễ hạn', 'points' => $late], ['name' => 'Giảm điểm chấm (chưa phân loại nguyên nhân)', 'points' => $loss]],
             'data' => $rows, 'departments' => $departmentRows,
-            'references' => ['teachers' => $allTeachers->map(fn ($t) => ['id' => $t->id, 'name' => $t->user?->name, 'department_ids' => $t->departments->pluck('id')])->values(),
-                'departments' => $allTeachers->flatMap->departments->unique('id')->map(fn ($d) => ['id' => $d->id, 'name' => $d->name])->values(),
+            'references' => ['teachers' => $allTeachers->map(fn ($t) => ['id' => $t->id, 'name' => $t->user?->name, 'department_ids' => $t->unitIds()])->values(),
+                'departments' => Department::ordered($allTeachers->flatMap(fn ($t) => $t->unitIds())->unique()->values()->all())->map(fn ($d) => ['id' => $d['id'], 'name' => $d['label']])->values(),
                 'task_types' => TaskCatalogItem::orderBy('name')->get(['id', 'name'])]]);
     }
 }
