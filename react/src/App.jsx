@@ -359,7 +359,7 @@ function App() {
       </>
     );
   const can = (permission) => authUser.permissions.includes(permission);
-  const canConfigureTasks = authUser.permissions.includes("tasks.assign");
+  const canConfigureTasks = authUser.access_scope === "school" && authUser.permissions.includes("tasks.assign");
   const navPermissions = {
     "KPI & Thống kê": "kpi.view",
     "Quản lý nhân sự": "teachers.view",
@@ -466,7 +466,7 @@ function App() {
         ) : active === "Quản lý nhân sự" ? (
           <PersonnelManagement />
         ) : active === "Cấu hình giao việc" ? (
-          <TaskConfiguration canManage={canConfigureTasks} />
+          <TaskConfiguration />
         ) : active === "Giao việc" ? (
           <TaskManagement
             canAssign={can("tasks.assign")}
