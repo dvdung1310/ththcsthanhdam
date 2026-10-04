@@ -68,15 +68,17 @@ class TaskController extends Controller
         $unitOption = fn ($unit) => ['id' => $unit['id'], 'name' => $unit['label'], 'parent_id' => $unit['parent_id'], 'type' => $unit['type']];
         $avatar = fn (?User $u) => $u?->avatar_path ? route('avatars.show', ['filename' => basename($u->avatar_path)]) : null;
         $canAssign = $user->hasPermission('tasks.assign');
+        $activeRoles = fn ($q) => $q->where(fn ($r) => $r->whereNull('role_user.expires_at')->orWhere('role_user.expires_at', '>', now()));
+        $roles = fn (?User $u) => $u ? $u->roles->map(fn ($role) => ['code' => $role->code, 'name' => $role->name, 'department_id' => $role->pivot->department_id])->values() : [];
 
         return response()->json([
             'categories' => TaskCategory::where('is_active', true)->orderBy('name')->get(['id', 'name', 'description']),
             'filter_categories' => TaskCategory::orderBy('name')->get(['id', 'name']),
             'filter_teachers' => Teacher::with('user')->where('employment_status', 'working')->when($unitIds !== null, fn ($q) => $q->where(fn ($b) => $b->where('id', $user->teacher?->id ?? 0)->orWhere(fn ($m) => $m->inUnits($unitIds))))->get()->map(fn ($t) => ['id' => $t->id, 'name' => $t->user?->name]),
             'filter_departments' => Department::ordered($unitIds === null ? null : array_values(array_unique([...$unitIds, ...$user->memberUnitIds()])))->map($unitOption)->values(),
-            'teachers' => $canAssign ? Teacher::with(['user', 'departments' => fn ($q) => $q->wherePivotNull('ends_on')])->where('employment_status', 'working')->when($unitIds !== null, fn ($q) => $q->inUnits($unitIds))->orderBy('employee_code')->get()->map(fn ($t) => ['id' => $t->id, 'name' => $t->user->name, 'code' => $t->employee_code, 'avatar_url' => $avatar($t->user), 'department_ids' => $t->unitIds()]) : [],
+            'teachers' => $canAssign ? Teacher::with(['user.roles' => $activeRoles, 'departments' => fn ($q) => $q->wherePivotNull('ends_on')])->where('employment_status', 'working')->when($unitIds !== null, fn ($q) => $q->inUnits($unitIds))->orderBy('employee_code')->get()->map(fn ($t) => ['id' => $t->id, 'name' => $t->user->name, 'code' => $t->employee_code, 'avatar_url' => $avatar($t->user), 'department_ids' => $t->unitIds(), 'roles' => $roles($t->user)]) : [],
             'departments' => $canAssign ? Department::ordered($unitIds)->map($unitOption)->values() : [],
-            'reviewers' => User::with(['teacher.departments' => fn ($q) => $q->wherePivotNull('ends_on')])->where('status', 'active')->orderBy('name')->get()->map(fn ($u) => ['id' => $u->id, 'name' => $u->name, 'avatar_url' => $avatar($u), 'department_ids' => $u->teacher?->unitIds() ?? []]),
+            'reviewers' => User::with(['roles' => $activeRoles, 'teacher.departments' => fn ($q) => $q->wherePivotNull('ends_on')])->where('status', 'active')->orderBy('name')->get()->map(fn ($u) => ['id' => $u->id, 'name' => $u->name, 'avatar_url' => $avatar($u), 'department_ids' => $u->teacher?->unitIds() ?? [], 'roles' => $roles($u)]),
             'current_teacher' => $user->teacher ? ['id' => $user->teacher->id, 'name' => $user->name, 'avatar_url' => $avatar($user)] : null,
             'can_assign' => $canAssign,
             'documents' => OfficialDocument::with(['type', 'file'])->latest('issued_on')->limit(200)->get()->map(fn ($document) => [
