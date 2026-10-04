@@ -6,7 +6,7 @@ use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\TaskController;
 use App\Http\Controllers\Api\TaskConfigurationController;
 use App\Http\Controllers\Api\PersonnelController;
-use App\Http\Controllers\Api\TeacherController;
+use App\Http\Controllers\Api\UnitController;
 use App\Http\Controllers\Api\KpiController;
 use App\Http\Controllers\Api\AiAssistantController;
 use Illuminate\Support\Facades\Route;
@@ -20,7 +20,7 @@ Route::middleware('api.token')->group(function(){
  Route::post('ai-assistant/ask',[AiAssistantController::class,'ask']);
  Route::post('documents/{document}/ai-summary',[AiAssistantController::class,'summarizeDocument'])->middleware('permission:documents.manage');
  Route::get('personnel',[PersonnelController::class,'index'])->middleware('permission:teachers.view');Route::post('personnel',[PersonnelController::class,'store'])->middleware('permission:teachers.manage');Route::put('personnel/{user}',[PersonnelController::class,'update'])->middleware('permission:teachers.manage');Route::delete('personnel/{user}',[PersonnelController::class,'destroy'])->middleware('permission:teachers.manage');
- Route::get('units',[TeacherController::class,'units'])->middleware('permission:teachers.view');Route::post('units',[TeacherController::class,'storeUnit'])->middleware('permission:teachers.manage');Route::put('units/{unit}',[TeacherController::class,'updateUnit'])->middleware('permission:teachers.manage');Route::delete('units/{unit}',[TeacherController::class,'destroyUnit'])->middleware('permission:teachers.manage');
+ Route::get('units',[UnitController::class,'index'])->middleware('permission:teachers.view');Route::get('units/{unit}',[UnitController::class,'show'])->middleware('permission:teachers.view');Route::post('units',[UnitController::class,'store'])->middleware('permission:teachers.manage');Route::put('units/{unit}',[UnitController::class,'update'])->middleware('permission:teachers.manage');Route::delete('units/{unit}',[UnitController::class,'destroy'])->middleware('permission:teachers.manage');
  Route::get('documents',[DocumentController::class,'index'])->middleware('permission:documents.view');Route::get('documents/{document}',[DocumentController::class,'show'])->middleware('permission:documents.view');Route::get('documents/{document}/download',[DocumentController::class,'download'])->middleware('permission:documents.view')->name('documents.download');Route::post('documents',[DocumentController::class,'store'])->middleware('permission:documents.manage');Route::match(['put','patch'],'documents/{document}',[DocumentController::class,'update'])->middleware('permission:documents.manage');Route::delete('documents/{document}',[DocumentController::class,'destroy'])->middleware('permission:documents.manage');
  Route::post('document-folders',[DocumentController::class,'storeFolder'])->middleware('permission:documents.manage');Route::put('document-folders/{folder}',[DocumentController::class,'updateFolder'])->middleware('permission:documents.manage');Route::delete('document-folders/{folder}',[DocumentController::class,'destroyFolder'])->middleware('permission:documents.manage');
  Route::post('data-library/paste',[DocumentController::class,'paste'])->middleware('permission:documents.manage');
