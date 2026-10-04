@@ -28,7 +28,7 @@ class TaskStatsController extends Controller
         $previous = $compare === 'year' ? $start->copy()->subYear() : $start->copy()->subMonth();
 
         $allTeachers = Teacher::with(['user:id,name', 'departments' => fn ($q) => $q->wherePivotNull('ends_on')])
-            ->where('employment_status', 'working')->when($visibleIds !== null, fn ($q) => $q->whereIn('id', $visibleIds))->get();
+            ->when($visibleIds !== null, fn ($q) => $q->whereIn('id', $visibleIds))->get();
         $teachers = $allTeachers->filter(fn ($t) => (empty($v['department_id']) || in_array((int) $v['department_id'], $t->unitIds(), true)) && (empty($v['teacher_id']) || $t->id == $v['teacher_id']))->values();
         $unitIds = $teachers->flatMap(fn ($t) => $t->unitIds())->unique()->values();
 
