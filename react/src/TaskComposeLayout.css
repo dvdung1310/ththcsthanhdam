@@ -129,21 +129,10 @@
   background: #fff;
 }
 
-.form-blocked-hint {
-  margin-right: auto;
-  color: #8a92a8;
-  font-size: 12px;
-}
-
 @media (max-width: 860px) {
   .task-compose-body {
     grid-template-columns: minmax(0, 1fr);
     gap: 18px;
-  }
-
-  .form-blocked-hint {
-    width: 100%;
-    margin: 0 0 4px;
   }
 
   .task-modal form:has(.task-compose-body) > .modal-actions {

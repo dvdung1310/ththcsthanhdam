@@ -1038,7 +1038,6 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                 </div>
               </div>
               <div className="modal-actions">
-                {formBlocked && <span className="form-blocked-hint">{formBlocked}</span>}
                 <button
                   type="button"
                   className="secondary-btn"
@@ -1046,7 +1045,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                 >
                   Hủy bỏ
                 </button>
-                <button className="primary-btn" disabled={saving || !!formBlocked}>
+                <button className="primary-btn" disabled={saving || !!formBlocked} title={formBlocked || undefined}>
                   <Send size={15} />
                   {saving
                     ? "Đang lưu..."
