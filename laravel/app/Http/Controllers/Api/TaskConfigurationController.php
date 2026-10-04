@@ -18,7 +18,7 @@ class TaskConfigurationController extends Controller
         return response()->json([
             'groups' => TaskGroup::orderBy('code')->get(),
             'catalog_items' => TaskCatalogItem::with(['group:id,code,name,maximum_score', 'department:id,name', 'users:id,name'])->latest()->get(),
-            'departments' => Department::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'departments' => Department::ordered()->map(fn ($unit) => ['id' => $unit['id'], 'name' => $unit['label']])->values(),
             'users' => User::where('status', 'active')->orderBy('name')->get(['id', 'name']),
             'late_penalty_rules' => LatePenaltyRule::orderBy('from_day')->get(),
         ]);
