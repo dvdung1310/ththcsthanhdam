@@ -106,7 +106,6 @@ export default function PersonnelDrawer({
     isTeacher && !(form.employee_code ?? "").trim() && "Mã giáo viên",
   ].filter(Boolean);
   const blockedReason = missing.length ? `Còn thiếu: ${missing.join(", ")}` : !isNew && !dirty ? "Chưa có thay đổi" : "";
-  const statusText = blockedReason || (!isNew && dirty ? "Có thay đổi chưa lưu" : "");
   const requestClose = () => {
     if (dirty && !window.confirm("Bỏ các thay đổi chưa lưu?")) return;
     onClose();
@@ -331,7 +330,7 @@ export default function PersonnelDrawer({
                 <Trash2 size={15} /> <span>Cho nghỉ & khóa</span>
               </button>
             )}
-            <span className={`drawer-status ${blockedReason ? "" : dirty ? "dirty" : ""}`}>{statusText}</span>
+            <span className="drawer-status">{missing.length ? blockedReason : ""}</span>
             <button type="button" className="secondary-btn" onClick={requestClose}>
               Hủy
             </button>

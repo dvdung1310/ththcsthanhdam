@@ -287,11 +287,6 @@
   white-space: nowrap;
 }
 
-.drawer-status.dirty {
-  color: #5a43c9;
-  font-weight: 600;
-}
-
 .drawer-footer .primary-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
