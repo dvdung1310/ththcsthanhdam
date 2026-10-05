@@ -446,6 +446,7 @@ export default function PersonnelManagement({ view = "people" }) {
           roles={data.roles}
           units={data.units}
           canAssignRoles={data.can_assign_roles}
+          canViewEvaluations={data.can_view_evaluations}
           people={data.data}
           onClose={() => setEditing(null)}
           onSaved={afterSave}

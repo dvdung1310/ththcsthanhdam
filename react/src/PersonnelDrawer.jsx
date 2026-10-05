@@ -3,6 +3,7 @@ import { Trash2, X } from "lucide-react";
 import { apiJson } from "./api";
 import { useConfirm } from "./ConfirmDialog";
 import UnitMembershipEditor, { findHolderConflicts } from "./UnitMembershipEditor";
+import EvaluationTeacherHistory from "./EvaluationTeacherHistory";
 import "./PersonnelDrawer.css";
 
 export const EMPLOYMENT_LABELS = {
@@ -43,6 +44,7 @@ export default function PersonnelDrawer({
   roles,
   units,
   canAssignRoles,
+  canViewEvaluations,
   people,
   onClose,
   onSaved,
@@ -344,6 +346,12 @@ export default function PersonnelDrawer({
               </section>
             )}
 
+            {canViewEvaluations && person?.teacher_id && (
+              <section>
+                <h4>Thi đua</h4>
+                <EvaluationTeacherHistory teacherId={person.teacher_id} />
+              </section>
+            )}
           </div>
           <div className="drawer-footer">
             {!isNew && (
