@@ -2150,3 +2150,12 @@
 .app-shell .ev-page .ev-tpl-table td {
   font-size: 13px !important;
 }
+
+.ev-tpl-filters .ev-search {
+  flex: 0 1 380px;
+  margin-left: 0;
+}
+
+.ev-page .pagination {
+  border-top: 1px solid #eceef3;
+}
