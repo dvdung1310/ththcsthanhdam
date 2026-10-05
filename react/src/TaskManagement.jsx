@@ -10,6 +10,7 @@ import {
   Clock3,
   Eye,
   FileText,
+  FolderInput,
   Filter,
   Paperclip,
   Pencil,
@@ -54,6 +55,8 @@ import "./TaskAvatars.css";
 import { apiFetch } from "./api";
 import { ColumnPicker, NameStack, useScrollEdges, useTaskColumns } from "./TaskTable";
 import PeoplePicker, { roleChips, useOutsideClose } from "./PeoplePicker";
+import ShareFileDialog from "./ShareFileDialog";
+import { formatBytes, openFileInTab } from "./fileUtils";
 import { useConfirm } from "./ConfirmDialog";
 
 const labels = {
@@ -81,7 +84,7 @@ const emptyTask = {
   reviewer_ids: [],
   teacher_ids: [],
   department_ids: [],
-  document_ids: [],
+  library_file_ids: [],
   attachments: [],
   pending_files: [],
   removed_attachment_ids: [],
@@ -111,7 +114,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
       teachers: [],
       departments: [],
       reviewers: [],
-      documents: [],
+      library_files: [],
       current_teacher: null,
     }),
     [filters, setFilters] = useState(emptyActionFilters),
@@ -131,7 +134,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
     [success, setSuccess] = useState(""),
     [editing, setEditing] = useState(null),
     [viewing, setViewing] = useState(null),
-    [viewingDocument, setViewingDocument] = useState(null),
+    [sharingFile, setSharingFile] = useState(null),
     [workflowSaving, setWorkflowSaving] = useState(false),
     [workflowError, setWorkflowError] = useState(""),
     [editingComment, setEditingComment] = useState(null),
@@ -239,11 +242,11 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
     const f = new FormData(e.currentTarget);
     f.delete("teacher_ids");
     f.delete("department_ids");
-    f.delete("document_ids");
+    f.delete("library_file_ids");
     f.delete("attachments");
     editing.teacher_ids.forEach((id) => f.append("teacher_ids[]", id));
     editing.department_ids.forEach((id) => f.append("department_ids[]", id));
-    editing.document_ids.forEach((id) => f.append("document_ids[]", id));
+    editing.library_file_ids.forEach((id) => f.append("library_file_ids[]", id));
     editing.pending_files?.forEach((file) => f.append("attachments[]", file));
     editing.removed_attachment_ids?.forEach((id) =>
       f.append("remove_attachment_ids[]", id),
@@ -284,19 +287,6 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
       if (!r.ok) throw new Error(d.message);
       setViewing(d.data);
       setWorkflowError("");
-      setViewingDocument(null);
-    } catch (e) {
-      setError(e.message);
-    }
-  };
-  const showLinkedDocument = async (document) => {
-    try {
-      const response = await apiFetch(`/api/documents/${document.id}`, {
-        headers: { Accept: "application/json" },
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.message);
-      setViewingDocument(payload.data);
     } catch (e) {
       setError(e.message);
     }
@@ -314,22 +304,6 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
       await loadTasks();
     } catch (e) {
       setDeleting(null);
-      setError(e.message);
-    }
-  };
-  const downloadDocument = async (document) => {
-    try {
-      const r = await apiFetch(document.download_url, {
-        headers: { Accept: "application/octet-stream" },
-      });
-      if (!r.ok) throw new Error("Không thể tải văn bản.");
-      const url = URL.createObjectURL(await r.blob()),
-        a = window.document.createElement("a");
-      a.href = url;
-      a.download = document.file_name || document.title;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (e) {
       setError(e.message);
     }
   };
@@ -486,11 +460,14 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
     if (!editing && formBaseline !== null) setFormBaseline(null);
   }, [editing, formBaseline]);
   useEffect(() => {
-    if (editing) setShowSupport((editing.document_ids?.length || 0) + (editing.attachments?.length || 0) > 0);
+    if (editing) setShowSupport((editing.library_file_ids?.length || 0) + (editing.attachments?.length || 0) > 0);
   }, [editing?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const formDirty = formBaseline !== null && taskFormSnapshot(formRef.current, editing) !== formBaseline;
+  const libraryOptions = editing
+    ? [...refs.library_files, ...(editing.library_files || []).filter((file) => !refs.library_files.some((option) => option.id === file.id))]
+    : [];
   const attachmentCount = editing
-    ? editing.document_ids.length + (editing.pending_files?.length || 0) + (editing.attachments?.length || 0) - (editing.removed_attachment_ids?.length || 0)
+    ? editing.library_file_ids.length + (editing.pending_files?.length || 0) + (editing.attachments?.length || 0) - (editing.removed_attachment_ids?.length || 0)
     : 0;
   const formMissing = editing
     ? [
@@ -858,14 +835,14 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                     >
                       <Paperclip size={15} />
                       <span>
-                        Văn bản & file đính kèm
+                        File từ kho & file đính kèm
                         {attachmentCount > 0 && <em>{attachmentCount}</em>}
                       </span>
                       <ChevronDown size={16} className={showSupport ? "open" : ""} />
                     </button>
                     {showSupport && (
                       <div className="block-body">
-                        <span className="field-label">Văn bản liên quan</span>
+                        <span className="field-label">File từ kho dữ liệu</span>
                         <label className="document-search">
                           <Search size={16} />
                           <input
@@ -873,44 +850,30 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                             onChange={(event) =>
                               setDocumentSearch(event.target.value)
                             }
-                            placeholder="Tìm theo số, tên hoặc đơn vị ban hành..."
+                            placeholder="Tìm file trong kho..."
                           />
                         </label>
                         <div className="document-picker">
-                          {refs.documents
-                            .filter((document) =>
-                              `${document.document_number} ${document.title} ${document.issuer}`
-                                .toLowerCase()
-                                .includes(documentSearch.toLowerCase()),
-                            )
-                            .map((document) => (
-                              <label key={document.id}>
+                          {libraryOptions
+                            .filter((file) => file.name.toLowerCase().includes(documentSearch.toLowerCase()))
+                            .map((file) => (
+                              <label key={file.id}>
                                 <input
                                   type="checkbox"
-                                  checked={editing.document_ids.includes(
-                                    document.id,
-                                  )}
-                                  onChange={() =>
-                                    toggle("document_ids", document.id)
-                                  }
+                                  checked={editing.library_file_ids.includes(file.id)}
+                                  onChange={() => toggle("library_file_ids", file.id)}
                                 />
                                 <span>
-                                  <b>{document.document_number}</b>
-                                  <strong>{document.title}</strong>
-                                  <small>
-                                    {document.type} · {document.issuer}
-                                    {document.issued_on
-                                      ? ` · ${new Date(document.issued_on).toLocaleDateString("vi-VN")}`
-                                      : ""}
-                                  </small>
+                                  <strong>{file.name}</strong>
+                                  <small>{formatBytes(file.size)}</small>
                                 </span>
-                                {document.has_file && <Paperclip size={15} />}
+                                <FileText size={15} />
                               </label>
                             ))}
                         </div>
-                        {!refs.documents.length && (
+                        {!libraryOptions.length && (
                           <div className="no-documents">
-                            Chưa có văn bản trong mục Quản lý văn bản.
+                            Chưa có file nào trong kho dữ liệu mà bạn được xem.
                           </div>
                         )}
                         <span className="field-label">File đính kèm</span>
@@ -1152,105 +1115,28 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                   />
                 </section>
               )}
-              {!!viewing.documents?.length && (
+              {!!viewing.library_files?.length && (
                 <section className="drawer-section">
-                  <h4>Văn bản liên quan <em>{viewing.documents.length}</em></h4>
-                  <div className="linked-documents">
-                    {viewing.documents.map((document) => (
-                      <article key={document.id}>
-                        <span>
-                          <FileText size={18} />
-                        </span>
+                  <h4>File từ kho dữ liệu <em>{viewing.library_files.length}</em></h4>
+                  <div className="detail-attachments">
+                    {viewing.library_files.map((file) => (
+                      <button
+                        type="button"
+                        key={file.id}
+                        onClick={() => openFileInTab(file.download_url.replace(/^.*\/api\//, "/api/"), file.mime_type).catch((e) => setError(e.message))}
+                        title="Mở file trong tab mới"
+                      >
+                        <i>
+                          <FileText size={16} />
+                        </i>
                         <div>
-                          <b>{document.document_number}</b>
-                          <strong>{document.title}</strong>
-                          <small>
-                            {document.type} · {document.issuer}
-                          </small>
+                          <b>{file.name}</b>
+                          <small>{formatFileSize(file.size)}</small>
                         </div>
-                        <div className="linked-document-actions">
-                          <button
-                            className="document-detail-btn"
-                            onClick={() => showLinkedDocument(document)}
-                          >
-                            <Eye size={14} /> Chi tiết
-                          </button>
-                          {document.download_url && (
-                            <button onClick={() => downloadDocument(document)}>
-                              <Paperclip size={14} /> Tải file
-                            </button>
-                          )}
-                        </div>
-                      </article>
+                        <Eye size={16} />
+                      </button>
                     ))}
                   </div>
-                </section>
-              )}
-              {viewingDocument && (
-                <section className="linked-document-detail">
-                  <div className="linked-detail-head">
-                    <div>
-                      <small>CHI TIẾT VĂN BẢN</small>
-                      <h3>{viewingDocument.title}</h3>
-                    </div>
-                    <button onClick={() => setViewingDocument(null)}>
-                      <X size={17} />
-                    </button>
-                  </div>
-                  <dl>
-                    <div>
-                      <dt>Số hiệu</dt>
-                      <dd>{viewingDocument.document_number}</dd>
-                    </div>
-                    <div>
-                      <dt>Loại văn bản</dt>
-                      <dd>{viewingDocument.document_type}</dd>
-                    </div>
-                    <div>
-                      <dt>Đơn vị ban hành</dt>
-                      <dd>{viewingDocument.issuer}</dd>
-                    </div>
-                    <div>
-                      <dt>Ngày ban hành</dt>
-                      <dd>
-                        {viewingDocument.issued_on
-                          ? new Date(viewingDocument.issued_on).toLocaleDateString("vi-VN")
-                          : "—"}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>Ngày hiệu lực</dt>
-                      <dd>
-                        {viewingDocument.effective_on
-                          ? new Date(viewingDocument.effective_on).toLocaleDateString("vi-VN")
-                          : "—"}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>Trạng thái</dt>
-                      <dd>{viewingDocument.status}</dd>
-                    </div>
-                    <div>
-                      <dt>Chiều văn bản</dt>
-                      <dd>{viewingDocument.direction}</dd>
-                    </div>
-                    <div>
-                      <dt>Tệp đính kèm</dt>
-                      <dd>{viewingDocument.file_name || "Không có file"}</dd>
-                    </div>
-                  </dl>
-                  <div className="document-summary">
-                    <b>Nội dung tóm tắt</b>
-                    <p>{viewingDocument.summary || "Chưa có nội dung tóm tắt."}</p>
-                  </div>
-                  {viewingDocument.download_url && (
-                    <button
-                      className="primary-btn"
-                      onClick={() => downloadDocument(viewingDocument)}
-                    >
-                      <Paperclip size={15} /> Tải văn bản
-                    </button>
-                  )}
                 </section>
               )}
               {!!viewing.attachments?.length && (
@@ -1325,6 +1211,20 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                                 <span>{file.original_name}</span>
                                 <small>{formatFileSize(file.size)}</small>
                                 <Eye size={15} />
+                                {file.can_share && (
+                                  <span
+                                    role="button"
+                                    tabIndex={0}
+                                    className="submission-share"
+                                    title="Chia sẻ vào kho dữ liệu"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      setSharingFile({ id: file.id, name: file.original_name });
+                                    }}
+                                  >
+                                    <FolderInput size={14} /> Chia sẻ
+                                  </span>
+                                )}
                               </button>
                             ))}
                           </div>
@@ -1406,6 +1306,16 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
             )}
           </aside>
         </div>
+      )}
+      {sharingFile && (
+        <ShareFileDialog
+          file={sharingFile}
+          onClose={() => setSharingFile(null)}
+          onDone={(message) => {
+            setSharingFile(null);
+            setSuccess(message);
+          }}
+        />
       )}
       {deleting && (
         <div className="modal-backdrop">
@@ -1782,7 +1692,7 @@ function PersonCards({ people, empty }) {
 
 function taskFormSnapshot(element, editing) {
   if (!element || !editing) return null;
-  const values = [...new FormData(element).entries()].filter(([key, value]) => typeof value === "string" && !["description", "reviewer_ids", "teacher_ids", "department_ids", "document_ids"].includes(key.replace(/\[\]$/, "")));
+  const values = [...new FormData(element).entries()].filter(([key, value]) => typeof value === "string" && !["description", "reviewer_ids", "teacher_ids", "department_ids", "library_file_ids"].includes(key.replace(/\[\]$/, "")));
   return JSON.stringify([
     values,
     editing.description || "",
@@ -1790,7 +1700,7 @@ function taskFormSnapshot(element, editing) {
     editing.assignment_mode,
     editing.teacher_ids,
     editing.department_ids,
-    editing.document_ids,
+    editing.library_file_ids,
     editing.pending_files?.length || 0,
     editing.removed_attachment_ids?.length || 0,
   ]);
