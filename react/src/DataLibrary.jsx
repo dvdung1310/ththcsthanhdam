@@ -34,6 +34,7 @@ import {
   X,
 } from "lucide-react";
 import { apiFetch, apiJson } from "./api";
+import { uploadProblem } from "./uploadLimits";
 import { useConfirm } from "./ConfirmDialog";
 import { RichTextEditor } from "./TaskManagement";
 import LibraryShareDialog, { ACCESS_LABELS } from "./LibraryShareDialog";
@@ -163,6 +164,12 @@ export default function DataLibrary({ view = "library", folderId = null, selectI
   const uploadFiles = async (fileList, targetId = folderId) => {
     const files = [...fileList];
     if (!files.length || !canUploadTo(targetId)) return;
+    const problem = await uploadProblem(files);
+    if (problem) {
+      setError(problem);
+      if (fileInput.current) fileInput.current.value = "";
+      return;
+    }
     setUploading(true);
     setError("");
     try {

@@ -54,6 +54,7 @@ import "./TaskDrawer.css";
 import "./TaskComments.css";
 import "./TaskAvatars.css";
 import { apiFetch } from "./api";
+import { getUploadLimits, uploadProblem } from "./uploadLimits";
 import { ColumnPicker, NameStack, useScrollEdges, useTaskColumns } from "./TaskTable";
 import PeoplePicker, { roleChips, useOutsideClose } from "./PeoplePicker";
 import ShareFileDialog from "./ShareFileDialog";
@@ -244,6 +245,12 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
     e.preventDefault();
     setSaving(true);
     setError("");
+    const problem = await uploadProblem(editing.pending_files || []);
+    if (problem) {
+      setError(problem);
+      setSaving(false);
+      return;
+    }
     const f = new FormData(e.currentTarget);
     f.delete("teacher_ids");
     f.delete("department_ids");
@@ -389,6 +396,11 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
     event.preventDefault();
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
+    const problem = await uploadProblem(form.getAll("submission_files[]").filter((file) => file.size));
+    if (problem) {
+      setError(problem);
+      return;
+    }
     const links = String(form.get("submission_links") || "");
     form.delete("submission_links");
     links
@@ -1454,10 +1466,12 @@ function ReviewerPicker({ reviewers, units, value, onChange }) {
 
 function FileAttachmentPicker({ editing, setEditing }) {
   const inputRef = useRef(null);
-  const addFiles = (fileList) => {
-    const incoming = [...fileList].filter(
-      (file) => file.size <= 20 * 1024 * 1024,
-    );
+  const [warning, setWarning] = useState("");
+  const addFiles = async (fileList) => {
+    const files = [...fileList];
+    const limits = await getUploadLimits();
+    const incoming = files.filter((file) => file.size <= limits.max_file_bytes);
+    setWarning(incoming.length < files.length ? await uploadProblem(files) : "");
     setEditing((current) => ({
       ...current,
       pending_files: [...(current.pending_files || []), ...incoming].filter(
@@ -1511,6 +1525,7 @@ function FileAttachmentPicker({ editing, setEditing }) {
           event.target.value = "";
         }}
       />
+      {warning && <p className="attachment-warning" role="alert">{warning}</p>}
       <div className="attachment-list">
         {existing.map((file) => (
           <article key={`old-${file.id}`}>
