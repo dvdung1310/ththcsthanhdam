@@ -38,7 +38,8 @@ import { useConfirm } from "./ConfirmDialog";
 import { RichTextEditor } from "./TaskManagement";
 import LibraryShareDialog, { ACCESS_LABELS } from "./LibraryShareDialog";
 import ShareFileDialog from "./ShareFileDialog";
-import { downloadFile, formatBytes, openFileInTab } from "./fileUtils";
+import { downloadFile, formatBytes } from "./fileUtils";
+import FilePreview from "./FilePreview";
 import ActionMenu, { MenuList, menuPosition } from "./ActionMenu";
 import LibraryFolderTree from "./LibraryFolderTree";
 import { useNameConflicts } from "./NameConflictDialog";
@@ -81,6 +82,7 @@ export default function DataLibrary() {
   const [nameDialog, setNameDialog] = useState(null);
   const [sharing, setSharing] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [preview, setPreview] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef(null);
@@ -239,7 +241,12 @@ export default function DataLibrary() {
     }
   };
 
-  const openFile = (node) => openFileInTab(`/api/library/nodes/${node.id}/download`, node.mime_type).catch((e) => setError(e.message));
+  const toPreview = (node) => ({ key: node.id, name: node.name, mime_type: node.mime_type, size: node.size, url: `/api/library/nodes/${node.id}/download`, node });
+  const openFile = (node) => {
+    const files = (payload?.data ?? []).filter((item) => item.type === "file");
+    const list = files.some((item) => item.id === node.id) ? files : [node];
+    setPreview({ files: list.map(toPreview), index: list.findIndex((item) => item.id === node.id) });
+  };
   const openNode = (node) => (node.type === "folder" ? openFolder(node.id) : openFile(node));
   const copyNode = (node, action) => {
     setClipboard({ node, action });
@@ -247,7 +254,7 @@ export default function DataLibrary() {
   };
 
   const nodeMenu = (node, inTree = false) => [
-    { key: "open", label: "Mở", icon: node.type === "folder" ? FolderOpen : Eye, onClick: () => openNode(node) },
+    { key: "open", label: node.type === "folder" ? "Mở" : "Xem", icon: node.type === "folder" ? FolderOpen : Eye, onClick: () => openNode(node) },
     ...(inTree ? targetMenu(node.id, !!node.abilities.can_upload) : []),
     node.type === "file" && { key: "download", label: "Tải về", icon: Download, onClick: () => downloadFile(`/api/library/nodes/${node.id}/download`, node.name).catch((e) => setError(e.message)) },
     { key: "detail", label: "Chi tiết", icon: Info, onClick: () => setDetail(node) },
@@ -294,7 +301,7 @@ export default function DataLibrary() {
 
   useEffect(() => {
     const shortcut = (event) => {
-      if (view !== "library" || nameDialog || sharing || conflictDialog || ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName) || document.activeElement?.isContentEditable) return;
+      if (view !== "library" || nameDialog || sharing || conflictDialog || preview || ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName) || document.activeElement?.isContentEditable) return;
       const node = selected ? findItem(selected) : null;
       const key = event.key.toLowerCase();
       if ((event.ctrlKey || event.metaKey) && key === "c" && node) {
@@ -555,6 +562,19 @@ export default function DataLibrary() {
 
       {menu && <MenuList items={menu.items} position={menu.position} onClose={() => setMenu(null)} />}
 
+      {preview && (
+        <FilePreview
+          files={preview.files}
+          startIndex={preview.index}
+          onClose={() => setPreview(null)}
+          onDetail={(file) => {
+            setPreview(null);
+            setSelected(file.node.id);
+            setDetail(file.node);
+          }}
+        />
+      )}
+
       {nameDialog && (
         <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setNameDialog(null)}>
           <form className="dl-name-dialog" onSubmit={submitName}>
@@ -774,7 +794,7 @@ function NodeDetail({ node: initial, reloadToken, onClose, onOpen, onDownload, o
           <button className="secondary-btn" onClick={() => onOpenFolder(node.id)}><FolderOpen size={15} /> Mở thư mục</button>
         ) : (
           <>
-            <button className="secondary-btn" onClick={() => onOpen(node)}><Eye size={15} /> Mở file</button>
+            <button className="secondary-btn" onClick={() => onOpen(node)}><Eye size={15} /> Xem</button>
             <button className="secondary-btn" onClick={() => onDownload(node)}><Download size={15} /> Tải về</button>
           </>
         )}
@@ -888,13 +908,20 @@ function MyFiles({ onError, onSuccess, error, onOpenLocation }) {
   };
   const rowKey = (file) => `${file.id}-${file.source}`;
   const url = (file) => `/api/my-files/${file.id}/download`;
-  const openFile = (file) => openFileInTab(url(file), file.mime_type).catch((e) => onError(e.message));
+  const [preview, setPreview] = useState(null);
+  const openFile = (file) => {
+    const list = data?.data ?? [file];
+    setPreview({
+      files: list.map((item) => ({ key: rowKey(item), name: item.name, mime_type: item.mime_type, size: item.size, url: url(item) })),
+      index: Math.max(0, list.findIndex((item) => rowKey(item) === rowKey(file))),
+    });
+  };
   const download = (file) => downloadFile(url(file), file.name).catch((e) => onError(e.message));
   const share = (file) => setSharing({ id: file.id, name: file.name });
   const detailFile = detailKey ? data?.data.find((file) => rowKey(file) === detailKey) : null;
 
   const fileMenu = (file) => [
-    { key: "open", label: "Mở", icon: Eye, onClick: () => openFile(file) },
+    { key: "open", label: "Xem", icon: Eye, onClick: () => openFile(file) },
     { key: "download", label: "Tải về", icon: Download, onClick: () => download(file) },
     { key: "detail", label: "Chi tiết", icon: Info, onClick: () => setDetailKey(rowKey(file)) },
     { key: "d1", divider: true },
@@ -1037,6 +1064,17 @@ function MyFiles({ onError, onSuccess, error, onOpenLocation }) {
         </footer>
       )}
       {menu && <MenuList items={menu.items} position={menu.position} onClose={() => setMenu(null)} />}
+      {preview && (
+        <FilePreview
+          files={preview.files}
+          startIndex={preview.index}
+          onClose={() => setPreview(null)}
+          onDetail={(item) => {
+            setPreview(null);
+            setDetailKey(item.key);
+          }}
+        />
+      )}
       {detailFile && (
         <MyFileDetail key={detailKey} file={detailFile} onClose={() => setDetailKey(null)} onOpen={openFile} onDownload={download} onShare={share} onOpenLocation={onOpenLocation} />
       )}
@@ -1060,7 +1098,7 @@ function MyFileDetail({ file, onClose, onOpen, onDownload, onShare, onOpenLocati
     <aside className="dl-detail" aria-label={`Chi tiết ${file.name}`}>
       <DetailHeader icon={fileIcon(file.mime_type)} tone="file" title={file.name} subtitle={`${fileKind(file.name, file.mime_type)} · ${formatBytes(file.size)}`} onClose={onClose} />
       <div className="dl-detail-actions">
-        <button className="secondary-btn" onClick={() => onOpen(file)}><Eye size={15} /> Mở file</button>
+        <button className="secondary-btn" onClick={() => onOpen(file)}><Eye size={15} /> Xem</button>
         <button className="secondary-btn" onClick={() => onDownload(file)}><Download size={15} /> Tải về</button>
         {file.can_share && <button className="secondary-btn" onClick={() => onShare(file)}><FolderInput size={15} /> Chia sẻ vào kho</button>}
       </div>

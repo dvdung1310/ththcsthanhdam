@@ -10,7 +10,6 @@ import {
   Clock3,
   Eye,
   Download,
-  ExternalLink,
   FileText,
   FolderInput,
   Filter,
@@ -58,7 +57,8 @@ import { apiFetch } from "./api";
 import { ColumnPicker, NameStack, useScrollEdges, useTaskColumns } from "./TaskTable";
 import PeoplePicker, { roleChips, useOutsideClose } from "./PeoplePicker";
 import ShareFileDialog from "./ShareFileDialog";
-import { downloadFile, formatBytes, openFileInTab } from "./fileUtils";
+import { downloadFile, formatBytes } from "./fileUtils";
+import FilePreview from "./FilePreview";
 import ActionMenu from "./ActionMenu";
 import { useConfirm } from "./ConfirmDialog";
 
@@ -138,6 +138,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
     [editing, setEditing] = useState(null),
     [viewing, setViewing] = useState(null),
     [sharingFile, setSharingFile] = useState(null),
+    [preview, setPreview] = useState(null),
     [workflowSaving, setWorkflowSaving] = useState(false),
     [workflowError, setWorkflowError] = useState(""),
     [editingComment, setEditingComment] = useState(null),
@@ -328,46 +329,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
       setReminding("");
     }
   };
-  const viewTaskAttachment = async (file) => {
-    const tab = window.open("", "_blank");
-    if (tab)
-      tab.document.body.innerHTML =
-        '<p style="font-family:sans-serif;padding:24px">Đang mở file...</p>';
-    try {
-      const response = await apiFetch(
-        `/api/tasks/${viewing.id}/attachments/${file.id}`,
-        { headers: { Accept: file.mime_type || "application/octet-stream" } },
-      );
-      if (!response.ok) throw new Error("Không thể mở file đính kèm.");
-      const url = URL.createObjectURL(await response.blob());
-      if (tab) tab.location.href = url;
-      else window.open(url, "_blank");
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-    } catch (e) {
-      tab?.close();
-      setError(e.message);
-    }
-  };
-  const viewSubmissionAttachment = async (submission, file) => {
-    const tab = window.open("", "_blank");
-    if (tab)
-      tab.document.body.innerHTML =
-        '<p style="font-family:sans-serif;padding:24px">Đang mở bài nộp...</p>';
-    try {
-      const response = await apiFetch(
-        `/api/tasks/${viewing.id}/submissions/${submission.id}/attachments/${file.id}`,
-        { headers: { Accept: file.mime_type || "application/octet-stream" } },
-      );
-      if (!response.ok) throw new Error("Không thể mở file bài nộp.");
-      const url = URL.createObjectURL(await response.blob());
-      if (tab) tab.location.href = url;
-      else window.open(url, "_blank", "noopener,noreferrer");
-      setTimeout(() => URL.revokeObjectURL(url), 60000);
-    } catch (e) {
-      tab?.close();
-      setError(e.message);
-    }
-  };
+  const openPreview = (list, index) => setPreview({ files: list, index });
   const saveComment = async (event) => {
     event.preventDefault();
     const content = new FormData(event.currentTarget).get("content");
@@ -1122,7 +1084,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                 <section className="drawer-section">
                   <h4>File từ kho dữ liệu <em>{viewing.library_files.length}</em></h4>
                   <div className="drawer-files">
-                    {viewing.library_files.map((file) => {
+                    {viewing.library_files.map((file, index, all) => {
                       const url = file.download_url.replace(/^.*\/api\//, "/api/");
                       return (
                         <DrawerFile
@@ -1130,7 +1092,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                           name={file.name}
                           size={file.size}
                           icon={FileText}
-                          onOpen={() => openFileInTab(url, file.mime_type).catch((e) => setError(e.message))}
+                          onOpen={() => openPreview(all.map((f) => ({ key: f.id, name: f.name, mime_type: f.mime_type, size: f.size, url: f.download_url.replace(/^.*\/api\//, "/api/") })), index)}
                           onDownload={() => downloadFile(url, file.name).catch((e) => setError(e.message))}
                         />
                       );
@@ -1142,14 +1104,14 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                 <section className="drawer-section">
                   <h4>File đính kèm <em>{viewing.attachments.length}</em></h4>
                   <div className="drawer-files">
-                    {viewing.attachments.map((file) => {
+                    {viewing.attachments.map((file, index, all) => {
                       const url = `/api/tasks/${viewing.id}/attachments/${file.id}`;
                       return (
                         <DrawerFile
                           key={file.id}
                           name={file.original_name}
                           size={file.size}
-                          onOpen={() => viewTaskAttachment(file)}
+                          onOpen={() => openPreview(all.map((f) => ({ key: f.id, name: f.original_name, mime_type: f.mime_type, size: f.size, url: `/api/tasks/${viewing.id}/attachments/${f.id}` })), index)}
                           onDownload={() => downloadFile(url, file.original_name).catch((e) => setError(e.message))}
                         />
                       );
@@ -1194,12 +1156,12 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                         )}
                         {!!submission.files?.length && (
                           <div className="drawer-files">
-                            {submission.files.map((file) => (
+                            {submission.files.map((file, index, all) => (
                               <DrawerFile
                                 key={file.id}
                                 name={file.original_name}
                                 size={file.size}
-                                onOpen={() => viewSubmissionAttachment(submission, file)}
+                                onOpen={() => openPreview(all.map((f) => ({ key: f.id, name: f.original_name, mime_type: f.mime_type, size: f.size, url: `/api/tasks/${viewing.id}/submissions/${submission.id}/attachments/${f.id}` })), index)}
                                 onDownload={() => downloadFile(`/api/tasks/${viewing.id}/submissions/${submission.id}/attachments/${file.id}`, file.original_name).catch((e) => setError(e.message))}
                                 onShare={file.can_share ? () => setSharingFile({ id: file.id, name: file.original_name }) : null}
                               />
@@ -1284,6 +1246,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
           </aside>
         </div>
       )}
+      {preview && <FilePreview files={preview.files} startIndex={preview.index} onClose={() => setPreview(null)} />}
       {sharingFile && (
         <ShareFileDialog
           file={sharingFile}
@@ -1573,7 +1536,7 @@ function formatFileSize(bytes) {
 function DrawerFile({ name, size, icon: Icon = Paperclip, onOpen, onDownload, onShare }) {
   return (
     <div className="drawer-file">
-      <button type="button" className="drawer-file-main" onClick={onOpen} title="Mở file trong tab mới">
+      <button type="button" className="drawer-file-main" onClick={onOpen} title="Xem file">
         <i>
           <Icon size={16} />
         </i>
@@ -1584,7 +1547,7 @@ function DrawerFile({ name, size, icon: Icon = Paperclip, onOpen, onDownload, on
       </button>
       <ActionMenu
         items={[
-          { key: "open", label: "Mở trong tab mới", icon: ExternalLink, onClick: onOpen },
+          { key: "open", label: "Xem", icon: Eye, onClick: onOpen },
           { key: "download", label: "Tải về", icon: Download, onClick: onDownload },
           onShare && { key: "d", divider: true },
           onShare && { key: "share", label: "Chia sẻ vào kho", icon: FolderInput, onClick: onShare },
