@@ -16,6 +16,7 @@ import {
   FolderInput,
   FolderOpen,
   FolderPlus,
+  Globe,
   Info,
   Lock,
   Pencil,
@@ -28,6 +29,7 @@ import {
   TriangleAlert,
   Upload,
   UserRound,
+  Users,
   X,
 } from "lucide-react";
 import { apiFetch, apiJson } from "./api";
@@ -248,7 +250,7 @@ export default function DataLibrary() {
     { key: "open", label: "Mở", icon: node.type === "folder" ? FolderOpen : Eye, onClick: () => openNode(node) },
     ...(inTree ? targetMenu(node.id, !!node.abilities.can_upload) : []),
     node.type === "file" && { key: "download", label: "Tải về", icon: Download, onClick: () => downloadFile(`/api/library/nodes/${node.id}/download`, node.name).catch((e) => setError(e.message)) },
-    node.type === "file" && { key: "detail", label: "Chi tiết", icon: Info, onClick: () => setDetail(node) },
+    { key: "detail", label: "Chi tiết", icon: Info, onClick: () => setDetail(node) },
     node.abilities.can_share && { key: "share", label: "Chia sẻ", icon: Share2, onClick: () => setSharing(node) },
     { key: "d1", divider: true },
     node.abilities.can_move && { key: "cut", label: "Cắt", icon: Scissors, shortcut: "Ctrl+X", onClick: () => copyNode(node, "cut") },
@@ -541,7 +543,19 @@ export default function DataLibrary() {
         </main>
       )}
 
-      {detail && <NodeDetail key={detail.id} node={detail} onClose={() => setDetail(null)} onOpen={openFile} onShare={setSharing} onSaved={async (message) => { await done(message); }} />}
+      {detail && (
+        <NodeDetail
+          key={detail.id}
+          node={detail}
+          reloadToken={payload}
+          onClose={() => setDetail(null)}
+          onOpen={openFile}
+          onDownload={(node) => downloadFile(`/api/library/nodes/${node.id}/download`, node.name).catch((e) => setError(e.message))}
+          onOpenFolder={openFolder}
+          onShare={setSharing}
+          onSaved={done}
+        />
+      )}
 
       {menu && <MenuList items={menu.items} position={menu.position} onClose={() => setMenu(null)} />}
 
@@ -584,19 +598,115 @@ export default function DataLibrary() {
   );
 }
 
-function NodeDetail({ node, onClose, onOpen, onShare, onSaved }) {
-  const [description, setDescription] = useState(node.description || "");
+const fullDate = (value) => (value ? new Date(value).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" }) : "—");
+
+function relativeTime(value) {
+  if (!value) return "";
+  const minutes = Math.round((Date.now() - new Date(value).getTime()) / 60000);
+  if (minutes < 1) return "vừa xong";
+  if (minutes < 60) return `${minutes} phút trước`;
+  if (minutes < 1440) return `${Math.round(minutes / 60)} giờ trước`;
+  if (minutes < 43200) return `${Math.round(minutes / 1440)} ngày trước`;
+  return "";
+}
+
+function fileKind(name = "", mime = "") {
+  const extension = name.includes(".") ? name.split(".").pop().toUpperCase() : "";
+  if (mime.startsWith("image/")) return `Hình ảnh ${extension}`.trim();
+  if (mime.includes("pdf")) return "Tài liệu PDF";
+  if (mime.includes("word")) return "Tài liệu Word";
+  if (mime.includes("sheet") || mime.includes("excel")) return "Bảng tính Excel";
+  if (mime.includes("presentation") || mime.includes("powerpoint")) return "Bản trình chiếu";
+  if (mime.startsWith("text/")) return "Văn bản thuần";
+  return extension ? `Tệp ${extension}` : "Tệp";
+}
+
+function PersonAvatar({ person, size = 26 }) {
+  const initial = person?.name?.trim().split(/\s+/).at(-1)?.charAt(0) ?? "?";
+  return person?.avatar_url ? (
+    <img className="dl-avatar" src={person.avatar_url} alt="" style={{ width: size, height: size }} />
+  ) : (
+    <i className="dl-avatar" style={{ width: size, height: size, fontSize: size * 0.42 }}>{initial}</i>
+  );
+}
+
+function PersonLine({ person, note }) {
+  if (!person) return <span className="dl-muted">—</span>;
+  return (
+    <span className="dl-person">
+      <PersonAvatar person={person} />
+      <span>
+        <b>{person.name}</b>
+        {note && <small>{note}</small>}
+      </span>
+    </span>
+  );
+}
+
+function DateLine({ value }) {
+  const relative = relativeTime(value);
+  return (
+    <span className="dl-date-line">
+      {fullDate(value)}
+      {relative && <small>{relative}</small>}
+    </span>
+  );
+}
+
+function DetailHeader({ icon: Icon, tone, title, subtitle, onClose }) {
+  return (
+    <header className="dl-detail-header">
+      <span className={`dl-detail-icon ${tone}`}><Icon size={24} /></span>
+      <div>
+        <h3 title={title}>{title}</h3>
+        <p>{subtitle}</p>
+      </div>
+      <button onClick={onClose} aria-label="Đóng"><X size={18} /></button>
+    </header>
+  );
+}
+
+function InfoRows({ rows }) {
+  return (
+    <dl className="dl-info">
+      {rows.filter(Boolean).map(([label, value]) => (
+        <div key={label}>
+          <dt>{label}</dt>
+          <dd>{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+const LEVEL_LABELS = ["—", "Xem", "Tải lên", "Chỉnh sửa", "Quản trị kho"];
+
+function NodeDetail({ node: initial, reloadToken, onClose, onOpen, onDownload, onOpenFolder, onShare, onSaved }) {
+  const [node, setNode] = useState(initial);
+  const [description, setDescription] = useState(initial.description || "");
   const [saving, setSaving] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
   const [error, setError] = useState("");
-  const Icon = fileIcon(node.mime_type);
+  const isFolder = node.type === "folder";
+  const Icon = isFolder ? Folder : fileIcon(node.mime_type);
   const dirty = description !== (node.description || "");
+
+  useEffect(() => {
+    let active = true;
+    apiJson(`/api/library/nodes/${initial.id}`)
+      .then((payload) => active && setNode(payload.data))
+      .catch((e) => active && setError(e.message));
+    return () => {
+      active = false;
+    };
+  }, [initial.id, reloadToken]);
 
   const save = async () => {
     setSaving(true);
     setError("");
     try {
       const result = await apiJson(`/api/library/nodes/${node.id}`, { method: "PUT", body: { description } });
+      setNode((current) => ({ ...current, ...result.data, stats: current.stats, uploader: current.uploader }));
       await onSaved(result.message);
     } catch (e) {
       setError(e.message);
@@ -618,34 +728,83 @@ function NodeDetail({ node, onClose, onOpen, onShare, onSaved }) {
     }
   };
 
+  const location = ["Kho dữ liệu", ...(node.path ?? []).map((p) => p.name)].join(" › ");
+  const stats = node.stats;
+  const subtitle = isFolder ? (node.is_system ? "Thư mục hệ thống" : "Thư mục") : `${fileKind(node.name, node.mime_type)} · ${formatBytes(node.size)}`;
+  const showUploader = !isFolder && node.uploader && node.uploader.id !== node.owner?.id;
+
   return (
     <aside className="dl-detail" aria-label={`Chi tiết ${node.name}`}>
-      <header>
-        <Icon size={22} />
-        <h3 title={node.name}>{node.name}</h3>
-        <button onClick={onClose} aria-label="Đóng"><X size={18} /></button>
-      </header>
-      <dl>
-        <div><dt>Dung lượng</dt><dd>{formatBytes(node.size)}</dd></div>
-        <div><dt>Người tải lên</dt><dd>{node.owner?.name ?? "—"}</dd></div>
-        <div><dt>Cập nhật</dt><dd>{formatDate(node.updated_at)}</dd></div>
-        <div><dt>Quyền của bạn</dt><dd>{node.abilities.level >= 4 ? "Quản trị kho" : ["—", "Xem", "Tải lên", "Chỉnh sửa"][node.abilities.level]}</dd></div>
-      </dl>
+      <DetailHeader icon={Icon} tone={isFolder ? (node.is_system ? "system" : "folder") : "file"} title={node.name} subtitle={subtitle} onClose={onClose} />
       <div className="dl-detail-actions">
-        <button className="secondary-btn" onClick={() => onOpen(node)}><Eye size={15} /> Mở file</button>
+        {isFolder ? (
+          <button className="secondary-btn" onClick={() => onOpenFolder(node.id)}><FolderOpen size={15} /> Mở thư mục</button>
+        ) : (
+          <>
+            <button className="secondary-btn" onClick={() => onOpen(node)}><Eye size={15} /> Mở file</button>
+            <button className="secondary-btn" onClick={() => onDownload(node)}><Download size={15} /> Tải về</button>
+          </>
+        )}
         {node.abilities.can_share && <button className="secondary-btn" onClick={() => onShare(node)}><Share2 size={15} /> Chia sẻ</button>}
       </div>
+
+      <section>
+        <div className="dl-detail-head"><h4>Thông tin</h4></div>
+        <InfoRows
+          rows={[
+            isFolder
+              ? ["Nội dung", stats ? `${stats.folders} thư mục · ${stats.files} file` : `${node.children_count ?? 0} mục`]
+              : ["Loại", fileKind(node.name, node.mime_type)],
+            isFolder ? ["Tổng dung lượng", stats ? formatBytes(stats.size) : "—"] : ["Dung lượng", formatBytes(node.size)],
+            ["Vị trí", <span className="dl-location-text" title={location}>{location}</span>],
+            ["Chủ sở hữu", <PersonLine person={node.owner} />],
+            showUploader && ["Người tải file lên", <PersonLine person={node.uploader} />],
+            ["Ngày tạo", <DateLine value={node.created_at} />],
+            ["Cập nhật lần cuối", <DateLine value={node.updated_at} />],
+            ["Quyền của bạn", LEVEL_LABELS[node.abilities.level] ?? "—"],
+          ]}
+        />
+      </section>
+
+      <section>
+        <div className="dl-detail-head">
+          <h4>Người có quyền truy cập</h4>
+          {node.abilities.can_share && <button className="dl-link-btn" onClick={() => onShare(node)}>Quản lý</button>}
+        </div>
+        <ul className="dl-access-list">
+          {node.owner && (
+            <li>
+              <PersonAvatar person={node.owner} size={30} />
+              <span>{node.owner.name}</span>
+              <small>Chủ sở hữu</small>
+            </li>
+          )}
+          {node.shares.map((share, index) => (
+            <li key={index}>
+              {share.kind === "user" ? (
+                <PersonAvatar person={share} size={30} />
+              ) : (
+                <i className={`dl-avatar ${share.kind}`} style={{ width: 30, height: 30 }}>{share.kind === "unit" ? <Users size={15} /> : <Globe size={15} />}</i>
+              )}
+              <span>{share.name}</span>
+              <small>{ACCESS_LABELS[share.access]}</small>
+            </li>
+          ))}
+        </ul>
+        {!node.shares.length && <p className="dl-detail-note">Chưa chia sẻ riêng. {node.parent_id ? "Quyền được kế thừa từ thư mục cha." : ""}</p>}
+      </section>
+
       <section>
         <div className="dl-detail-head">
           <h4>Mô tả</h4>
-          {node.abilities.can_edit && (
+          {!isFolder && node.abilities.can_edit && (
             <button className="dl-ai" onClick={summarize} disabled={summarizing}>
               <Sparkles size={14} /> {summarizing ? "AI đang đọc file..." : "AI tóm tắt"}
             </button>
           )}
         </div>
         {node.abilities.can_edit ? (
-          <RichTextEditor value={description} onChange={setDescription} placeholder="Thêm mô tả hoặc tóm tắt nội dung file..." />
+          <RichTextEditor value={description} onChange={setDescription} placeholder={isFolder ? "Thêm mô tả cho thư mục..." : "Thêm mô tả hoặc tóm tắt nội dung file..."} />
         ) : (
           <div className="dl-description" dangerouslySetInnerHTML={{ __html: description || "<p>Chưa có mô tả.</p>" }} />
         )}
@@ -867,26 +1026,25 @@ function MyFiles({ onError, onSuccess, error, onOpenLocation }) {
 }
 
 function MyFileDetail({ file, onClose, onOpen, onDownload, onShare, onOpenLocation }) {
-  const Icon = fileIcon(file.mime_type);
-  const extension = file.name.includes(".") ? file.name.split(".").pop().toUpperCase() : "—";
   return (
     <aside className="dl-detail" aria-label={`Chi tiết ${file.name}`}>
-      <header>
-        <Icon size={22} />
-        <h3 title={file.name}>{file.name}</h3>
-        <button onClick={onClose} aria-label="Đóng"><X size={18} /></button>
-      </header>
-      <dl>
-        <div><dt>Nguồn</dt><dd><span className={`dl-source ${file.source}`}>{SOURCE_LABELS[file.source]}</span></dd></div>
-        <div><dt>Định dạng</dt><dd>{extension}</dd></div>
-        <div><dt>Dung lượng</dt><dd>{formatBytes(file.size)}</dd></div>
-        <div><dt>Ngày tải lên</dt><dd>{formatDate(file.created_at)}</dd></div>
-      </dl>
+      <DetailHeader icon={fileIcon(file.mime_type)} tone="file" title={file.name} subtitle={`${fileKind(file.name, file.mime_type)} · ${formatBytes(file.size)}`} onClose={onClose} />
       <div className="dl-detail-actions">
         <button className="secondary-btn" onClick={() => onOpen(file)}><Eye size={15} /> Mở file</button>
         <button className="secondary-btn" onClick={() => onDownload(file)}><Download size={15} /> Tải về</button>
         {file.can_share && <button className="secondary-btn" onClick={() => onShare(file)}><FolderInput size={15} /> Chia sẻ vào kho</button>}
       </div>
+      <section>
+        <div className="dl-detail-head"><h4>Thông tin</h4></div>
+        <InfoRows
+          rows={[
+            ["Nguồn", <span className={`dl-source ${file.source}`}>{SOURCE_LABELS[file.source]}</span>],
+            ["Loại", fileKind(file.name, file.mime_type)],
+            ["Dung lượng", formatBytes(file.size)],
+            ["Ngày tải lên", <DateLine value={file.created_at} />],
+          ]}
+        />
+      </section>
       <section>
         <div className="dl-detail-head"><h4>Công việc</h4></div>
         {file.task ? (

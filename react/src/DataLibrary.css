@@ -423,64 +423,14 @@ body.dl-resizing {
   right: 0;
   bottom: 0;
   z-index: 70;
-  width: min(420px, 100%);
-  padding: 18px 20px;
+  width: min(440px, 100%);
+  padding: 20px 22px 24px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 18px;
   overflow-y: auto;
   background: #fff;
   box-shadow: -20px 0 60px rgba(13, 20, 45, 0.18);
-}
-
-.dl-detail header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  color: #6a4ee0;
-}
-
-.dl-detail h3 {
-  min-width: 0;
-  flex: 1;
-  margin: 0;
-  overflow: hidden;
-  color: #1f2a48;
-  font-size: 16px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.dl-detail header button {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 8px;
-  color: #6d7690;
-  background: #f3f4f8;
-  cursor: pointer;
-}
-
-.dl-detail dl {
-  margin: 0;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.dl-detail dt {
-  color: #8a92a8;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.dl-detail dd {
-  margin: 3px 0 0;
-  color: #273250;
-  font-size: 13px;
-  font-weight: 600;
 }
 
 .dl-detail-actions {
@@ -805,4 +755,220 @@ body.dl-resizing {
   margin: 0;
   color: #8a92a8;
   font-size: 13px;
+}
+
+.dl-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dl-detail-icon {
+  width: 46px;
+  height: 46px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+}
+
+.dl-detail-icon.file {
+  color: #6a4ee0;
+  background: #f1eeff;
+}
+
+.dl-detail-icon.folder {
+  color: #d99227;
+  background: #fff6e5;
+}
+
+.dl-detail-icon.system {
+  color: #2f7fe0;
+  background: #e8f1fd;
+}
+
+.dl-detail-header > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.dl-detail-header h3 {
+  margin: 0;
+  overflow: hidden;
+  color: #1f2a48;
+  font-size: 16px;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dl-detail-header p {
+  margin: 3px 0 0;
+  color: #8a92a8;
+  font-size: 12px;
+}
+
+.dl-detail-header button {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  color: #6d7690;
+  background: #f3f4f8;
+  cursor: pointer;
+}
+
+.dl-detail-actions {
+  flex-wrap: wrap;
+}
+
+.dl-info {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #eceef3;
+  border-radius: 11px;
+}
+
+.dl-info > div {
+  min-height: 44px;
+  padding: 8px 12px;
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.dl-info > div + div {
+  border-top: 1px solid #f1f2f6;
+}
+
+.dl-info dt {
+  color: #8a92a8;
+  font-size: 12px;
+}
+
+.dl-info dd {
+  min-width: 0;
+  margin: 0;
+  color: #273250;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dl-location-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dl-avatar {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  object-fit: cover;
+  color: #fff;
+  background: linear-gradient(135deg, #8b6cf0, #5a3fd6);
+  font-style: normal;
+  font-weight: 700;
+}
+
+.dl-avatar.unit {
+  color: #0f8a5f;
+  background: #e7f6ef;
+}
+
+.dl-avatar.everyone {
+  color: #2f6fbf;
+  background: #e8f1fd;
+}
+
+.dl-person {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dl-person > span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.dl-person b {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dl-person small,
+.dl-date-line small {
+  color: #9aa1b4;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.dl-date-line {
+  display: flex;
+  flex-direction: column;
+}
+
+.dl-access-list {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  list-style: none;
+}
+
+.dl-access-list li {
+  min-height: 42px;
+  padding: 4px 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 9px;
+}
+
+.dl-access-list li:hover {
+  background: #fafbfd;
+}
+
+.dl-access-list span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: #273250;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dl-access-list small {
+  flex: none;
+  color: #6d7690;
+  font-size: 12px;
+}
+
+.dl-link-btn {
+  padding: 0;
+  border: 0;
+  color: #5a3fd6;
+  background: none;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dl-link-btn:hover {
+  text-decoration: underline;
 }
