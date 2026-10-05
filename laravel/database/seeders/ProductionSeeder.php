@@ -7,6 +7,7 @@ use App\Models\LibraryNode;
 use App\Models\LibraryShare;
 use App\Models\Permission;
 use App\Models\Role;
+use App\Models\TaskCategory;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Str;
@@ -31,6 +32,15 @@ class ProductionSeeder extends Seeder
         ['reports.view', 'Xem báo cáo', 'reports'],
         ['roles.manage', 'Quản lý phân quyền', 'system'],
         ['settings.manage', 'Quản lý hệ thống', 'system'],
+    ];
+
+    private const TASK_CATEGORIES = [
+        'Chuyên môn' => 'Kế hoạch dạy học, sinh hoạt chuyên môn, dự giờ, ra đề.',
+        'Hành chính' => 'Hồ sơ, giấy tờ và thủ tục hành chính của nhà trường.',
+        'Báo cáo' => 'Báo cáo định kỳ hoặc đột xuất gửi Ban giám hiệu.',
+        'Sự kiện' => 'Tổ chức, tham gia các sự kiện và hoạt động ngoại khóa.',
+        'Công tác chủ nhiệm' => 'Công việc liên quan lớp chủ nhiệm và phụ huynh.',
+        'Phong trào' => 'Thi đua, phong trào của trường và các đoàn thể.',
     ];
 
     public function run(): void
@@ -62,6 +72,10 @@ class ProductionSeeder extends Seeder
             } elseif ($grant = array_intersect($added, $permissions)) {
                 $role->permissions()->syncWithoutDetaching(Permission::whereIn('code', $grant)->pluck('id'));
             }
+        }
+
+        foreach (self::TASK_CATEGORIES as $name => $description) {
+            TaskCategory::firstOrCreate(['name' => $name], ['code' => strtoupper(Str::slug($name, '_')), 'description' => $description, 'is_active' => true]);
         }
 
         $this->seedLibrary($this->seedAdmin());
