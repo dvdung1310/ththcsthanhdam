@@ -3,6 +3,8 @@
 namespace Database\Seeders;
 
 use App\Models\Department;
+use App\Models\LibraryNode;
+use App\Models\LibraryShare;
 use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
@@ -18,8 +20,9 @@ class ProductionSeeder extends Seeder
         ['tasks.view', 'Xem công việc', 'tasks'],
         ['tasks.assign', 'Giao và quản lý công việc', 'tasks'],
         ['tasks.update', 'Cập nhật tiến độ', 'tasks'],
-        ['documents.view', 'Xem văn bản', 'documents'],
-        ['documents.manage', 'Quản lý văn bản', 'documents'],
+        ['library.view', 'Xem dữ liệu được chia sẻ', 'library'],
+        ['library.upload', 'Tạo thư mục, tải file ở gốc kho', 'library'],
+        ['library.manage', 'Quản lý toàn bộ kho dữ liệu', 'library'],
         ['kpi.view', 'Xem thống kê', 'kpi'],
         ['kpi.manage', 'Quản lý thống kê', 'kpi'],
         ['reports.view', 'Xem báo cáo', 'reports'],
@@ -33,16 +36,17 @@ class ProductionSeeder extends Seeder
             Permission::updateOrCreate(['code' => $code], ['name' => $name, 'module' => $module]);
         }
         $all = array_column(self::PERMISSIONS, 0);
-        $unitLeader = ['dashboard.view', 'teachers.view', 'teachers.manage', 'tasks.view', 'tasks.assign', 'tasks.update', 'documents.view', 'documents.manage', 'kpi.view'];
+        Permission::whereNotIn('code', $all)->delete();
+        $unitLeader = ['dashboard.view', 'teachers.view', 'teachers.manage', 'tasks.view', 'tasks.assign', 'tasks.update', 'library.view', 'kpi.view'];
 
         $roles = [
             Role::ADMIN => ['Quản trị viên', Role::SCOPE_SYSTEM, null, $all],
             Role::HIEU_TRUONG => ['Hiệu trưởng', Role::SCOPE_SCHOOL, null, $all],
-            Role::THU_KY => ['Thư ký', Role::SCOPE_SCHOOL, null, ['dashboard.view', 'teachers.view', 'tasks.view', 'tasks.assign', 'documents.view', 'documents.manage', 'kpi.view']],
+            Role::THU_KY => ['Thư ký', Role::SCOPE_SCHOOL, null, ['dashboard.view', 'teachers.view', 'tasks.view', 'tasks.assign', 'library.view', 'kpi.view']],
             Role::TO_TRUONG => ['Tổ trưởng', Role::SCOPE_UNIT, Department::TYPE_TO, $unitLeader],
             Role::TO_PHO => ['Tổ phó', Role::SCOPE_UNIT, Department::TYPE_TO, $unitLeader],
             Role::NHOM_TRUONG => ['Nhóm trưởng', Role::SCOPE_UNIT, Department::TYPE_NHOM, $unitLeader],
-            Role::GIAO_VIEN => ['Giáo viên', Role::SCOPE_SELF, null, ['dashboard.view', 'tasks.view', 'tasks.update', 'documents.view', 'kpi.view']],
+            Role::GIAO_VIEN => ['Giáo viên', Role::SCOPE_SELF, null, ['dashboard.view', 'tasks.view', 'tasks.update', 'library.view', 'kpi.view']],
         ];
 
         foreach ($roles as $code => [$name, $scope, $unitType, $permissions]) {
@@ -52,10 +56,22 @@ class ProductionSeeder extends Seeder
             }
         }
 
-        $this->seedAdmin();
+        $this->seedLibrary($this->seedAdmin());
     }
 
-    private function seedAdmin(): void
+    private function seedLibrary(User $admin): void
+    {
+        $shared = LibraryNode::firstOrCreate(
+            ['parent_id' => null, 'is_system' => true, 'name' => 'Chia sẻ chung'],
+            ['type' => LibraryNode::FOLDER, 'owner_id' => $admin->id],
+        );
+        LibraryShare::firstOrCreate(
+            ['node_id' => $shared->id, 'user_id' => null, 'department_id' => null],
+            ['access' => LibraryShare::READ, 'granted_by' => $admin->id],
+        );
+    }
+
+    private function seedAdmin(): User
     {
         $config = config('app.admin');
         $admin = User::where('email', $config['email'])->first();
@@ -74,5 +90,7 @@ class ProductionSeeder extends Seeder
         if (! $admin->roles()->whereKey($adminRole->id)->exists()) {
             $admin->roles()->attach($adminRole->id, ['assigned_by' => $admin->id]);
         }
+
+        return $admin;
     }
 }
