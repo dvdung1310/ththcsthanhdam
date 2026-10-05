@@ -134,6 +134,10 @@
   border-bottom: 1px solid #eceef3;
 }
 
+.ev-board-head.empty {
+  display: none;
+}
+
 .ev-period-select {
   display: flex;
   align-items: center;

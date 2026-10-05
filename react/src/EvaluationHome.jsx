@@ -134,11 +134,15 @@ export default function EvaluationHome() {
 
       <section className="ev-hero">
         <p>
-          Bộ tiêu chí: <b>{overview.template?.name ?? "Chưa có bộ tiêu chí đang áp dụng"}</b>
+          Bộ tiêu chí đang áp dụng:{" "}
+          {abilities.can_manage && overview.template ? (
+            <Link to={`/evaluations/templates/${overview.template.id}`}><b>{overview.template.name}</b></Link>
+          ) : (
+            <b>{overview.template?.name ?? "Chưa có"}</b>
+          )}
         </p>
         {abilities.can_manage && (
           <div className="ev-hero-actions">
-            <Link className="secondary-btn" to="/evaluations/templates"><ListChecks size={16} /> Bộ tiêu chí</Link>
             <button className="primary-btn" onClick={() => setPeriodDialog({ mode: "open" })}>
               <CalendarPlus size={16} /> Mở kỳ đánh giá
             </button>
@@ -169,13 +173,15 @@ export default function EvaluationHome() {
         <MySheets periods={overview.data} />
       ) : (
         <section className="ev-card">
-          <div className="ev-board-head">
-            <label className="ev-period-select">
-              <span>Kỳ đánh giá</span>
-              <select value={periodId ?? ""} onChange={(e) => setParam({ period: e.target.value })}>
-                {overview.data.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-              </select>
-            </label>
+          <div className={`ev-board-head ${overview.data.length ? "" : "empty"}`}>
+            {overview.data.length > 0 && (
+              <label className="ev-period-select">
+                <span>Kỳ đánh giá</span>
+                <select value={periodId ?? ""} onChange={(e) => setParam({ period: e.target.value })}>
+                  {overview.data.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
+                </select>
+              </label>
+            )}
             {period && (
               <div className="ev-period-meta">
                 <span className={`ev-chip ${PERIOD_TONES[period.status]}`}>{period.status_label}</span>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
-import { ArrowDown, ArrowLeft, ArrowUp, CheckCircle2, ChevronDown, Copy, FilePlus2, ListChecks, Lock, Plus, Save, ShieldCheck, Trash2, TriangleAlert, X } from "lucide-react";
+import { useNavigate, useParams } from "react-router";
+import { ArrowDown, ArrowUp, CheckCircle2, ChevronDown, Copy, FilePlus2, ListChecks, Lock, Plus, Save, ShieldCheck, Trash2, TriangleAlert, X } from "lucide-react";
 import { apiJson } from "./api";
 import { useConfirm } from "./ConfirmDialog";
 import { formatMoment, formatScore, parseScore } from "./evaluationUtils";
@@ -246,7 +246,7 @@ export default function EvaluationTemplates() {
         </div>
       )}
       <section className="ev-hero">
-        <Link className="ev-back" to="/evaluations"><ArrowLeft size={16} /> Đánh giá thi đua</Link>
+        <p>Bộ tiêu chí đang áp dụng được dùng cho các kỳ mở sau. Kỳ đã mở luôn giữ bộ tiêu chí của nó.</p>
         <button className="primary-btn" onClick={() => setCreateDialog({ copyFrom: "" })}><FilePlus2 size={16} /> Tạo bộ tiêu chí</button>
       </section>
       {error && (
@@ -268,7 +268,7 @@ export default function EvaluationTemplates() {
                 <b>{item.name}</b>
                 <span className="ev-tpl-badges">
                   {item.is_active && <span className="ev-chip green">Đang áp dụng</span>}
-                  {item.periods_count > 0 ? <span className="ev-chip muted">Đã dùng {item.periods_count} kỳ</span> : <span className="ev-chip orange">Nháp</span>}
+                  {item.periods_count > 0 ? <span className="ev-chip muted">Đã dùng {item.periods_count} kỳ</span> : !item.is_active && <span className="ev-chip orange">Nháp</span>}
                 </span>
                 <small>{item.criteria_count} tiêu chí · cập nhật {formatMoment(item.updated_at)}</small>
               </button>

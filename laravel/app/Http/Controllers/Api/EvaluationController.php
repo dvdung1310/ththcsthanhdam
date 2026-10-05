@@ -561,7 +561,7 @@ class EvaluationController extends Controller
 
     private function ineligibleReason(Teacher $teacher): ?string
     {
-        $statuses = ['on_leave' => 'Đang tạm nghỉ', 'suspended' => 'Đang tạm đình chỉ', 'terminated' => 'Đã nghỉ việc'];
+        $statuses = ['on_leave' => 'Nghỉ phép', 'suspended' => 'Tạm nghỉ', 'terminated' => 'Đã nghỉ việc'];
         if ($teacher->employment_status !== 'working') {
             return $statuses[$teacher->employment_status] ?? 'Không còn làm việc';
         }
