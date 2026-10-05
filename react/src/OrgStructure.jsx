@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
-import { Building2, FolderTree, Pencil, Plus, Power, Trash2, Users, X } from "lucide-react";
+import { Building2, ChevronRight, FolderTree, Pencil, Plus, Power, Trash2, Users, X } from "lucide-react";
 import { apiJson } from "./api";
 import { useConfirm } from "./ConfirmDialog";
 import { EMPLOYMENT_LABELS } from "./PersonnelDrawer";
 import "./OrgStructure.css";
+
+const COLLAPSED_KEY = "org-collapsed";
 
 export default function OrgStructure({ onChanged, onError }) {
   const [units, setUnits] = useState([]);
@@ -11,6 +13,7 @@ export default function OrgStructure({ onChanged, onError }) {
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [collapsed, setCollapsed] = useState(() => new Set(JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? "[]")));
   const confirm = useConfirm();
 
   const loadUnits = async () => {
@@ -42,6 +45,24 @@ export default function OrgStructure({ onChanged, onError }) {
 
   const roots = units.filter((unit) => !unit.parent_id);
   const selected = units.find((unit) => unit.id === selectedId);
+  const childrenOf = (id) => units.filter((unit) => unit.parent_id === id);
+
+  const updateCollapsed = (next) => {
+    setCollapsed(next);
+    localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next]));
+  };
+  const toggle = (id) => {
+    const next = new Set(collapsed);
+    next.has(id) ? next.delete(id) : next.add(id);
+    updateCollapsed(next);
+  };
+  const expand = (id) => {
+    if (!collapsed.has(id)) return;
+    const next = new Set(collapsed);
+    next.delete(id);
+    updateCollapsed(next);
+  };
+  const allCollapsed = roots.some((root) => childrenOf(root.id).length) && roots.every((root) => !childrenOf(root.id).length || collapsed.has(root.id));
 
   const refresh = async (message, nextId = selectedId) => {
     await loadUnits();
@@ -85,7 +106,14 @@ export default function OrgStructure({ onChanged, onError }) {
         <div className="org-tree-head">
           <div>
             <h3>Cơ cấu tổ chức</h3>
-            <p>{roots.length} tổ · {units.length - roots.length} nhóm</p>
+            <p>
+              {roots.length} tổ · {units.length - roots.length} nhóm
+              {units.length > roots.length && (
+                <button type="button" className="org-link" onClick={() => updateCollapsed(allCollapsed ? new Set() : new Set(roots.map((root) => root.id)))}>
+                  {allCollapsed ? "Mở rộng tất cả" : "Thu gọn tất cả"}
+                </button>
+              )}
+            </p>
           </div>
           {canConfigure && (
             <button className="primary-btn" onClick={() => setEditing({ parent_id: null })}>
@@ -94,17 +122,40 @@ export default function OrgStructure({ onChanged, onError }) {
           )}
         </div>
         <div className="org-tree">
-          {units.map((unit) => (
-            <button
-              key={unit.id}
-              className={`${unit.parent_id ? "is-child" : ""} ${unit.id === selectedId ? "active" : ""} ${unit.is_active ? "" : "is-inactive"}`}
-              onClick={() => setSelectedId(unit.id)}
-            >
-              {unit.parent_id ? <Users size={15} /> : <Building2 size={15} />}
-              <span>{unit.name}</span>
-              <em>{unit.members}</em>
-            </button>
-          ))}
+          {roots.map((root) => {
+            const groups = childrenOf(root.id);
+            const open = !collapsed.has(root.id);
+            const hiddenSelected = !open && groups.some((group) => group.id === selectedId);
+            return (
+              <div key={root.id} className="org-branch" role="group">
+                <div className={`org-row ${root.id === selectedId || hiddenSelected ? "active" : ""} ${root.is_active ? "" : "is-inactive"}`}>
+                  {groups.length > 0 ? (
+                    <button type="button" className={`org-toggle ${open ? "open" : ""}`} onClick={() => toggle(root.id)} aria-expanded={open} aria-label={open ? `Thu gọn ${root.name}` : `Mở rộng ${root.name}`}>
+                      <ChevronRight size={15} />
+                    </button>
+                  ) : (
+                    <span className="org-toggle-space" />
+                  )}
+                  <button type="button" className="org-select" onClick={() => setSelectedId(root.id)}>
+                    <Building2 size={15} />
+                    <span>{root.name}</span>
+                    {groups.length > 0 && !open && <small>{groups.length} nhóm</small>}
+                    <em>{root.members}</em>
+                  </button>
+                </div>
+                {open &&
+                  groups.map((group) => (
+                    <div key={group.id} className={`org-row is-child ${group.id === selectedId ? "active" : ""} ${group.is_active ? "" : "is-inactive"}`}>
+                      <button type="button" className="org-select" onClick={() => setSelectedId(group.id)}>
+                        <Users size={15} />
+                        <span>{group.name}</span>
+                        <em>{group.members}</em>
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            );
+          })}
           {!units.length && (
             <div className="org-empty">
               <FolderTree size={30} />
@@ -130,7 +181,7 @@ export default function OrgStructure({ onChanged, onError }) {
               {canConfigure && (
                 <div className="org-actions">
                   {!selected.parent_id && (
-                    <button onClick={() => setEditing({ parent_id: selected.id })}>
+                    <button onClick={() => { expand(selected.id); setEditing({ parent_id: selected.id }); }}>
                       <Plus size={15} /> Thêm nhóm
                     </button>
                   )}

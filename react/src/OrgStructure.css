@@ -51,14 +51,78 @@
   overflow-y: auto;
 }
 
-.org-tree button {
-  width: 100%;
-  padding: 10px 12px;
+.org-link {
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  color: #5a3fd6;
+  background: none;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.org-link:hover {
+  text-decoration: underline;
+}
+
+.org-row {
+  display: flex;
+  align-items: center;
+  border-radius: 10px;
+}
+
+.org-row:hover {
+  background: #f6f7fb;
+}
+
+.org-row.active {
+  background: #f1edff;
+}
+
+.org-row.is-child {
+  padding-left: 28px;
+}
+
+.org-toggle,
+.org-toggle-space {
+  width: 26px;
+  height: 26px;
+  margin-left: 4px;
+  flex: none;
+}
+
+.org-toggle {
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  color: #8a92a8;
+  background: none;
+  cursor: pointer;
+}
+
+.org-toggle:hover {
+  color: #5a43c9;
+  background: #e9e4ff;
+}
+
+.org-toggle svg {
+  transition: transform 0.15s ease;
+}
+
+.org-toggle.open svg {
+  transform: rotate(90deg);
+}
+
+.org-select {
+  min-width: 0;
+  flex: 1;
+  padding: 10px 12px 10px 6px;
   display: flex;
   align-items: center;
   gap: 9px;
   border: 0;
-  border-radius: 10px;
   color: #34405e;
   background: none;
   font-size: 13px;
@@ -67,30 +131,34 @@
   cursor: pointer;
 }
 
-.org-tree button.is-child {
-  padding-left: 34px;
+.org-row.is-child .org-select {
   font-weight: 500;
 }
 
-.org-tree button:hover {
-  background: #f6f7fb;
-}
-
-.org-tree button.active {
+.org-row.active .org-select {
   color: #5a43c9;
-  background: #f1edff;
 }
 
-.org-tree button.is-inactive span {
+.org-row.is-inactive .org-select span {
   color: #a2a9ba;
   text-decoration: line-through;
 }
 
-.org-tree button span {
+.org-select span {
+  min-width: 0;
   flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.org-tree button em {
+.org-select small {
+  color: #a0a7b9;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.org-select em {
   min-width: 24px;
   padding: 1px 7px;
   border-radius: 999px;
