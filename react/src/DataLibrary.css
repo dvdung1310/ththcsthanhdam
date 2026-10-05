@@ -908,16 +908,10 @@ body.dl-resizing {
   white-space: nowrap;
 }
 
-.dl-person small,
-.dl-date-line small {
+.dl-person small {
   color: #9aa1b4;
   font-size: 11px;
   font-weight: 500;
-}
-
-.dl-date-line {
-  display: flex;
-  flex-direction: column;
 }
 
 .dl-access-list {

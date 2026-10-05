@@ -600,16 +600,6 @@ export default function DataLibrary() {
 
 const fullDate = (value) => (value ? new Date(value).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" }) : "—");
 
-function relativeTime(value) {
-  if (!value) return "";
-  const minutes = Math.round((Date.now() - new Date(value).getTime()) / 60000);
-  if (minutes < 1) return "vừa xong";
-  if (minutes < 60) return `${minutes} phút trước`;
-  if (minutes < 1440) return `${Math.round(minutes / 60)} giờ trước`;
-  if (minutes < 43200) return `${Math.round(minutes / 1440)} ngày trước`;
-  return "";
-}
-
 function fileKind(name = "", mime = "") {
   const extension = name.includes(".") ? name.split(".").pop().toUpperCase() : "";
   if (mime.startsWith("image/")) return `Hình ảnh ${extension}`.trim();
@@ -622,7 +612,7 @@ function fileKind(name = "", mime = "") {
 }
 
 function PersonAvatar({ person, size = 26 }) {
-  const initial = person?.name?.trim().split(/\s+/).at(-1)?.charAt(0) ?? "?";
+  const initial = person?.name?.trim().split(/\s+/).at(-1)?.charAt(0).toUpperCase() ?? "?";
   return person?.avatar_url ? (
     <img className="dl-avatar" src={person.avatar_url} alt="" style={{ width: size, height: size }} />
   ) : (
@@ -639,16 +629,6 @@ function PersonLine({ person, note }) {
         <b>{person.name}</b>
         {note && <small>{note}</small>}
       </span>
-    </span>
-  );
-}
-
-function DateLine({ value }) {
-  const relative = relativeTime(value);
-  return (
-    <span className="dl-date-line">
-      {fullDate(value)}
-      {relative && <small>{relative}</small>}
     </span>
   );
 }
@@ -759,8 +739,9 @@ function NodeDetail({ node: initial, reloadToken, onClose, onOpen, onDownload, o
             ["Vị trí", <span className="dl-location-text" title={location}>{location}</span>],
             ["Chủ sở hữu", <PersonLine person={node.owner} />],
             showUploader && ["Người tải file lên", <PersonLine person={node.uploader} />],
-            ["Ngày tạo", <DateLine value={node.created_at} />],
-            ["Cập nhật lần cuối", <DateLine value={node.updated_at} />],
+            ["Ngày tạo", fullDate(node.created_at)],
+            ["Cập nhật lần cuối", fullDate(node.updated_at)],
+            node.updated_by && ["Người cập nhật cuối", <PersonLine person={node.updated_by} />],
             ["Quyền của bạn", LEVEL_LABELS[node.abilities.level] ?? "—"],
           ]}
         />
@@ -1041,7 +1022,7 @@ function MyFileDetail({ file, onClose, onOpen, onDownload, onShare, onOpenLocati
             ["Nguồn", <span className={`dl-source ${file.source}`}>{SOURCE_LABELS[file.source]}</span>],
             ["Loại", fileKind(file.name, file.mime_type)],
             ["Dung lượng", formatBytes(file.size)],
-            ["Ngày tải lên", <DateLine value={file.created_at} />],
+            ["Ngày tải lên", fullDate(file.created_at)],
           ]}
         />
       </section>
