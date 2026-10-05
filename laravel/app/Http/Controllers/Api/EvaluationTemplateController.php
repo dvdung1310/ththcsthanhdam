@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\EvaluationCriterion;
 use App\Models\EvaluationTemplate;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -12,10 +13,11 @@ use Illuminate\Validation\Rule;
 
 class EvaluationTemplateController extends Controller
 {
+    private const PEOPLE = ['creator:id,name,avatar_path', 'editor:id,name,avatar_path', 'activator:id,name,avatar_path'];
+
     public function index(): JsonResponse
     {
-        $templates = EvaluationTemplate::with('creator:id,name')->withCount(['periods', 'criteria' => fn ($q) => $q->whereNotNull('parent_id')])
-            ->orderByDesc('is_active')->orderByDesc('updated_at')->get();
+        $templates = EvaluationTemplate::with(['criteria', 'periods', ...self::PEOPLE])->orderByDesc('is_active')->orderByDesc('updated_at')->get();
 
         return response()->json(['data' => $templates->map(fn (EvaluationTemplate $template) => $this->summary($template))->values()]);
     }
@@ -37,7 +39,7 @@ class EvaluationTemplateController extends Controller
         $template = DB::transaction(function () use ($data, $source, $request) {
             $template = EvaluationTemplate::create([
                 'name' => trim($data['name']), 'description' => $data['description'] ?? $source?->description,
-                'is_active' => false, 'grades' => $source?->grades ?? [], 'created_by' => $request->user()->id,
+                'is_active' => false, 'grades' => $source?->grades ?? [], 'created_by' => $request->user()->id, 'updated_by' => $request->user()->id,
             ]);
             if ($source) {
                 $ids = [];
@@ -58,6 +60,7 @@ class EvaluationTemplateController extends Controller
 
     public function update(Request $request, EvaluationTemplate $template): JsonResponse
     {
+        $actor = $request->user();
         $locked = $template->periods()->exists();
         $rules = [
             'name' => ['required', 'string', 'max:255', Rule::unique('evaluation_templates', 'name')->ignore($template->id)],
@@ -93,8 +96,9 @@ class EvaluationTemplateController extends Controller
             'sections.*.criteria.*.title.required' => 'Tiêu chí nào cũng cần tên.',
         ]);
 
-        DB::transaction(function () use ($template, $data, $locked) {
-            $template->update(['name' => trim($data['name']), 'description' => $data['description'] ?? null] + ($locked ? [] : ['grades' => array_values($data['grades'])]));
+        DB::transaction(function () use ($template, $data, $locked, $actor) {
+            $template->update(['name' => trim($data['name']), 'description' => $data['description'] ?? null, 'updated_by' => $actor->id] + ($locked ? [] : ['grades' => array_values($data['grades'])]));
+            $template->touch();
             if ($locked) {
                 return;
             }
@@ -111,13 +115,13 @@ class EvaluationTemplateController extends Controller
         return response()->json(['message' => $locked ? 'Đã lưu tên và mô tả. Bộ đã dùng cho kỳ đánh giá nên không sửa được tiêu chí.' : 'Đã lưu bộ tiêu chí.', 'data' => $this->detail($template->fresh())]);
     }
 
-    public function activate(EvaluationTemplate $template): JsonResponse
+    public function activate(Request $request, EvaluationTemplate $template): JsonResponse
     {
         $problems = $this->problems($template->load('criteria'));
         abort_if($problems, 422, 'Chưa áp dụng được: '.implode(' ', $problems));
-        DB::transaction(function () use ($template) {
-            EvaluationTemplate::where('id', '!=', $template->id)->update(['is_active' => false]);
-            $template->update(['is_active' => true]);
+        DB::transaction(function () use ($template, $request) {
+            DB::table('evaluation_templates')->where('id', '!=', $template->id)->update(['is_active' => false]);
+            DB::table('evaluation_templates')->where('id', $template->id)->update(['is_active' => true, 'activated_by' => $request->user()->id, 'activated_at' => now()]);
         });
 
         return response()->json(['message' => "Đã áp dụng “{$template->name}” cho các kỳ đánh giá mở từ bây giờ.", 'data' => $this->detail($template->fresh())]);
@@ -170,30 +174,38 @@ class EvaluationTemplateController extends Controller
 
     private function summary(EvaluationTemplate $template): array
     {
+        $template->loadMissing(['criteria', 'periods', ...self::PEOPLE]);
+        $sections = $template->criteria->whereNull('parent_id');
+        $score = $sections->where('kind', EvaluationCriterion::SCORE);
+        $periods = $template->periods->sortBy(fn ($period) => $period->year * 100 + $period->month)->values();
+
         return [
             'id' => $template->id, 'name' => $template->name, 'description' => $template->description, 'is_active' => $template->is_active,
-            'periods_count' => $template->periods_count ?? $template->periods()->count(),
-            'criteria_count' => $template->criteria_count ?? $template->criteria()->whereNotNull('parent_id')->count(),
-            'created_by' => $template->creator?->name, 'updated_at' => $template->updated_at?->toIso8601String(),
-        ];
-    }
-
-    private function detail(EvaluationTemplate $template): array
-    {
-        $template->load(['criteria', 'creator:id,name'])->loadCount('periods');
-        $criteria = $template->criteria;
-        $sections = $criteria->whereNull('parent_id')->sortBy('position')->values();
-        $score = $sections->where('kind', EvaluationCriterion::SCORE);
-
-        return [
-            ...$this->summary($template),
-            'locked' => $template->periods_count > 0,
-            'grades' => $template->grades ?? [],
+            'sections_count' => $sections->count(),
+            'criteria_count' => $template->criteria->whereNotNull('parent_id')->count(),
             'totals' => [
                 'homeroom' => (float) $score->sum('max_score'),
                 'regular' => (float) $score->where('homeroom_only', false)->sum('max_score'),
                 'bonus' => (float) $sections->where('kind', EvaluationCriterion::BONUS)->sum('max_score'),
             ],
+            'periods_count' => $periods->count(),
+            'periods' => $periods->map(fn ($period) => ['id' => $period->id, 'label' => $period->label(), 'status' => $period->status])->values(),
+            'created_by' => $this->person($template->creator), 'created_at' => $template->created_at?->toIso8601String(),
+            'updated_by' => $this->person($template->editor), 'updated_at' => $template->updated_at?->toIso8601String(),
+            'activated_by' => $this->person($template->activator), 'activated_at' => $template->activated_at?->toIso8601String(),
+        ];
+    }
+
+    private function detail(EvaluationTemplate $template): array
+    {
+        $template->load(['criteria', 'periods', ...self::PEOPLE]);
+        $criteria = $template->criteria;
+        $sections = $criteria->whereNull('parent_id')->sortBy('position')->values();
+
+        return [
+            ...$this->summary($template),
+            'locked' => $template->periods->isNotEmpty(),
+            'grades' => $template->grades ?? [],
             'problems' => $this->problems($template),
             'sections' => $sections->map(fn (EvaluationCriterion $section) => [
                 'id' => $section->id, 'code' => $section->code, 'title' => $section->title, 'max_score' => (float) $section->max_score,
@@ -204,6 +216,11 @@ class EvaluationTemplateController extends Controller
                 ]),
             ]),
         ];
+    }
+
+    private function person(?User $user): ?array
+    {
+        return $user ? ['id' => $user->id, 'name' => $user->name, 'avatar_url' => $user->avatar_path ? route('avatars.show', ['filename' => basename($user->avatar_path)]) : null] : null;
     }
 
     private function number($value): string
