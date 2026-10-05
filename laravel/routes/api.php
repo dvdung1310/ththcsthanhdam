@@ -7,6 +7,9 @@ use App\Http\Controllers\Api\TaskController;
 use App\Http\Controllers\Api\TaskTypeController;
 use App\Http\Controllers\Api\PersonnelController;
 use App\Http\Controllers\Api\UnitController;
+use App\Http\Controllers\Api\EvaluationController;
+use App\Http\Controllers\Api\EvaluationSummaryController;
+use App\Http\Controllers\Api\EvaluationTemplateController;
 use App\Http\Controllers\Api\TaskStatsController;
 use App\Http\Controllers\Api\AiAssistantController;
 use Illuminate\Support\Facades\Route;
@@ -24,6 +27,20 @@ Route::middleware('api.token')->group(function(){
   Route::get('library/nodes/{node}',[LibraryController::class,'show']);  Route::put('library/nodes/{node}',[LibraryController::class,'update']);Route::delete('library/nodes/{node}',[LibraryController::class,'destroy']);Route::get('library/nodes/{node}/download',[LibraryController::class,'download'])->name('library.download');
   Route::get('library/nodes/{node}/shares',[LibraryController::class,'shares']);Route::put('library/nodes/{node}/shares',[LibraryController::class,'updateShares']);Route::post('library/nodes/{node}/ai-summary',[AiAssistantController::class,'summarizeLibraryFile']);
   Route::get('my-files',[LibraryController::class,'myFiles']);Route::get('my-files/{file}/download',[LibraryController::class,'downloadMyFile']);
+ });
+ Route::middleware('permission:evaluation.view|evaluation.score|evaluation.manage')->group(function(){
+  Route::get('evaluation-periods',[EvaluationController::class,'periods']);Route::get('evaluations',[EvaluationController::class,'index']);Route::get('evaluations/{evaluation}',[EvaluationController::class,'show']);
+  Route::put('evaluations/{evaluation}/self',[EvaluationController::class,'saveSelf']);Route::get('evaluations/{evaluation}/duties',[EvaluationController::class,'duties']);Route::post('evaluations/{evaluation}/comments',[EvaluationController::class,'comment']);
+  Route::put('evaluations/{evaluation}/unit',[EvaluationController::class,'saveUnit']);Route::post('evaluations/{evaluation}/return',[EvaluationController::class,'returnToTeacher']);
+  Route::post('evaluations/{evaluation}/evidence',[EvaluationController::class,'uploadEvidence']);Route::get('evaluations/{evaluation}/evidence/{file}',[EvaluationController::class,'downloadEvidence']);Route::delete('evaluations/{evaluation}/evidence/{file}',[EvaluationController::class,'removeEvidence']);
+ });
+ Route::middleware('permission:evaluation.manage')->group(function(){
+  Route::get('evaluation-periods/roster',[EvaluationController::class,'roster']);Route::post('evaluation-periods',[EvaluationController::class,'openPeriod']);Route::put('evaluation-periods/{period}',[EvaluationController::class,'updatePeriod']);Route::delete('evaluation-periods/{period}',[EvaluationController::class,'destroyPeriod']);
+  Route::post('evaluation-periods/{period}/disclose',[EvaluationController::class,'disclose']);Route::post('evaluation-periods/{period}/publish',[EvaluationController::class,'publish']);Route::post('evaluation-periods/{period}/reopen',[EvaluationController::class,'reopen']);
+  Route::put('evaluations/{evaluation}/review',[EvaluationController::class,'review']);
+  Route::get('evaluation-summary',[EvaluationSummaryController::class,'index']);Route::get('evaluation-summary/export',[EvaluationSummaryController::class,'export']);Route::get('evaluation-summary/teachers/{teacher}',[EvaluationSummaryController::class,'teacher']);
+  Route::get('evaluation-templates',[EvaluationTemplateController::class,'index']);Route::post('evaluation-templates',[EvaluationTemplateController::class,'store']);Route::get('evaluation-templates/{template}',[EvaluationTemplateController::class,'show']);
+  Route::put('evaluation-templates/{template}',[EvaluationTemplateController::class,'update']);Route::post('evaluation-templates/{template}/activate',[EvaluationTemplateController::class,'activate']);Route::delete('evaluation-templates/{template}',[EvaluationTemplateController::class,'destroy']);
  });
  Route::get('personnel',[PersonnelController::class,'index'])->middleware('permission:teachers.view');Route::post('personnel',[PersonnelController::class,'store'])->middleware('permission:teachers.manage');Route::put('personnel/{user}',[PersonnelController::class,'update'])->middleware('permission:teachers.manage');Route::delete('personnel/{user}',[PersonnelController::class,'destroy'])->middleware('permission:teachers.manage');
  Route::get('units',[UnitController::class,'index'])->middleware('permission:teachers.view');Route::get('units/{unit}',[UnitController::class,'show'])->middleware('permission:teachers.view');Route::post('units',[UnitController::class,'store'])->middleware('permission:teachers.manage');Route::put('units/{unit}',[UnitController::class,'update'])->middleware('permission:teachers.manage');Route::delete('units/{unit}',[UnitController::class,'destroy'])->middleware('permission:teachers.manage');

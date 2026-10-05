@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, NavLink, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
+import { Link, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
 import {
   Activity,
   Award,
@@ -9,6 +9,7 @@ import {
   CalendarCheck,
   ChartNoAxesColumnIncreasing,
   Check,
+  ChevronDown,
   CheckCircle2,
   ClipboardCheck,
   Clock3,
@@ -46,27 +47,61 @@ import NotificationCenter from "./NotificationCenter";
 import AiAssistant from "./AiAssistant";
 import PersonalProfile from "./PersonalProfile";
 import DataLibrary from "./DataLibrary";
+import EvaluationHome from "./EvaluationHome";
+import EvaluationSheet from "./EvaluationSheet";
+import EvaluationSummary from "./EvaluationSummary";
+import EvaluationTemplates from "./EvaluationTemplates";
+import EvaluationPeriodEditor from "./EvaluationPeriodEditor";
 import { apiFetch, getToken, setToken } from "./api";
 import "./PermissionStates.css";
 import "./SystemTypography.css";
 import "./GlobalLoading.css";
 import "./NotificationTaskStates.css";
 
-const navItems = [
-  ["Tổng quan", LayoutDashboard, "/"],
-  ["Thống kê", ChartNoAxesColumnIncreasing, "/stats"],
-  ["Giao việc", ClipboardCheck, "/tasks"],
-  ["Kho dữ liệu", Database, "/library"],
-  ["Quản lý nhân sự", Users, "/personnel"],
-  ["Cấu hình giao việc", Settings, "/task-settings"],
-  ["Vai trò & quyền", ShieldCheck, "/roles"],
-  ["Thông tin cá nhân", UserRoundCog, "/profile"],
+const navTree = [
+  { key: "dashboard", label: "Tổng quan", icon: LayoutDashboard, path: "/" },
+  { key: "stats", label: "Thống kê", icon: ChartNoAxesColumnIncreasing, path: "/stats", permission: "kpi.view" },
+  {
+    key: "tasks-group",
+    label: "Giao việc",
+    icon: ClipboardCheck,
+    children: [
+      { key: "tasks", label: "Danh sách công việc", title: "Giao việc", path: "/tasks", permission: "tasks.view", badge: true },
+      { key: "task-settings", label: "Cấu hình", title: "Cấu hình giao việc", path: "/task-settings", permission: "tasks.assign", schoolOnly: true },
+    ],
+  },
+  { key: "library", label: "Kho dữ liệu", icon: Database, path: "/library", permission: "library.view" },
+  {
+    key: "evaluation-group",
+    label: "Đánh giá thi đua",
+    icon: Award,
+    children: [
+      { key: "evaluations", label: "Đánh giá tháng", title: "Đánh giá thi đua", path: "/evaluations", permission: "evaluation.view|evaluation.score|evaluation.manage" },
+      { key: "evaluation-summary", label: "Tổng hợp", title: "Tổng hợp thi đua", path: "/evaluations/summary", permission: "evaluation.manage" },
+      { key: "evaluation-templates", label: "Bộ tiêu chí", title: "Bộ tiêu chí đánh giá", path: "/evaluations/templates", permission: "evaluation.manage" },
+    ],
+  },
+  {
+    key: "personnel-group",
+    label: "Nhân sự",
+    icon: Users,
+    children: [
+      { key: "personnel", label: "Danh sách nhân sự", title: "Nhân sự", path: "/personnel", permission: "teachers.view" },
+      { key: "structure", label: "Cơ cấu tổ chức", path: "/personnel/structure", permission: "teachers.view" },
+    ],
+  },
+  { key: "roles", label: "Vai trò & quyền", icon: ShieldCheck, path: "/roles", permission: "roles.manage" },
+  { key: "profile", label: "Thông tin cá nhân", icon: UserRoundCog, path: "/profile" },
 ];
+
+const navLeaves = navTree.flatMap((item) => item.children?.map((child) => ({ ...child, group: item })) ?? [item]);
 
 const APP_NAME = "TH-THCS Thanh Đàm";
 
 const matchNav = (pathname) =>
-  navItems.find(([, , path]) => (path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(`${path}/`)));
+  navLeaves
+    .filter((leaf) => (leaf.path === "/" ? pathname === "/" : pathname === leaf.path || pathname.startsWith(`${leaf.path}/`)))
+    .sort((a, b) => b.path.length - a.path.length)[0];
 
 function TaskRoute(props) {
   const { taskCode } = useParams();
@@ -331,7 +366,14 @@ function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const current = matchNav(location.pathname);
-  const pageLabel = authLoading ? null : !authUser ? "Đăng nhập" : current?.[0] ?? "Không tìm thấy trang";
+  const pageTitle = current ? current.title ?? current.label : "Không tìm thấy trang";
+  const pageLabel = authLoading ? null : !authUser ? "Đăng nhập" : pageTitle;
+  const [openGroups, setOpenGroups] = useState([]);
+  const currentGroup = current?.group?.key;
+
+  useEffect(() => {
+    if (currentGroup) setOpenGroups((groups) => (groups.includes(currentGroup) ? groups : [...groups, currentGroup]));
+  }, [currentGroup]);
 
   useEffect(() => {
     const title = pageLabel ? `${pageLabel} · ${APP_NAME}` : APP_NAME;
@@ -430,19 +472,12 @@ function App() {
         )}
       </>
     );
-  const can = (permission) => authUser.permissions.includes(permission);
+  const can = (permission) => permission.split("|").some((code) => authUser.permissions.includes(code));
   const canConfigureTasks = authUser.access_scope === "school" && authUser.permissions.includes("tasks.assign");
-  const navPermissions = {
-    "Thống kê": "kpi.view",
-    "Quản lý nhân sự": "teachers.view",
-    "Giao việc": "tasks.view",
-    "Kho dữ liệu": "library.view",
-    "Cấu hình giao việc": "tasks.assign",
-    "Vai trò & quyền": "roles.manage",
-  };
-  const allowed = (label) => (label === "Cấu hình giao việc" ? canConfigureTasks : !navPermissions[label] || can(navPermissions[label]));
-  const visibleNavItems = navItems.filter(([label]) => allowed(label));
-  const guard = (label, element) => (allowed(label) ? element : <RouteNotice kind="forbidden" />);
+  const allowed = (leaf) => (leaf.schoolOnly && !canConfigureTasks ? false : !leaf.permission || can(leaf.permission));
+  const guard = (key, element) => (allowed(navLeaves.find((leaf) => leaf.key === key)) ? element : <RouteNotice kind="forbidden" />);
+  const toggleGroup = (key) => setOpenGroups((groups) => (groups.includes(key) ? groups.filter((g) => g !== key) : [...groups, key]));
+  const closeSidebar = () => setSidebarOpen(false);
   const openTask = (code) => navigate(`/tasks/${code}`);
 
   return (
@@ -476,15 +511,44 @@ function App() {
           </button>
         </div>
         <nav className="nav-list">
-          {visibleNavItems.map(([label, Icon, path]) => (
-            <div className="nav-entry" key={label}>
-              <NavLink to={path} end={path === "/"} className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`} onClick={() => setSidebarOpen(false)}>
-                <Icon size={18} />
-                <span>{label}</span>
-                {label === "Giao việc" && <em>{pendingTaskCount}</em>}
-              </NavLink>
-            </div>
-          ))}
+          {navTree.map((item) => {
+            const Icon = item.icon;
+            const children = item.children?.filter(allowed);
+            if (item.children ? !children.length : !allowed(item)) return null;
+            if (!item.children || children.length === 1) {
+              const leaf = item.children ? children[0] : item;
+              return (
+                <div className="nav-entry" key={item.key}>
+                  <Link to={leaf.path} className={`nav-link ${current?.key === leaf.key ? "active" : ""}`} onClick={closeSidebar}>
+                    <Icon size={18} />
+                    <span>{item.label}</span>
+                    {leaf.badge && <em>{pendingTaskCount}</em>}
+                  </Link>
+                </div>
+              );
+            }
+            const open = openGroups.includes(item.key);
+            return (
+              <div className="nav-entry nav-group" key={item.key}>
+                <button type="button" className={`nav-link nav-parent ${current?.group?.key === item.key ? "in-group" : ""}`} aria-expanded={open} onClick={() => toggleGroup(item.key)}>
+                  <Icon size={18} />
+                  <span>{item.label}</span>
+                  {!open && children.some((child) => child.badge) && <em>{pendingTaskCount}</em>}
+                  <ChevronDown size={15} className="nav-chevron" />
+                </button>
+                {open && (
+                  <div className="nav-children">
+                    {children.map((child) => (
+                      <Link key={child.key} to={child.path} className={`nav-link ${current?.key === child.key ? "active" : ""}`} onClick={closeSidebar}>
+                        <span>{child.label}</span>
+                        {child.badge && <em>{pendingTaskCount}</em>}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </nav>
       </aside>
 
@@ -497,7 +561,7 @@ function App() {
             >
               <Menu size={24} />
             </button>
-            <h1>{current?.[0] ?? "Không tìm thấy trang"}</h1>
+            <h1>{pageTitle}</h1>
           </div>
           <div className="top-actions">
             <label className="search-box">
@@ -511,6 +575,7 @@ function App() {
             <NotificationCenter
               user={authUser}
               onOpenTask={openTask}
+              onOpenLink={(link) => navigate(link)}
               onUnreadChange={setUnreadCount}
             />
             <div className="profile">
@@ -528,12 +593,19 @@ function App() {
 
         <Routes>
           <Route path="/" element={<ManagementDashboard onTask={openTask} onKpi={() => navigate("/stats")} />} />
-          <Route path="/stats" element={guard("Thống kê", <TaskStats onTask={openTask} />)} />
-          <Route path="/tasks/:taskCode?" element={guard("Giao việc", <TaskRoute canAssign={can("tasks.assign")} canUpdate={can("tasks.update")} selectedTask={selectedTask} />)} />
-          <Route path="/library/*" element={guard("Kho dữ liệu", <LibraryRoute />)} />
-          <Route path="/personnel" element={guard("Quản lý nhân sự", <PersonnelManagement />)} />
-          <Route path="/task-settings" element={guard("Cấu hình giao việc", <TaskConfiguration />)} />
-          <Route path="/roles" element={guard("Vai trò & quyền", <RolePermissionMatrix />)} />
+          <Route path="/stats" element={guard("stats", <TaskStats onTask={openTask} />)} />
+          <Route path="/tasks/:taskCode?" element={guard("tasks", <TaskRoute canAssign={can("tasks.assign")} canUpdate={can("tasks.update")} selectedTask={selectedTask} />)} />
+          <Route path="/library/*" element={guard("library", <LibraryRoute />)} />
+          <Route path="/evaluations" element={guard("evaluations", <EvaluationHome />)} />
+          <Route path="/evaluations/periods/new" element={guard("evaluation-templates", <EvaluationPeriodEditor />)} />
+          <Route path="/evaluations/periods/:periodId/edit" element={guard("evaluation-templates", <EvaluationPeriodEditor />)} />
+          <Route path="/evaluations/summary" element={guard("evaluation-summary", <EvaluationSummary />)} />
+          <Route path="/evaluations/:evaluationId" element={guard("evaluations", <EvaluationSheet />)} />
+          <Route path="/evaluations/templates/:templateId?" element={guard("evaluation-templates", <EvaluationTemplates />)} />
+          <Route path="/personnel" element={guard("personnel", <PersonnelManagement view="people" />)} />
+          <Route path="/personnel/structure" element={guard("structure", <PersonnelManagement view="structure" />)} />
+          <Route path="/task-settings" element={guard("task-settings", <TaskConfiguration />)} />
+          <Route path="/roles" element={guard("roles", <RolePermissionMatrix />)} />
           <Route path="/profile" element={<PersonalProfile user={authUser} onUserChanged={setAuthUser} />} />
           <Route path="*" element={<RouteNotice kind="missing" />} />
         </Routes>

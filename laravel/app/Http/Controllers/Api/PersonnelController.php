@@ -34,6 +34,7 @@ class PersonnelController extends Controller
             'units' => Department::ordered($unitIds)->values(),
             'can_manage' => $actor->hasPermission('teachers.manage'),
             'can_assign_roles' => $this->canAssignRoles($actor),
+            'can_view_evaluations' => $actor->hasPermission('evaluation.manage'),
             'management_scope' => $unitIds === null ? 'school' : 'department',
         ]);
     }
@@ -244,6 +245,7 @@ class PersonnelController extends Controller
             'is_active' => $user->status === 'active',
             'avatar_url' => $user->avatar_path ? route('avatars.show', ['filename' => basename($user->avatar_path)]) : null,
             'is_teacher' => (bool) $teacher,
+            'teacher_id' => $teacher?->id,
             'employee_code' => $teacher?->employee_code,
             'employment_status' => $teacher?->employment_status,
             'units' => $units,

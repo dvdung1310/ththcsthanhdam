@@ -23,6 +23,9 @@ class ProductionSeeder extends Seeder
         ['library.view', 'Xem dữ liệu được chia sẻ', 'library'],
         ['library.upload', 'Tạo thư mục, tải file ở gốc kho', 'library'],
         ['library.manage', 'Quản lý toàn bộ kho dữ liệu', 'library'],
+        ['evaluation.view', 'Tự đánh giá thi đua', 'evaluation'],
+        ['evaluation.score', 'Chấm phiếu thi đua của tổ', 'evaluation'],
+        ['evaluation.manage', 'Mở kỳ, duyệt và công bố thi đua', 'evaluation'],
         ['kpi.view', 'Xem thống kê', 'kpi'],
         ['kpi.manage', 'Quản lý thống kê', 'kpi'],
         ['reports.view', 'Xem báo cáo', 'reports'],
@@ -32,12 +35,15 @@ class ProductionSeeder extends Seeder
 
     public function run(): void
     {
+        $added = [];
         foreach (self::PERMISSIONS as [$code, $name, $module]) {
-            Permission::updateOrCreate(['code' => $code], ['name' => $name, 'module' => $module]);
+            if (Permission::updateOrCreate(['code' => $code], ['name' => $name, 'module' => $module])->wasRecentlyCreated) {
+                $added[] = $code;
+            }
         }
         $all = array_column(self::PERMISSIONS, 0);
         Permission::whereNotIn('code', $all)->delete();
-        $unitLeader = ['dashboard.view', 'teachers.view', 'teachers.manage', 'tasks.view', 'tasks.assign', 'tasks.update', 'library.view', 'kpi.view'];
+        $unitLeader = ['dashboard.view', 'teachers.view', 'teachers.manage', 'tasks.view', 'tasks.assign', 'tasks.update', 'library.view', 'evaluation.view', 'evaluation.score', 'kpi.view'];
 
         $roles = [
             Role::ADMIN => ['Quản trị viên', Role::SCOPE_SYSTEM, null, $all],
@@ -46,17 +52,20 @@ class ProductionSeeder extends Seeder
             Role::TO_TRUONG => ['Tổ trưởng', Role::SCOPE_UNIT, Department::TYPE_TO, $unitLeader],
             Role::TO_PHO => ['Tổ phó', Role::SCOPE_UNIT, Department::TYPE_TO, $unitLeader],
             Role::NHOM_TRUONG => ['Nhóm trưởng', Role::SCOPE_UNIT, Department::TYPE_NHOM, $unitLeader],
-            Role::GIAO_VIEN => ['Giáo viên', Role::SCOPE_SELF, null, ['dashboard.view', 'tasks.view', 'tasks.update', 'library.view', 'kpi.view']],
+            Role::GIAO_VIEN => ['Giáo viên', Role::SCOPE_SELF, null, ['dashboard.view', 'tasks.view', 'tasks.update', 'library.view', 'evaluation.view', 'kpi.view']],
         ];
 
         foreach ($roles as $code => [$name, $scope, $unitType, $permissions]) {
             $role = Role::updateOrCreate(['code' => $code], ['name' => $name, 'scope' => $scope, 'unit_type' => $unitType, 'is_system' => true]);
             if ($code === Role::ADMIN || $role->wasRecentlyCreated) {
                 $role->permissions()->sync(Permission::whereIn('code', $permissions)->pluck('id'));
+            } elseif ($grant = array_intersect($added, $permissions)) {
+                $role->permissions()->syncWithoutDetaching(Permission::whereIn('code', $grant)->pluck('id'));
             }
         }
 
         $this->seedLibrary($this->seedAdmin());
+        $this->call(EvaluationTemplateSeeder::class);
     }
 
     private function seedLibrary(User $admin): void

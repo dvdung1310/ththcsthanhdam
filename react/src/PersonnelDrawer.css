@@ -318,3 +318,77 @@
     grid-template-columns: 1fr;
   }
 }
+
+.ev-teacher-history {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ev-teacher-history-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  color: #46516a;
+  font-size: 12.5px;
+}
+
+.ev-teacher-history-head select {
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid #dfe3ec;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.ev-teacher-months {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ev-teacher-month {
+  min-width: 74px;
+  padding: 6px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #eceef3;
+  border-radius: 10px;
+  color: #46516a;
+  background: #fff;
+  text-decoration: none;
+}
+
+.ev-teacher-month:hover {
+  border-color: #c6bdf5;
+  background: #faf9ff;
+}
+
+.ev-teacher-month small {
+  color: #8a92a8;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ev-teacher-month em {
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.ev-teacher-month.pending em,
+.ev-teacher-month.empty {
+  color: #a0a7b9;
+  font-style: italic;
+}
+
+.ev-teacher-month .ev-chip {
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-size: 11px;
+}

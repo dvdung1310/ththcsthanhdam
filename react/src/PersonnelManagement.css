@@ -1,35 +1,3 @@
-.personnel-tabs {
-  margin-bottom: 6px;
-  display: flex;
-  gap: 6px;
-  padding: 5px;
-  width: fit-content;
-  border: 1px solid #eceef4;
-  border-radius: 12px;
-  background: #fff;
-}
-
-.personnel-tabs button {
-  height: 36px;
-  padding: 0 16px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  border: 0;
-  border-radius: 9px;
-  color: #68728c;
-  background: none;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.personnel-tabs button.active {
-  color: #fff;
-  background: #6b50df;
-  box-shadow: 0 6px 16px rgba(107, 80, 223, 0.25);
-}
-
 .filters.personnel-filters {
   grid-template-columns: minmax(240px, 1fr) 210px 180px 170px auto;
 }
