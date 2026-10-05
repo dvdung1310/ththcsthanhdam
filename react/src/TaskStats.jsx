@@ -402,7 +402,7 @@ export default function TaskStats({ onTask }) {
                     {onTask && (
                       <button
                         className="kpi-open-task"
-                        onClick={() => onTask(t.id)}
+                        onClick={() => onTask(t.code)}
                       >
                         Chi tiết công việc <ArrowRight size={14} />
                       </button>

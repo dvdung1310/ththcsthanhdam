@@ -63,7 +63,7 @@ function selectBaseName(input, isFile) {
 
 const formatDate = (value) => (value ? new Date(value).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" }) : "—");
 
-export default function DataLibrary({ view = "library", folderId = null, selectId = null, onNavigate }) {
+export default function DataLibrary({ view = "library", folderId = null, selectId = null, onNavigate, onFolderLoaded }) {
   const confirm = useConfirm();
   const [askConflicts, conflictDialog] = useNameConflicts();
   const [payload, setPayload] = useState(null);
@@ -113,6 +113,11 @@ export default function DataLibrary({ view = "library", folderId = null, selectI
     const timer = setTimeout(() => setSuccess(""), 3500);
     return () => clearTimeout(timer);
   }, [success]);
+
+  const loadedFolder = payload?.folder?.id === folderId ? payload.folder : null;
+  useEffect(() => {
+    if (view === "library" && loadedFolder) onFolderLoaded?.(loadedFolder.id, loadedFolder.name);
+  }, [view, loadedFolder?.id, loadedFolder?.name]);
 
   const resetView = useCallback((select) => {
     setSearch("");

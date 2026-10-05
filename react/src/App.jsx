@@ -69,27 +69,46 @@ const matchNav = (pathname) =>
   navItems.find(([, , path]) => (path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(`${path}/`)));
 
 function TaskRoute(props) {
-  const { taskId } = useParams();
+  const { taskCode } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
-  if (taskId && !/^\d+$/.test(taskId)) return <RouteNotice kind="missing" />;
-  const onRouteTaskChange = (id, { replace = false } = {}) => {
-    if (id) navigate(`/tasks/${id}`, { replace, state: { fromList: true } });
+  if (taskCode && !/^[A-Za-z0-9-]+$/.test(taskCode)) return <RouteNotice kind="missing" />;
+  const onRouteTaskChange = (code, { replace = false } = {}) => {
+    if (code) navigate(`/tasks/${code}`, { replace, state: replace ? location.state : { fromList: true } });
     else if (!replace && location.state?.fromList) navigate(-1);
     else navigate("/tasks", { replace: true });
   };
-  return <TaskManagement {...props} routeTaskId={taskId ? Number(taskId) : null} onRouteTaskChange={onRouteTaskChange} />;
+  return <TaskManagement {...props} routeTaskCode={taskCode ?? null} onRouteTaskChange={onRouteTaskChange} />;
 }
+
+const slugify = (name = "") =>
+  name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[đĐ]/g, "d")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .slice(0, 60)
+    .replace(/^-+|-+$/g, "");
+
+const folderPath = (id, name) => {
+  const slug = slugify(name);
+  return `/library/folders/${id}${slug ? `-${slug}` : ""}`;
+};
 
 function LibraryRoute() {
   const rest = useParams()["*"] ?? "";
   const navigate = useNavigate();
   const location = useLocation();
-  const folder = rest.match(/^folders\/(\d+)$/);
+  const folder = rest.match(/^folders\/(\d+)(?:-[^/]*)?$/);
   if (rest && rest !== "mine" && !folder) return <RouteNotice kind="missing" />;
   const onNavigate = (view, folderId = null, { replace = false, select = null } = {}) =>
     navigate(view === "mine" ? "/library/mine" : folderId ? `/library/folders/${folderId}` : "/library", { replace, state: select ? { select } : null });
-  return <DataLibrary view={rest === "mine" ? "mine" : "library"} folderId={folder ? Number(folder[1]) : null} selectId={location.state?.select ?? null} onNavigate={onNavigate} />;
+  const onFolderLoaded = (id, name) => {
+    const path = folderPath(id, name);
+    if (location.pathname !== path) navigate(path, { replace: true, state: location.state });
+  };
+  return <DataLibrary view={rest === "mine" ? "mine" : "library"} folderId={folder ? Number(folder[1]) : null} selectId={location.state?.select ?? null} onNavigate={onNavigate} onFolderLoaded={onFolderLoaded} />;
 }
 
 function RouteNotice({ kind }) {
@@ -424,7 +443,7 @@ function App() {
   const allowed = (label) => (label === "Cấu hình giao việc" ? canConfigureTasks : !navPermissions[label] || can(navPermissions[label]));
   const visibleNavItems = navItems.filter(([label]) => allowed(label));
   const guard = (label, element) => (allowed(label) ? element : <RouteNotice kind="forbidden" />);
-  const openTask = (id) => navigate(`/tasks/${id}`);
+  const openTask = (code) => navigate(`/tasks/${code}`);
 
   return (
     <div className="app-shell">
@@ -510,7 +529,7 @@ function App() {
         <Routes>
           <Route path="/" element={<ManagementDashboard onTask={openTask} onKpi={() => navigate("/stats")} />} />
           <Route path="/stats" element={guard("Thống kê", <TaskStats onTask={openTask} />)} />
-          <Route path="/tasks/:taskId?" element={guard("Giao việc", <TaskRoute canAssign={can("tasks.assign")} canUpdate={can("tasks.update")} selectedTask={selectedTask} />)} />
+          <Route path="/tasks/:taskCode?" element={guard("Giao việc", <TaskRoute canAssign={can("tasks.assign")} canUpdate={can("tasks.update")} selectedTask={selectedTask} />)} />
           <Route path="/library/*" element={guard("Kho dữ liệu", <LibraryRoute />)} />
           <Route path="/personnel" element={guard("Quản lý nhân sự", <PersonnelManagement />)} />
           <Route path="/task-settings" element={guard("Cấu hình giao việc", <TaskConfiguration />)} />

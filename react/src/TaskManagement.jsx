@@ -94,7 +94,7 @@ const emptyTask = {
   assignment_mode: "assign",
 };
 
-export default function TaskManagement({ canAssign, canUpdate, selectedTask, routeTaskId = null, onRouteTaskChange }) {
+export default function TaskManagement({ canAssign, canUpdate, selectedTask, routeTaskCode = null, onRouteTaskChange }) {
   const confirm = useConfirm();
   const columnState = useTaskColumns();
   const [tasks, setTasks] = useState([]),
@@ -293,7 +293,8 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
       setViewing(d.data);
       setWorkflowError("");
       setRouteError("");
-      if (!fromRoute && routeTaskId !== d.data.id) onRouteTaskChange?.(d.data.id);
+      if (fromRoute) setHighlightedTaskId(d.data.id);
+      if (routeTaskCode !== d.data.code) onRouteTaskChange?.(d.data.code, { replace: fromRoute });
     } catch (e) {
       if (fromRoute) {
         setRouteError(e.message);
@@ -476,13 +477,12 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
     return closed;
   };
   useEffect(() => {
-    if (routeTaskId) {
-      setHighlightedTaskId(routeTaskId);
-      if (viewing?.id !== routeTaskId) show({ id: routeTaskId }, { fromRoute: true });
+    if (routeTaskCode) {
+      if (viewing?.code.toLowerCase() !== routeTaskCode.toLowerCase()) show({ id: routeTaskCode }, { fromRoute: true });
     } else if (viewing) {
-      requestCloseView().then((closed) => !closed && onRouteTaskChange?.(viewing.id, { replace: true }));
+      requestCloseView().then((closed) => !closed && onRouteTaskChange?.(viewing.code, { replace: true }));
     }
-  }, [routeTaskId]);
+  }, [routeTaskCode]);
   const toggle = (field, id) =>
     setEditing((c) => {
       const adding = !c[field].includes(id);

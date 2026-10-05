@@ -90,7 +90,7 @@ export default function NotificationCenter({ user, onOpenTask, onUnreadChange })
   const markRead = async (notification) => {
     if (!notification.read_at) await apiFetch(`/api/notifications/${notification.id}/read`, { method: 'POST', headers: { Accept: 'application/json' } })
     await loadNotifications()
-    if (notification.data?.task_id) onOpenTask?.(notification.data.task_id)
+    if (notification.data?.code) onOpenTask?.(notification.data.code)
     setOpen(false)
   }
 
