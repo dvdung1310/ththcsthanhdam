@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   CheckCircle2,
   ChevronLeft,
@@ -497,9 +498,7 @@ export default function DataLibrary() {
                           {isFolder && node.is_system && <small>Thư mục hệ thống</small>}
                         </span>
                         {node.shares.length > 0 && !node.is_system && (
-                          <span className="dl-shared-mark" title={`Chia sẻ với: ${node.shares.map((share) => `${share.name} (${ACCESS_LABELS[share.access]})`).join(", ")}`}>
-                            <Users size={13} />
-                          </span>
+                          <SharedMark shares={node.shares} />
                         )}
                         {isFolder && !node.abilities.can_upload && <Lock size={12} className="dl-readonly" aria-label="Chỉ xem" />}
                       </td>
@@ -653,6 +652,38 @@ function InfoRows({ rows }) {
         </div>
       ))}
     </dl>
+  );
+}
+
+function SharedMark({ shares }) {
+  const [anchor, setAnchor] = useState(null);
+  const show = (event) => setAnchor(event.currentTarget.getBoundingClientRect());
+  const hide = () => setAnchor(null);
+  const width = 260;
+  const left = anchor ? Math.min(Math.max(8, anchor.left + anchor.width / 2 - width / 2), window.innerWidth - width - 8) : 0;
+  const below = anchor && anchor.bottom + 40 + shares.length * 34 < window.innerHeight;
+  return (
+    <span className="dl-shared-mark" tabIndex={0} aria-label={`Chia sẻ với ${shares.length} đối tượng`} onMouseEnter={show} onMouseLeave={hide} onFocus={show} onBlur={hide}>
+      <Users size={13} />
+      {anchor &&
+        createPortal(
+          <div className="dl-share-tip" role="tooltip" style={{ left, width, ...(below ? { top: anchor.bottom + 6 } : { bottom: window.innerHeight - anchor.top + 6 }) }}>
+            <b>Chia sẻ với</b>
+            {shares.map((share, index) => (
+              <span key={index}>
+                {share.kind === "user" ? (
+                  <PersonAvatar person={share} size={22} />
+                ) : (
+                  <i className={`dl-avatar ${share.kind}`} style={{ width: 22, height: 22 }}>{share.kind === "unit" ? <Users size={12} /> : <Globe size={12} />}</i>
+                )}
+                <em>{share.name}</em>
+                <small>{ACCESS_LABELS[share.access]}</small>
+              </span>
+            ))}
+          </div>,
+          document.body,
+        )}
+    </span>
   );
 }
 

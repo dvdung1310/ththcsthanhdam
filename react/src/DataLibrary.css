@@ -972,8 +972,60 @@ body.dl-resizing {
   display: inline-grid;
   place-items: center;
   color: #8a92a8;
+  border-radius: 5px;
   vertical-align: middle;
-  cursor: help;
+  outline: none;
+}
+
+.dl-shared-mark:hover,
+.dl-shared-mark:focus-visible {
+  color: #5a3fd6;
+  background: #efebff;
+}
+
+.dl-share-tip {
+  position: fixed;
+  z-index: 200;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid #e6e9f1;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 12px 32px rgba(13, 20, 45, 0.16);
+  pointer-events: none;
+}
+
+.dl-share-tip b {
+  color: #8a92a8;
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.dl-share-tip > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dl-share-tip em {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: #273250;
+  font-size: 13px;
+  font-style: normal;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dl-share-tip small {
+  flex: none;
+  color: #6d7690;
+  font-size: 12px;
 }
 
 .dl-access-group {
