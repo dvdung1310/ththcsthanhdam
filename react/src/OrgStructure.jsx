@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Building2, FolderTree, Pencil, Plus, Power, Trash2, Users } from "lucide-react";
+import { Building2, FolderTree, Pencil, Plus, Power, Trash2, Users, X } from "lucide-react";
 import { apiJson } from "./api";
 import { useConfirm } from "./ConfirmDialog";
 import { EMPLOYMENT_LABELS } from "./PersonnelDrawer";
@@ -50,31 +50,6 @@ export default function OrgStructure({ onChanged, onError }) {
     onChanged(message);
   };
 
-  const save = async (event) => {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const body = {
-      name: form.get("name"),
-      parent_id: form.get("parent_id") ? Number(form.get("parent_id")) : null,
-    };
-    try {
-      if (editing.id) {
-        const payload = await apiJson(`/api/units/${editing.id}`, {
-          method: "PUT",
-          body: { ...body, is_active: editing.is_active },
-        });
-        setEditing(null);
-        await refresh(payload.message);
-      } else {
-        const payload = await apiJson("/api/units", { method: "POST", body });
-        setEditing(null);
-        await refresh(payload.message, payload.data.id);
-      }
-    } catch (e) {
-      onError(e.message);
-    }
-  };
-
   const toggleActive = async () => {
     try {
       const payload = await apiJson(`/api/units/${selected.id}`, {
@@ -123,10 +98,7 @@ export default function OrgStructure({ onChanged, onError }) {
             <button
               key={unit.id}
               className={`${unit.parent_id ? "is-child" : ""} ${unit.id === selectedId ? "active" : ""} ${unit.is_active ? "" : "is-inactive"}`}
-              onClick={() => {
-                setEditing(null);
-                setSelectedId(unit.id);
-              }}
+              onClick={() => setSelectedId(unit.id)}
             >
               {unit.parent_id ? <Users size={15} /> : <Building2 size={15} />}
               <span>{unit.name}</span>
@@ -144,45 +116,7 @@ export default function OrgStructure({ onChanged, onError }) {
       </section>
 
       <section className="org-detail-card">
-        {editing ? (
-          <form className="org-form" onSubmit={save} key={editing.id ?? `new-${editing.parent_id}`}>
-            <h3>
-              {editing.id
-                ? `Sửa ${editing.parent_id ? "nhóm" : "tổ"}`
-                : editing.parent_id
-                  ? "Thêm nhóm"
-                  : "Thêm tổ"}
-            </h3>
-            <label>
-              Tên
-              <input
-                name="name"
-                required
-                autoFocus
-                defaultValue={editing.name ?? ""}
-                placeholder={editing.parent_id ? "VD: Nhóm toán" : "VD: Tổ tự nhiên"}
-              />
-            </label>
-            {editing.parent_id != null && (
-              <label>
-                Thuộc tổ
-                <select name="parent_id" defaultValue={editing.parent_id}>
-                  {roots.map((root) => (
-                    <option key={root.id} value={root.id}>
-                      {root.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            <div className="org-form-actions">
-              <button type="button" className="secondary-btn" onClick={() => setEditing(null)}>
-                Hủy
-              </button>
-              <button className="primary-btn">{editing.id ? "Lưu thay đổi" : "Thêm mới"}</button>
-            </div>
-          </form>
-        ) : selected && detail?.unit?.id === selected.id ? (
+        {selected && detail?.unit?.id === selected.id ? (
           <>
             <div className="org-detail-head">
               <div>
@@ -213,6 +147,7 @@ export default function OrgStructure({ onChanged, onError }) {
               )}
             </div>
 
+            <div className="org-detail-body">
             <h4>Người phụ trách</h4>
             <div className="org-leaders">
               {detail.leaders.map((leader) => (
@@ -260,6 +195,7 @@ export default function OrgStructure({ onChanged, onError }) {
               </table>
               {!detail.members.length && <p className="org-muted">Chưa có giáo viên trong đơn vị này.</p>}
             </div>
+            </div>
           </>
         ) : (
           <div className="org-empty">
@@ -269,6 +205,91 @@ export default function OrgStructure({ onChanged, onError }) {
           </div>
         )}
       </section>
+
+      {editing && (
+        <UnitDialog
+          unit={editing}
+          roots={roots}
+          onClose={() => setEditing(null)}
+          onSaved={async (message, id) => {
+            setEditing(null);
+            await refresh(message, id ?? selectedId);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function UnitDialog({ unit, roots, onClose, onSaved }) {
+  const isGroup = unit.parent_id != null;
+  const [name, setName] = useState(unit.name ?? "");
+  const [parentId, setParentId] = useState(unit.parent_id ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const kind = isGroup ? "nhóm" : "tổ";
+  const parent = roots.find((root) => root.id === Number(parentId));
+
+  useEffect(() => {
+    const onKey = (event) => event.key === "Escape" && !saving && onClose();
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose, saving]);
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!name.trim()) return setError(`Vui lòng nhập tên ${kind}.`);
+    setSaving(true);
+    setError("");
+    const body = { name: name.trim(), parent_id: isGroup ? Number(parentId) : null };
+    try {
+      const payload = unit.id
+        ? await apiJson(`/api/units/${unit.id}`, { method: "PUT", body: { ...body, is_active: unit.is_active } })
+        : await apiJson("/api/units", { method: "POST", body });
+      await onSaved(payload.message, unit.id ? null : payload.data?.id);
+    } catch (e) {
+      setError(e.message);
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && !saving && onClose()}>
+      <form className="org-dialog" onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="org-dialog-title">
+        <header>
+          <span className="org-dialog-icon">{isGroup ? <Users size={18} /> : <Building2 size={18} />}</span>
+          <div>
+            <h3 id="org-dialog-title">{unit.id ? `Sửa ${kind}` : `Thêm ${kind}`}</h3>
+            <p>
+              {isGroup
+                ? unit.id
+                  ? "Đổi tên nhóm hoặc chuyển nhóm sang tổ khác."
+                  : `Nhóm chuyên môn thuộc ${parent ? `“${parent.name}”` : "một tổ"}.`
+                : "Tổ là đơn vị cấp trên, có thể chia thành nhiều nhóm."}
+            </p>
+          </div>
+          <button type="button" className="org-dialog-close" onClick={onClose} disabled={saving} aria-label="Đóng"><X size={18} /></button>
+        </header>
+        <label>
+          Tên {kind}
+          <input value={name} autoFocus maxLength={150} onChange={(e) => { setName(e.target.value); setError(""); }} placeholder={isGroup ? "VD: Nhóm toán" : "VD: Tổ tự nhiên"} />
+        </label>
+        {isGroup && (
+          <label>
+            Thuộc tổ
+            <select value={parentId} onChange={(e) => setParentId(e.target.value)}>
+              {roots.map((root) => <option key={root.id} value={root.id}>{root.name}</option>)}
+            </select>
+          </label>
+        )}
+        {error && <p className="org-dialog-error" role="alert">{error}</p>}
+        <footer>
+          <button type="button" className="secondary-btn" onClick={onClose} disabled={saving}>Hủy</button>
+          <button className="primary-btn" disabled={saving || !name.trim()}>
+            {saving ? "Đang lưu..." : unit.id ? "Lưu thay đổi" : `Thêm ${kind}`}
+          </button>
+        </footer>
+      </form>
     </div>
   );
 }
