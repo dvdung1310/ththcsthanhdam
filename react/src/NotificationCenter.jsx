@@ -13,7 +13,7 @@ function relativeTime(value) {
   return formatter.format(Math.round(seconds / 86400), 'day')
 }
 
-export default function NotificationCenter({ user, onOpenTask, onUnreadChange }) {
+export default function NotificationCenter({ user, onOpenTask, onOpenLink, onUnreadChange }) {
   const [items, setItems] = useState([])
   const [unread, setUnread] = useState(0)
   const [open, setOpen] = useState(false)
@@ -90,7 +90,8 @@ export default function NotificationCenter({ user, onOpenTask, onUnreadChange })
   const markRead = async (notification) => {
     if (!notification.read_at) await apiFetch(`/api/notifications/${notification.id}/read`, { method: 'POST', headers: { Accept: 'application/json' } })
     await loadNotifications()
-    if (notification.data?.code) onOpenTask?.(notification.data.code)
+    if (notification.data?.link) onOpenLink?.(notification.data.link)
+    else if (notification.data?.code) onOpenTask?.(notification.data.code)
     setOpen(false)
   }
 

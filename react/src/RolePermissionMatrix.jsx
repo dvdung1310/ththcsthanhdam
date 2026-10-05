@@ -8,6 +8,7 @@ const MODULE_LABELS = {
   teachers: "Nhân sự",
   tasks: "Công việc",
   library: "Kho dữ liệu",
+  evaluation: "Đánh giá thi đua",
   kpi: "KPI",
   reports: "Báo cáo",
   system: "Hệ thống",

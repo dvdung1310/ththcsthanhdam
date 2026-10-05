@@ -46,6 +46,8 @@ import NotificationCenter from "./NotificationCenter";
 import AiAssistant from "./AiAssistant";
 import PersonalProfile from "./PersonalProfile";
 import DataLibrary from "./DataLibrary";
+import EvaluationHome from "./EvaluationHome";
+import EvaluationSheet from "./EvaluationSheet";
 import { apiFetch, getToken, setToken } from "./api";
 import "./PermissionStates.css";
 import "./SystemTypography.css";
@@ -57,6 +59,7 @@ const navItems = [
   ["Thống kê", ChartNoAxesColumnIncreasing, "/stats"],
   ["Giao việc", ClipboardCheck, "/tasks"],
   ["Kho dữ liệu", Database, "/library"],
+  ["Đánh giá thi đua", Award, "/evaluations"],
   ["Quản lý nhân sự", Users, "/personnel"],
   ["Cấu hình giao việc", Settings, "/task-settings"],
   ["Vai trò & quyền", ShieldCheck, "/roles"],
@@ -430,13 +433,14 @@ function App() {
         )}
       </>
     );
-  const can = (permission) => authUser.permissions.includes(permission);
+  const can = (permission) => permission.split("|").some((code) => authUser.permissions.includes(code));
   const canConfigureTasks = authUser.access_scope === "school" && authUser.permissions.includes("tasks.assign");
   const navPermissions = {
     "Thống kê": "kpi.view",
     "Quản lý nhân sự": "teachers.view",
     "Giao việc": "tasks.view",
     "Kho dữ liệu": "library.view",
+    "Đánh giá thi đua": "evaluation.view|evaluation.score|evaluation.manage",
     "Cấu hình giao việc": "tasks.assign",
     "Vai trò & quyền": "roles.manage",
   };
@@ -511,6 +515,7 @@ function App() {
             <NotificationCenter
               user={authUser}
               onOpenTask={openTask}
+              onOpenLink={(link) => navigate(link)}
               onUnreadChange={setUnreadCount}
             />
             <div className="profile">
@@ -531,6 +536,8 @@ function App() {
           <Route path="/stats" element={guard("Thống kê", <TaskStats onTask={openTask} />)} />
           <Route path="/tasks/:taskCode?" element={guard("Giao việc", <TaskRoute canAssign={can("tasks.assign")} canUpdate={can("tasks.update")} selectedTask={selectedTask} />)} />
           <Route path="/library/*" element={guard("Kho dữ liệu", <LibraryRoute />)} />
+          <Route path="/evaluations" element={guard("Đánh giá thi đua", <EvaluationHome />)} />
+          <Route path="/evaluations/:evaluationId" element={guard("Đánh giá thi đua", <EvaluationSheet />)} />
           <Route path="/personnel" element={guard("Quản lý nhân sự", <PersonnelManagement />)} />
           <Route path="/task-settings" element={guard("Cấu hình giao việc", <TaskConfiguration />)} />
           <Route path="/roles" element={guard("Vai trò & quyền", <RolePermissionMatrix />)} />
