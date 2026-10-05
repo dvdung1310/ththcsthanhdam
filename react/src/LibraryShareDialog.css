@@ -1,0 +1,239 @@
+.library-share-dialog {
+  width: min(560px, 100%);
+  max-height: min(720px, 92vh);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 25px 70px rgba(13, 20, 45, 0.25);
+}
+
+.library-share-dialog > header {
+  padding: 18px 20px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border-bottom: 1px solid #eceef3;
+}
+
+.library-share-dialog > header > span {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: #5a3fd6;
+  background: #efebff;
+}
+
+.library-share-dialog > header > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.library-share-dialog h3 {
+  margin: 0;
+  overflow: hidden;
+  color: #1f2a48;
+  font-size: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-share-dialog > header p {
+  margin: 3px 0 0;
+  color: #8a92a8;
+  font-size: 12px;
+}
+
+.library-share-dialog > header > button {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  color: #6d7690;
+  background: #f3f4f8;
+  cursor: pointer;
+}
+
+.lsd-loading {
+  padding: 30px 20px;
+  color: #8a92a8;
+  text-align: center;
+}
+
+.lsd-add {
+  padding: 14px 20px 6px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.lsd-add-btn {
+  height: 36px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px dashed #c6bdf5;
+  border-radius: 9px;
+  color: #5a3fd6;
+  background: #faf9ff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.lsd-everyone {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #3f4a66;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.lsd-list,
+.lsd-inherited {
+  padding: 6px 20px;
+  overflow-y: auto;
+}
+
+.lsd-list {
+  min-height: 60px;
+  flex: 1;
+}
+
+.lsd-row {
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid #f1f2f6;
+}
+
+.lsd-row > b {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  color: #273250;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lsd-row > b small {
+  margin-left: 6px;
+  color: #9aa1b4;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.lsd-row select {
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid #dfe3ec;
+  border-radius: 8px;
+  color: #34405e;
+  background: #fff;
+  font-size: 12px;
+}
+
+.lsd-row > button {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  color: #8a92a8;
+  background: transparent;
+  cursor: pointer;
+}
+
+.lsd-row > button:hover:not(:disabled) {
+  color: #c2273a;
+  background: #fff1f2;
+}
+
+.lsd-row.muted > em {
+  color: #8a92a8;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.lsd-icon {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  object-fit: cover;
+  color: #fff;
+  background: #7b68df;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.lsd-icon.unit {
+  border-radius: 9px;
+  color: #0f8a5f;
+  background: #e7f6ef;
+}
+
+.lsd-icon.everyone {
+  border-radius: 9px;
+  color: #2f7fe0;
+  background: #e8f1fd;
+}
+
+.lsd-empty {
+  margin: 12px 0;
+  color: #9aa1b4;
+  font-size: 13px;
+}
+
+.lsd-inherited h4 {
+  margin: 10px 0 2px;
+  color: #8a92a8;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.lsd-legend {
+  margin: 8px 20px 0;
+  color: #8a92a8;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.lsd-error {
+  margin: 8px 20px 0;
+  color: #c2273a;
+  font-size: 12px;
+}
+
+.library-share-dialog > footer {
+  margin-top: 12px;
+  padding: 14px 20px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px solid #eceef3;
+}
+
+.library-share-dialog > footer .primary-btn:disabled {
+  opacity: 0.5;
+  box-shadow: none;
+  cursor: not-allowed;
+}

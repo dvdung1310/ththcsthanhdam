@@ -7,7 +7,7 @@ const MODULE_LABELS = {
   dashboard: "Tổng quan",
   teachers: "Nhân sự",
   tasks: "Công việc",
-  documents: "Văn bản",
+  library: "Dữ liệu dùng chung",
   kpi: "KPI",
   reports: "Báo cáo",
   system: "Hệ thống",

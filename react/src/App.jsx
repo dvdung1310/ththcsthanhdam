@@ -44,7 +44,7 @@ import LoginPage from "./LoginPage";
 import NotificationCenter from "./NotificationCenter";
 import AiAssistant from "./AiAssistant";
 import PersonalProfile from "./PersonalProfile";
-import DocumentManagement from "./DocumentManagement";
+import DataLibrary from "./DataLibrary";
 import { apiFetch, getToken, setToken } from "./api";
 import "./PermissionStates.css";
 import "./SystemTypography.css";
@@ -364,7 +364,7 @@ function App() {
     "Thống kê": "kpi.view",
     "Quản lý nhân sự": "teachers.view",
     "Giao việc": "tasks.view",
-    "Dữ liệu dùng chung": "documents.view",
+    "Dữ liệu dùng chung": "library.view",
     "Cấu hình giao việc": "tasks.assign",
     "Vai trò & quyền": "roles.manage",
   };
@@ -474,7 +474,7 @@ function App() {
             selectedTask={selectedTask}
           />
         ) : active === "Dữ liệu dùng chung" ? (
-          <DocumentManagement canManage={can("documents.manage")} />
+          <DataLibrary />
         ) : active === "Vai trò & quyền" ? (
           <RolePermissionMatrix />
         ) : active === "Thông tin cá nhân" ? (
