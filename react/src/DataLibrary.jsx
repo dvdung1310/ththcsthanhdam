@@ -39,6 +39,7 @@ import ShareFileDialog from "./ShareFileDialog";
 import { downloadFile, formatBytes, openFileInTab } from "./fileUtils";
 import ActionMenu, { MenuList, menuPosition } from "./ActionMenu";
 import LibraryFolderTree from "./LibraryFolderTree";
+import { useNameConflicts } from "./NameConflictDialog";
 import "./DataLibrary.css";
 
 
@@ -52,10 +53,16 @@ function fileIcon(mime = "") {
 
 const SIDEBAR_KEY = "thanhdam_library_sidebar";
 
+function selectBaseName(input, isFile) {
+  const dot = isFile ? input.value.lastIndexOf(".") : -1;
+  input.setSelectionRange(0, dot > 0 ? dot : input.value.length);
+}
+
 const formatDate = (value) => (value ? new Date(value).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" }) : "—");
 
 export default function DataLibrary() {
   const confirm = useConfirm();
+  const [askConflicts, conflictDialog] = useNameConflicts();
   const [view, setView] = useState("library");
   const [folderId, setFolderId] = useState(null);
   const [payload, setPayload] = useState(null);
@@ -75,6 +82,7 @@ export default function DataLibrary() {
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
   const fileInput = useRef(null);
+  const uploadTarget = useRef(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -132,15 +140,32 @@ export default function DataLibrary() {
     }
   };
 
-  const uploadFiles = async (fileList) => {
+  const folderAbilities = (id) => (id ? payload?.tree.find((f) => f.id === id)?.abilities : null);
+  const canUploadTo = (id) => (id === folderId ? canUploadHere : id ? !!folderAbilities(id)?.can_upload : !!payload?.root.can_upload);
+
+  const chooseUploadTarget = (id) => {
+    uploadTarget.current = { id };
+    fileInput.current?.click();
+  };
+
+  const uploadFiles = async (fileList, targetId = folderId) => {
     const files = [...fileList];
-    if (!files.length || !canUploadHere) return;
+    if (!files.length || !canUploadTo(targetId)) return;
     setUploading(true);
     setError("");
-    const form = new FormData();
-    if (folderId) form.append("folder_id", folderId);
-    files.forEach((file) => form.append("files[]", file));
     try {
+      const checked = await apiJson("/api/library/check-names", { method: "POST", body: { folder_id: targetId, names: files.map((f) => f.name), type: "file" } });
+      const conflicts = checked.data.filter((row) => row.conflict);
+      const answers = conflicts.length ? await askConflicts(conflicts) : [];
+      if (!answers) return;
+      if (answers.length && answers.length === files.length && answers.every((a) => a.resolution === "skip")) {
+        setSuccess(`Đã bỏ qua ${files.length} file.`);
+        return;
+      }
+      const form = new FormData();
+      if (targetId) form.append("folder_id", targetId);
+      files.forEach((file) => form.append("files[]", file));
+      answers.forEach((a) => form.append(`resolutions[${a.index}]`, a.resolution));
       const response = await apiFetch("/api/library/upload", { method: "POST", headers: { Accept: "application/json" }, body: form });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(Object.values(result.errors ?? {}).flat()[0] ?? result.message ?? "Không thể tải file lên.");
@@ -149,6 +174,7 @@ export default function DataLibrary() {
       setError(e.message);
     } finally {
       setUploading(false);
+      uploadTarget.current = null;
       if (fileInput.current) fileInput.current.value = "";
     }
   };
@@ -160,12 +186,21 @@ export default function DataLibrary() {
     try {
       const result =
         nameDialog.mode === "create"
-          ? await apiJson("/api/library/folders", { method: "POST", body: { parent_id: folderId, name } })
+          ? await apiJson("/api/library/folders", { method: "POST", body: { parent_id: nameDialog.parentId, name } })
           : await apiJson(`/api/library/nodes/${nameDialog.node.id}`, { method: "PUT", body: { name } });
       setNameDialog(null);
       await done(result.message);
     } catch (e) {
-      setNameDialog((current) => ({ ...current, error: e.message }));
+      setNameDialog((current) => ({ ...current, error: e.message, suggested: e.status === 409 ? e.payload.suggested_name : null }));
+    }
+  };
+
+  const createFolder = async (parentId = folderId) => {
+    try {
+      const checked = await apiJson("/api/library/check-names", { method: "POST", body: { folder_id: parentId, names: ["Thư mục mới"], type: "folder" } });
+      setNameDialog({ mode: "create", parentId, value: checked.data[0].suggested_name });
+    } catch {
+      setNameDialog({ mode: "create", parentId, value: "Thư mục mới" });
     }
   };
 
@@ -182,10 +217,24 @@ export default function DataLibrary() {
     }
   };
 
-  const paste = async () => {
+  const paste = async (targetId = folderId) => {
     if (!clipboard) return;
-    const ok = await run(() => apiJson("/api/library/paste", { method: "POST", body: { node_id: clipboard.node.id, target_folder_id: folderId, action: clipboard.action } }));
-    if (ok && clipboard.action === "cut") setClipboard(null);
+    const body = { node_id: clipboard.node.id, target_folder_id: targetId, action: clipboard.action };
+    try {
+      let result;
+      try {
+        result = await apiJson("/api/library/paste", { method: "POST", body });
+      } catch (e) {
+        if (e.status !== 409 || !e.payload.conflict) throw e;
+        const answers = await askConflicts([e.payload.conflict]);
+        if (!answers || answers[0].resolution === "skip") return;
+        result = await apiJson("/api/library/paste", { method: "POST", body: { ...body, resolution: answers[0].resolution } });
+      }
+      if (clipboard.action === "cut") setClipboard(null);
+      await done(result.message);
+    } catch (e) {
+      setError(e.message);
+    }
   };
 
   const openFile = (node) => openFileInTab(`/api/library/nodes/${node.id}/download`, node.mime_type).catch((e) => setError(e.message));
@@ -195,8 +244,9 @@ export default function DataLibrary() {
     setSuccess(action === "cut" ? "Đã cắt. Mở thư mục đích và dán (Ctrl+V)." : "Đã sao chép. Mở thư mục đích và dán (Ctrl+V).");
   };
 
-  const nodeMenu = (node) => [
+  const nodeMenu = (node, inTree = false) => [
     { key: "open", label: "Mở", icon: node.type === "folder" ? FolderOpen : Eye, onClick: () => openNode(node) },
+    ...(inTree ? targetMenu(node.id, !!node.abilities.can_upload) : []),
     node.type === "file" && { key: "download", label: "Tải về", icon: Download, onClick: () => downloadFile(`/api/library/nodes/${node.id}/download`, node.name).catch((e) => setError(e.message)) },
     node.type === "file" && { key: "detail", label: "Chi tiết", icon: Info, onClick: () => setDetail(node) },
     node.abilities.can_share && { key: "share", label: "Chia sẻ", icon: Share2, onClick: () => setSharing(node) },
@@ -207,11 +257,25 @@ export default function DataLibrary() {
     node.abilities.can_delete && { key: "d2", divider: true },
     node.abilities.can_delete && { key: "delete", label: "Xóa", icon: Trash2, shortcut: "Del", danger: true, onClick: () => remove(node) },
   ];
+  const targetMenu = (targetId, allowed) =>
+    allowed
+      ? [
+          { key: "t0", divider: true },
+          { key: "folder-here", label: "Thư mục mới ở đây", icon: FolderPlus, onClick: () => createFolder(targetId) },
+          { key: "upload-here", label: "Tải file lên vào đây", icon: Upload, onClick: () => chooseUploadTarget(targetId) },
+          clipboard && { key: "paste-here", label: `Dán “${clipboard.node.name}” vào đây`, icon: ClipboardPaste, onClick: () => paste(targetId) },
+          { key: "t1", divider: true },
+        ]
+      : [];
   const backgroundMenu = () => [
-    { key: "paste", label: clipboard ? `Dán “${clipboard.node.name}”` : "Dán", icon: ClipboardPaste, shortcut: "Ctrl+V", disabled: !clipboard || !canUploadHere, onClick: paste },
+    { key: "paste", label: clipboard ? `Dán “${clipboard.node.name}”` : "Dán", icon: ClipboardPaste, shortcut: "Ctrl+V", disabled: !clipboard || !canUploadHere, onClick: () => paste() },
     canUploadHere && { key: "d", divider: true },
-    canUploadHere && { key: "folder", label: "Thư mục mới", icon: FolderPlus, onClick: () => setNameDialog({ mode: "create" }) },
-    canUploadHere && { key: "upload", label: "Tải file lên", icon: Upload, onClick: () => fileInput.current?.click() },
+    canUploadHere && { key: "folder", label: "Thư mục mới", icon: FolderPlus, onClick: () => createFolder() },
+    canUploadHere && { key: "upload", label: "Tải file lên", icon: Upload, onClick: () => chooseUploadTarget(folderId) },
+  ];
+  const rootMenu = () => [
+    { key: "open", label: "Mở", icon: FolderOpen, onClick: () => openFolder(null) },
+    ...targetMenu(null, !!payload?.root.can_upload),
   ];
 
   const openContextMenu = (event, node = null) => {
@@ -220,10 +284,15 @@ export default function DataLibrary() {
     if (node) setSelected(node.id);
     setMenu({ position: menuPosition(event.clientX, event.clientY), items: node ? nodeMenu(node) : backgroundMenu() });
   };
+  const openTreeMenu = (event, folder) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setMenu({ position: menuPosition(event.clientX, event.clientY), items: folder ? nodeMenu(folder, true) : rootMenu() });
+  };
 
   useEffect(() => {
     const shortcut = (event) => {
-      if (view !== "library" || nameDialog || sharing || ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName) || document.activeElement?.isContentEditable) return;
+      if (view !== "library" || nameDialog || sharing || conflictDialog || ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName) || document.activeElement?.isContentEditable) return;
       const node = selected ? findItem(selected) : null;
       const key = event.key.toLowerCase();
       if ((event.ctrlKey || event.metaKey) && key === "c" && node) {
@@ -299,12 +368,17 @@ export default function DataLibrary() {
             rootIcon={Database}
             rootSelected={view === "library" && !folderId}
             onSelectRoot={() => openFolder(null)}
+            rootCollapsible
+            onContextMenu={openTreeMenu}
           />
+          <div className={`lft-row root dl-mine-root ${view === "mine" ? "selected" : ""}`}>
+            <span className="lft-toggle-spacer" />
+            <button type="button" className="lft-label" onClick={() => { setView("mine"); setDetail(null); }}>
+              <UserRound size={16} />
+              <span>Tệp của tôi</span>
+            </button>
+          </div>
         </div>
-        <button className={`dl-mine-link ${view === "mine" ? "active" : ""}`} onClick={() => { setView("mine"); setDetail(null); }}>
-          <UserRound size={17} />
-          <span>Tệp của tôi</span>
-        </button>
       </aside>
       <div className="dl-splitter" onMouseDown={startResize} onDoubleClick={() => setSidebarWidth(260)} role="separator" aria-orientation="vertical" aria-label="Kéo để đổi độ rộng" />
 
@@ -345,15 +419,15 @@ export default function DataLibrary() {
               </select>
               {canUploadHere && !search && (
                 <div className="dl-actions">
-                  <button className="secondary-btn" onClick={() => setNameDialog({ mode: "create" })}>
+                  <button className="secondary-btn" onClick={() => createFolder()}>
                     <FolderPlus size={16} /> Thư mục mới
                   </button>
-                  <button className="primary-btn" onClick={() => fileInput.current?.click()} disabled={uploading}>
+                  <button className="primary-btn" onClick={() => chooseUploadTarget(folderId)} disabled={uploading}>
                     <Upload size={16} /> {uploading ? "Đang tải lên..." : "Tải file lên"}
                   </button>
                 </div>
               )}
-              <input ref={fileInput} type="file" multiple hidden onChange={(e) => uploadFiles(e.target.files)} accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.zip,.rar" />
+              <input ref={fileInput} type="file" multiple hidden onChange={(e) => uploadFiles(e.target.files, uploadTarget.current ? uploadTarget.current.id : folderId)} accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.zip,.rar" />
             </div>
           </section>
 
@@ -370,7 +444,7 @@ export default function DataLibrary() {
             onDrop={(e) => {
               e.preventDefault();
               setDragging(false);
-              uploadFiles(e.dataTransfer.files);
+              uploadFiles(e.dataTransfer.files, folderId);
             }}
           >
             {error && (
@@ -467,8 +541,17 @@ export default function DataLibrary() {
         <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setNameDialog(null)}>
           <form className="dl-name-dialog" onSubmit={submitName}>
             <h3>{nameDialog.mode === "create" ? "Tạo thư mục mới" : `Đổi tên ${nameDialog.node.type === "folder" ? "thư mục" : "file"}`}</h3>
-            <input name="name" autoFocus required maxLength={nameDialog.node?.type === "file" ? 255 : 150} defaultValue={nameDialog.node?.name ?? ""} placeholder="Nhập tên" onChange={() => nameDialog.error && setNameDialog((c) => ({ ...c, error: "" }))} />
-            {nameDialog.error && <p className="dl-dialog-error">{nameDialog.error}</p>}
+            <input name="name" autoFocus required maxLength={nameDialog.node?.type === "file" ? 255 : 150} value={nameDialog.value ?? nameDialog.node?.name ?? ""} placeholder="Nhập tên" onFocus={(e) => selectBaseName(e.target, nameDialog.node?.type === "file")} onChange={(e) => setNameDialog((c) => ({ ...c, value: e.target.value, error: "", suggested: null }))} />
+            {nameDialog.error && (
+              <p className="dl-dialog-error">
+                {nameDialog.error}
+                {nameDialog.suggested && (
+                  <button type="button" onClick={() => setNameDialog((c) => ({ ...c, value: c.suggested, error: "", suggested: null }))}>
+                    Dùng tên “{nameDialog.suggested}”
+                  </button>
+                )}
+              </p>
+            )}
             <footer>
               <button type="button" className="secondary-btn" onClick={() => setNameDialog(null)}>Hủy</button>
               <button className="primary-btn">{nameDialog.mode === "create" ? "Tạo thư mục" : "Lưu"}</button>
@@ -476,6 +559,8 @@ export default function DataLibrary() {
           </form>
         </div>
       )}
+
+      {conflictDialog}
 
       {sharing && (
         <LibraryShareDialog

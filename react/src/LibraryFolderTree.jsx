@@ -12,7 +12,7 @@ function readExpanded(storageKey) {
   }
 }
 
-export default function LibraryFolderTree({ folders, selectedId, onSelect, isDisabled, storageKey, revealId, rootLabel, rootSelected, onSelectRoot, rootDisabled, rootIcon: RootIcon }) {
+export default function LibraryFolderTree({ folders, selectedId, onSelect, isDisabled, storageKey, revealId, rootLabel, rootSelected, onSelectRoot, rootDisabled, rootIcon: RootIcon, rootCollapsible, onContextMenu }) {
   const [expanded, setExpanded] = useState(() => readExpanded(storageKey));
   const parentOf = useMemo(() => Object.fromEntries(folders.map((f) => [f.id, f.parent_id])), [folders]);
   const childrenOf = useMemo(() => {
@@ -39,6 +39,7 @@ export default function LibraryFolderTree({ folders, selectedId, onSelect, isDis
     if (storageKey) localStorage.setItem(storageKey, JSON.stringify(expanded));
   }, [expanded, storageKey]);
 
+  const rootOpen = !rootCollapsible || !expanded.includes("root-collapsed");
   const toggle = (id) => setExpanded((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
 
   const renderLevel = (parentKey, depth) =>
@@ -49,7 +50,11 @@ export default function LibraryFolderTree({ folders, selectedId, onSelect, isDis
       const Icon = open && kids.length ? FolderOpen : Folder;
       return (
         <div key={folder.id} className="lft-node" role="treeitem" aria-expanded={kids.length ? open : undefined} aria-selected={selectedId === folder.id}>
-          <div className={`lft-row ${selectedId === folder.id ? "selected" : ""} ${disabled ? "disabled" : ""}`} style={{ paddingLeft: 6 + depth * 16 }}>
+          <div
+            className={`lft-row ${selectedId === folder.id ? "selected" : ""} ${disabled ? "disabled" : ""}`}
+            style={{ paddingLeft: 6 + depth * 16 }}
+            onContextMenu={onContextMenu && !disabled ? (event) => onContextMenu(event, folder) : undefined}
+          >
             {kids.length ? (
               <button type="button" className={`lft-toggle ${open ? "open" : ""}`} onClick={() => toggle(folder.id)} aria-label={open ? "Thu gọn" : "Mở rộng"}>
                 <ChevronRight size={14} />
@@ -70,14 +75,25 @@ export default function LibraryFolderTree({ folders, selectedId, onSelect, isDis
   return (
     <div className="library-folder-tree" role="tree">
       {rootLabel && (
-        <div className={`lft-row root ${rootSelected ? "selected" : ""} ${rootDisabled ? "disabled" : ""}`}>
-          <button type="button" className="lft-label" disabled={rootDisabled} onClick={onSelectRoot}>
+        <div
+          className={`lft-row root ${rootSelected ? "selected" : ""} ${rootDisabled ? "disabled" : ""}`}
+          onContextMenu={onContextMenu && !rootDisabled ? (event) => onContextMenu(event, null) : undefined}
+        >
+          {rootCollapsible &&
+            (childrenOf.root?.length ? (
+              <button type="button" className={`lft-toggle ${rootOpen ? "open" : ""}`} onClick={() => toggle("root-collapsed")} aria-label={rootOpen ? "Thu gọn" : "Mở rộng"}>
+                <ChevronRight size={14} />
+              </button>
+            ) : (
+              <span className="lft-toggle-spacer" />
+            ))}
+          <button type="button" className="lft-label" disabled={rootDisabled} onClick={onSelectRoot} onDoubleClick={() => rootCollapsible && toggle("root-collapsed")}>
             {RootIcon && <RootIcon size={16} />}
             <span>{rootLabel}</span>
           </button>
         </div>
       )}
-      {renderLevel("root", rootLabel ? 0 : 0)}
+      {rootOpen && renderLevel("root", rootCollapsible ? 1 : 0)}
     </div>
   );
 }
