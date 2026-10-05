@@ -71,7 +71,7 @@ class EvaluationController extends Controller
         $evaluations = $period
             ? $period->evaluations()->withCount(['scores', 'comments'])->get()->keyBy('teacher_id')
             : collect();
-        $teachers = Teacher::with(['user.roles', 'departments' => fn ($q) => $q->wherePivotNull('ends_on')])
+        $teachers = Teacher::with(['user.roles', 'departments' => fn ($q) => $q->wherePivotNull('ends_on')->orderByDesc('teacher_department.is_primary')])
             ->where(fn ($q) => $q->where('employment_status', '!=', 'terminated')->orWhereIn('id', $evaluations->keys()))
             ->get()
             ->sortBy(fn (Teacher $teacher) => $teacher->user?->name)
@@ -80,6 +80,9 @@ class EvaluationController extends Controller
         return response()->json([
             'period' => $period ? $this->periodData($period) : null,
             'template' => ($template = $period ? $period->template : EvaluationTemplate::where('is_active', true)->first()) ? ['id' => $template->id, 'name' => $template->name] : null,
+            'units' => Department::orderBy('name')->get(['id', 'name', 'type', 'parent_id', 'is_active'])
+                ->filter(fn (Department $unit) => $unit->is_active || $teachers->contains(fn ($t) => $t->departments->contains('id', $unit->id)))
+                ->map(fn (Department $unit) => ['id' => $unit->id, 'name' => $unit->name, 'type' => $unit->type, 'parent_id' => $unit->parent_id])->values(),
             'data' => $teachers->map(function (Teacher $teacher) use ($evaluations, $period) {
                 $evaluation = $evaluations->get($teacher->id);
                 $reason = $this->ineligibleReason($teacher);
@@ -87,7 +90,10 @@ class EvaluationController extends Controller
 
                 return [
                     'teacher_id' => $teacher->id, 'name' => $teacher->user?->name, 'code' => $teacher->employee_code,
-                    'avatar_url' => $this->avatar($teacher->user), 'unit' => $teacher->departments->first()?->name,
+                    'avatar_url' => $this->avatar($teacher->user),
+                    'unit_id' => $teacher->departments->first()?->id,
+                    'other_units' => $teacher->departments->slice(1)->pluck('name')->values(),
+                    'roles' => $this->leadershipRoles($teacher->user),
                     'eligible' => $reason === null, 'reason' => $reason,
                     'evaluation' => $evaluation ? [
                         'id' => $evaluation->id, 'status' => $evaluation->status, 'status_label' => self::STATUS_LABELS[$evaluation->status],
@@ -557,6 +563,18 @@ class EvaluationController extends Controller
         abort_if($invalid->isNotEmpty() || $teachers->count() !== count(array_unique($ids)), 422, 'Không thể tạo phiếu cho: '.($invalid->map(fn ($t) => $t->user?->name)->join(', ') ?: 'giáo viên không tồn tại').'.');
 
         return $teachers;
+    }
+
+    private function leadershipRoles(?User $user): array
+    {
+        if (! $user) {
+            return [];
+        }
+
+        return $user->roles
+            ->filter(fn (Role $role) => $role->code !== Role::GIAO_VIEN && ($role->pivot->expires_at === null || Carbon::parse($role->pivot->expires_at)->isFuture()))
+            ->map(fn (Role $role) => ['name' => $role->name, 'unit_id' => $role->pivot->department_id ? (int) $role->pivot->department_id : null])
+            ->values()->all();
     }
 
     private function ineligibleReason(Teacher $teacher): ?string
