@@ -1,0 +1,114 @@
+.library-folder-tree {
+  display: flex;
+  flex-direction: column;
+}
+
+.lft-row {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 7px;
+}
+
+.lft-row:hover:not(.disabled) {
+  background: #f4f5f9;
+}
+
+.lft-row.selected {
+  background: #efebff;
+}
+
+.lft-row.root {
+  padding-left: 6px;
+}
+
+.lft-row.root .lft-label {
+  font-weight: 700;
+}
+
+.lft-toggle,
+.lft-toggle-spacer {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+
+.lft-toggle {
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  color: #8a92a8;
+  background: transparent;
+  cursor: pointer;
+}
+
+.lft-toggle:hover {
+  color: #5a3fd6;
+  background: #e8e3ff;
+}
+
+.lft-toggle svg {
+  transition: transform 0.12s ease;
+}
+
+.lft-toggle.open svg {
+  transform: rotate(90deg);
+}
+
+.lft-label {
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 6px;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  color: #3f4a66;
+  background: transparent;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lft-row.selected .lft-label {
+  color: #4b33c9;
+  font-weight: 700;
+}
+
+.lft-row.disabled .lft-label {
+  color: #a6acbd;
+  cursor: default;
+}
+
+.lft-label span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lft-label svg {
+  flex: none;
+  color: #e0a43a;
+}
+
+.lft-label svg.system {
+  color: #2f7fe0;
+}
+
+.lft-row.root .lft-label svg {
+  color: #6a4ee0;
+}
+
+.lft-row.disabled .lft-label svg {
+  opacity: 0.55;
+}
+
+.lft-children {
+  position: relative;
+}

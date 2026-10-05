@@ -6,7 +6,7 @@ use App\Events\TaskAssignedRealtime;
 use App\Events\TaskWorkflowRealtime;
 use App\Http\Controllers\Controller;
 use App\Models\Department;
-use App\Models\OfficialDocument;
+use App\Models\LibraryNode;
 use App\Models\Role;
 use App\Models\StoredFile;
 use App\Models\Task;
@@ -15,6 +15,8 @@ use App\Models\TaskSubmission;
 use App\Models\TaskUpdate;
 use App\Models\Teacher;
 use App\Models\User;
+use App\Services\FileStore;
+use App\Services\LibraryAccess;
 use App\Notifications\TaskAssignedNotification;
 use App\Notifications\TaskReminderNotification;
 use App\Notifications\TaskWorkflowNotification;
@@ -31,7 +33,7 @@ class TaskController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $query = Task::with(['category', 'creator', 'reviewers', 'teachers.user', 'departments', 'documents.type', 'documents.file'])
+        $query = Task::with(['category', 'creator', 'reviewers', 'teachers.user', 'departments', 'libraryFiles.file'])
             ->withCount(['teachers', 'departments', 'submissions'])
             ->when($request->string('search')->toString(), fn ($q, $search) => $q->where(fn ($b) => $b->where('code', 'like', "%{$search}%")->orWhere('title', 'like', "%{$search}%")->orWhere('description', 'like', "%{$search}%")))
             ->when($request->string('status')->toString(), fn ($q, $status) => $q->where('status', $status))
@@ -84,12 +86,7 @@ class TaskController extends Controller
             'current_teacher' => $user->teacher ? ['id' => $user->teacher->id, 'user_id' => $user->id, 'name' => $user->name, 'avatar_url' => $avatar($user)] : null,
             'current_user_id' => $user->id,
             'can_assign' => $canAssign,
-            'documents' => OfficialDocument::with(['type', 'file'])->latest('issued_on')->limit(200)->get()->map(fn ($document) => [
-                'id' => $document->id, 'document_number' => $document->document_number,
-                'title' => $document->title, 'issuer' => $document->issuer,
-                'issued_on' => $document->issued_on?->format('Y-m-d'), 'type' => $document->type?->name,
-                'has_file' => (bool) $document->file_id,
-            ]),
+            'library_files' => $this->readableLibraryFiles($user),
         ]);
     }
 
@@ -101,7 +98,7 @@ class TaskController extends Controller
             $task = Task::create([...$this->taskAttributes($data), 'code' => $this->nextCode(), 'created_by' => $request->user()->id, 'status' => Task::NOT_STARTED]);
             $this->syncAssignees($task, $data, $request->user());
             $this->syncReviewers($task, $data);
-            $task->documents()->sync($data['document_ids'] ?? []);
+            $this->syncLibraryFiles($request, $task, $data);
             $this->storeAttachments($request, $task);
             $this->recordStatus($task, null, Task::NOT_STARTED, 'Khởi tạo và giao công việc', $request->user());
 
@@ -123,7 +120,7 @@ class TaskController extends Controller
             $task = Task::create([...$this->taskAttributes($data), 'code' => $this->nextCode(), 'created_by' => $request->user()->id, 'status' => Task::NOT_STARTED]);
             $this->syncAssignees($task, $data, $request->user());
             $this->syncReviewers($task, $data);
-            $task->documents()->sync($data['document_ids'] ?? []);
+            $this->syncLibraryFiles($request, $task, $data);
             $this->storeAttachments($request, $task);
             $this->recordStatus($task, null, Task::NOT_STARTED, 'Tự tạo công việc cá nhân', $request->user());
 
@@ -147,6 +144,7 @@ class TaskController extends Controller
             return $update;
         });
         $attachments = DB::table('file_attachments')->join('files', 'files.id', '=', 'file_attachments.file_id')->where('attachable_type', Task::class)->where('attachable_id', $task->id)->select('files.id', 'files.original_name', 'files.mime_type', 'files.size')->get();
+        $canShareSubmissions = $task->status === Task::COMPLETED && $request->user()->hasPermission('library.view');
         $submissions = TaskSubmission::with(['teacher.user', 'reviewer:id,name'])->where('task_id', $task->id)->latest('submitted_at')->latest('id')->get()->map(fn (TaskSubmission $submission) => [
             'id' => $submission->id,
             'version' => $submission->version,
@@ -154,7 +152,8 @@ class TaskController extends Controller
             'submitter_avatar_url' => $submission->teacher?->user?->avatar_path ? route('avatars.show', ['filename' => basename($submission->teacher->user->avatar_path)]) : null,
             'result_content' => $submission->result_content,
             'links' => $submission->links ?? [],
-            'files' => DB::table('file_attachments')->join('files', 'files.id', '=', 'file_attachments.file_id')->where('attachable_type', TaskSubmission::class)->where('attachable_id', $submission->id)->select('files.id', 'files.original_name', 'files.mime_type', 'files.size')->get(),
+            'files' => DB::table('file_attachments')->join('files', 'files.id', '=', 'file_attachments.file_id')->where('attachable_type', TaskSubmission::class)->where('attachable_id', $submission->id)->select('files.id', 'files.original_name', 'files.mime_type', 'files.size', 'files.uploaded_by')->get()
+                ->map(fn ($file) => [...(array) $file, 'can_share' => $canShareSubmissions && ((int) $file->uploaded_by === $request->user()->id || $request->user()->hasPermission('library.manage'))]),
             'status' => $submission->status,
             'submitted_at' => $submission->submitted_at?->toIso8601String(),
             'review_comment' => $submission->review_comment,
@@ -174,7 +173,7 @@ class TaskController extends Controller
         $added = DB::transaction(function () use ($request, $data, $task) {
             $task->update($this->taskAttributes($data));
             $this->syncAssignees($task, $data, $request->user());
-            $task->documents()->sync($data['document_ids'] ?? []);
+            $this->syncLibraryFiles($request, $task, $data);
             $this->storeAttachments($request, $task);
             $this->removeAttachments($task, $data['remove_attachment_ids'] ?? []);
 
@@ -193,7 +192,7 @@ class TaskController extends Controller
         $data = $this->validateTask($request);
         $added = DB::transaction(function () use ($request, $data, $task) {
             $task->update($this->taskAttributes($data));
-            $task->documents()->sync($data['document_ids'] ?? []);
+            $this->syncLibraryFiles($request, $task, $data);
             $this->storeAttachments($request, $task);
             $this->removeAttachments($task, $data['remove_attachment_ids'] ?? []);
 
@@ -340,6 +339,16 @@ class TaskController extends Controller
         return response()->json(['message' => 'Đã đưa '.$teachers->count().' email nhắc việc vào hàng chờ.', 'queued_count' => $teachers->count(), 'reminder_count' => $round]);
     }
 
+    public function viewLibraryFile(Request $request, Task $task, LibraryNode $node)
+    {
+        $this->ensureTaskAccess($request, $task);
+        abort_unless($task->libraryFiles()->where('library_nodes.id', $node->id)->exists(), 404);
+        $node->loadMissing('file');
+        abort_unless($node->file && Storage::disk($node->file->disk)->exists($node->file->path), 404, 'File không tồn tại.');
+
+        return Storage::disk($node->file->disk)->response($node->file->path, $node->name, ['Content-Type' => $node->file->mime_type ?: 'application/octet-stream'], 'inline');
+    }
+
     public function viewAttachment(Request $request, Task $task, StoredFile $file)
     {
         $this->ensureTaskAccess($request, $task);
@@ -404,8 +413,8 @@ class TaskController extends Controller
             'teacher_ids.*' => ['integer', 'exists:teachers,id'],
             'department_ids' => ['required_without:teacher_ids', 'array'],
             'department_ids.*' => ['integer', 'exists:departments,id'],
-            'document_ids' => ['nullable', 'array'],
-            'document_ids.*' => ['integer', 'exists:official_documents,id'],
+            'library_file_ids' => ['nullable', 'array'],
+            'library_file_ids.*' => ['integer', Rule::exists('library_nodes', 'id')->where('type', LibraryNode::FILE)],
             'attachments' => ['nullable', 'array'],
             'attachments.*' => ['file', 'max:20480', 'mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png,zip'],
             'remove_attachment_ids' => ['nullable', 'array'],
@@ -696,7 +705,29 @@ class TaskController extends Controller
 
     private function storeFile($uploaded, string $folder, User $actor): StoredFile
     {
-        return StoredFile::create(['uploaded_by' => $actor->id, 'disk' => 'local', 'path' => $uploaded->store($folder), 'original_name' => $uploaded->getClientOriginalName(), 'mime_type' => $uploaded->getMimeType(), 'size' => $uploaded->getSize(), 'checksum' => hash_file('sha256', $uploaded->getRealPath())]);
+        return app(FileStore::class)->store($uploaded, $folder, $actor);
+    }
+
+    private function readableLibraryFiles(User $user): Collection
+    {
+        if (! $user->hasPermission('library.view')) {
+            return collect();
+        }
+        $ids = (new LibraryAccess($user))->accessibleIds();
+
+        return LibraryNode::with('file:id,size,mime_type')->where('type', LibraryNode::FILE)
+            ->when($ids !== null, fn ($q) => $q->whereIn('id', $ids ?: [0]))
+            ->orderBy('name')->limit(500)->get()
+            ->map(fn (LibraryNode $node) => ['id' => $node->id, 'name' => $node->name, 'size' => $node->file?->size, 'mime_type' => $node->file?->mime_type])->values();
+    }
+
+    private function syncLibraryFiles(Request $request, Task $task, array $data): void
+    {
+        $ids = collect($data['library_file_ids'] ?? [])->map(fn ($id) => (int) $id)->unique();
+        $existing = $task->exists ? $task->libraryFiles()->pluck('library_nodes.id') : collect();
+        $access = new LibraryAccess($request->user());
+        abort_if($ids->diff($existing)->contains(fn ($id) => ! $access->can($id, LibraryAccess::READ)), 403, 'Bạn chỉ gắn được file trong kho mà bạn có quyền xem.');
+        $task->libraryFiles()->sync($ids->all());
     }
 
     private function storeAttachments(Request $request, Task $task): void
@@ -714,9 +745,8 @@ class TaskController extends Controller
         }
         $files = StoredFile::whereIn('id', $fileIds)->whereIn('id', DB::table('file_attachments')->where('attachable_type', Task::class)->where('attachable_id', $task->id)->pluck('file_id'))->get();
         foreach ($files as $file) {
-            Storage::disk($file->disk)->delete($file->path);
             DB::table('file_attachments')->where('file_id', $file->id)->where('attachable_type', Task::class)->where('attachable_id', $task->id)->delete();
-            $file->delete();
+            app(FileStore::class)->releaseIfUnused($file->id);
         }
     }
 
@@ -732,7 +762,7 @@ class TaskController extends Controller
 
     private function loadTask(Task $task): Task
     {
-        return $task->load(['category', 'creator.teacher', 'reviewers', 'teachers.user', 'departments', 'documents.type', 'documents.file'])->loadCount(['teachers', 'departments', 'submissions']);
+        return $task->load(['category', 'creator.teacher', 'reviewers', 'teachers.user', 'departments', 'libraryFiles.file'])->loadCount(['teachers', 'departments', 'submissions']);
     }
 
     private function serialize(Task $task): array
@@ -755,8 +785,8 @@ class TaskController extends Controller
             'reviewers' => $task->reviewers->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name])->values(),
             'created_by' => $task->created_by, 'creator' => $task->creator?->name,
             'teacher_ids' => $task->teachers->pluck('id'), 'department_ids' => $task->departments->pluck('id'),
-            'document_ids' => $task->documents->pluck('id'),
-            'documents' => $task->documents->map(fn ($document) => ['id' => $document->id, 'document_number' => $document->document_number, 'title' => $document->title, 'issuer' => $document->issuer, 'issued_on' => $document->issued_on?->format('Y-m-d'), 'type' => $document->type?->name, 'file_name' => $document->file?->original_name, 'download_url' => $document->file ? route('documents.download', $document) : null]),
+            'library_file_ids' => $task->libraryFiles->pluck('id'),
+            'library_files' => $task->libraryFiles->map(fn (LibraryNode $node) => ['id' => $node->id, 'name' => $node->name, 'size' => $node->file?->size, 'mime_type' => $node->file?->mime_type, 'download_url' => route('tasks.library-file', ['task' => $task->id, 'node' => $node->id])])->values(),
             'assignees' => $assignees->map(fn (Teacher $t) => ['id' => $t->id, 'name' => $t->user->name, 'avatar_url' => $t->user->avatar_path ? route('avatars.show', ['filename' => basename($t->user->avatar_path)]) : null, 'direct' => $task->teachers->contains('id', $t->id), 'reminder_count' => (int) ($reminders->get($t->id)?->reminder_count ?? 0), 'last_reminded_at' => $reminders->get($t->id)?->last_reminded_at])->values(),
             'departments' => $task->departments->map(fn ($d) => Department::pathLabel($d->id))->values(),
             'units' => $task->departments->map(fn ($d) => [

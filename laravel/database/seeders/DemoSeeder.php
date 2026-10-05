@@ -60,7 +60,7 @@ class DemoSeeder extends Seeder
             }
         });
 
-        $this->call([DocumentSeeder::class, TaskSeeder::class]);
+        $this->call([TaskSeeder::class, LibrarySeeder::class]);
     }
 
     private function seedUnits(): array

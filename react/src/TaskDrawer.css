@@ -588,3 +588,75 @@
   color: #b33b46;
   background: #fdeef0;
 }
+
+
+
+.drawer-files {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.drawer-file {
+  min-height: 48px;
+  padding: 4px 6px 4px 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #e6e9f1;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.drawer-file:hover {
+  border-color: #d8d1fc;
+  background: #faf9ff;
+}
+
+.drawer-file-main {
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 6px;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.drawer-file-main > i {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: #6650d5;
+  background: #eeebff;
+}
+
+.drawer-file-main > span {
+  min-width: 0;
+  flex: 1;
+}
+
+.drawer-file-main b {
+  display: block;
+  overflow: hidden;
+  color: #273250;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.drawer-file-main small {
+  color: #8a92a8;
+  font-size: 11px;
+}
+
+.submission-list .drawer-files {
+  margin-top: 10px;
+}

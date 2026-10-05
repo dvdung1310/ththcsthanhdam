@@ -44,7 +44,7 @@ import LoginPage from "./LoginPage";
 import NotificationCenter from "./NotificationCenter";
 import AiAssistant from "./AiAssistant";
 import PersonalProfile from "./PersonalProfile";
-import DocumentManagement from "./DocumentManagement";
+import DataLibrary from "./DataLibrary";
 import { apiFetch, getToken, setToken } from "./api";
 import "./PermissionStates.css";
 import "./SystemTypography.css";
@@ -55,7 +55,7 @@ const navItems = [
   ["Tổng quan", LayoutDashboard],
   ["Thống kê", ChartNoAxesColumnIncreasing],
   ["Giao việc", ClipboardCheck],
-  ["Dữ liệu dùng chung", Database],
+  ["Kho dữ liệu", Database],
   ["Quản lý nhân sự", Users],
   ["Cấu hình giao việc", Settings],
   ["Vai trò & quyền", ShieldCheck],
@@ -364,7 +364,7 @@ function App() {
     "Thống kê": "kpi.view",
     "Quản lý nhân sự": "teachers.view",
     "Giao việc": "tasks.view",
-    "Dữ liệu dùng chung": "documents.view",
+    "Kho dữ liệu": "library.view",
     "Cấu hình giao việc": "tasks.assign",
     "Vai trò & quyền": "roles.manage",
   };
@@ -473,8 +473,8 @@ function App() {
             canUpdate={can("tasks.update")}
             selectedTask={selectedTask}
           />
-        ) : active === "Dữ liệu dùng chung" ? (
-          <DocumentManagement canManage={can("documents.manage")} />
+        ) : active === "Kho dữ liệu" ? (
+          <DataLibrary />
         ) : active === "Vai trò & quyền" ? (
           <RolePermissionMatrix />
         ) : active === "Thông tin cá nhân" ? (
