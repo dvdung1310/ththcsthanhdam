@@ -35,7 +35,6 @@ import {
 import { apiFetch, apiJson } from "./api";
 import { useConfirm } from "./ConfirmDialog";
 import { RichTextEditor } from "./TaskManagement";
-import { NameStack } from "./TaskTable";
 import LibraryShareDialog, { ACCESS_LABELS } from "./LibraryShareDialog";
 import ShareFileDialog from "./ShareFileDialog";
 import { downloadFile, formatBytes, openFileInTab } from "./fileUtils";
@@ -471,7 +470,6 @@ export default function DataLibrary() {
                 <tr>
                   <th>Tên</th>
                   <th>Kích thước</th>
-                  <th>Chia sẻ với</th>
                   <th className="dl-col-optional">Chủ sở hữu</th>
                   <th className="dl-col-optional">Cập nhật</th>
                   <th aria-label="Thao tác" />
@@ -493,20 +491,19 @@ export default function DataLibrary() {
                         <span className={`dl-node-icon ${isFolder ? (node.is_system ? "system" : "folder") : "file"}`}>
                           <Icon size={17} />
                         </span>
-                        <span className="dl-name-text">
+                        <span className="dl-name-text" style={{ "--marks": `${((node.shares.length > 0 && !node.is_system) + (isFolder && !node.abilities.can_upload)) * 20}px` }}>
                           <b title={node.name}>{node.name}</b>
                           {node.path?.length > 0 && <small>{node.path.map((p) => p.name).join(" › ")}</small>}
                           {isFolder && node.is_system && <small>Thư mục hệ thống</small>}
                         </span>
+                        {node.shares.length > 0 && !node.is_system && (
+                          <span className="dl-shared-mark" title={`Chia sẻ với: ${node.shares.map((share) => `${share.name} (${ACCESS_LABELS[share.access]})`).join(", ")}`}>
+                            <Users size={13} />
+                          </span>
+                        )}
                         {isFolder && !node.abilities.can_upload && <Lock size={12} className="dl-readonly" aria-label="Chỉ xem" />}
                       </td>
                       <td className="dl-muted">{isFolder ? `${node.children_count ?? 0} mục` : formatBytes(node.size)}</td>
-                      <td>
-                        <NameStack
-                          empty="—"
-                          items={node.shares.map((share, index) => ({ key: `${index}`, label: `${share.name} · ${ACCESS_LABELS[share.access]}`, kind: share.kind === "unit" ? "unit" : "" }))}
-                        />
-                      </td>
                       <td className="dl-col-optional dl-muted">{node.owner?.name ?? "—"}</td>
                       <td className="dl-col-optional dl-muted">{formatDate(node.updated_at)}</td>
                       <td className="dl-row-menu" onClick={(e) => e.stopPropagation()}>
@@ -659,6 +656,31 @@ function InfoRows({ rows }) {
   );
 }
 
+function AccessList({ owner, ownerLabel, shares }) {
+  return (
+    <ul className="dl-access-list">
+      {owner && (
+        <li>
+          <PersonAvatar person={owner} size={30} />
+          <span>{owner.name}</span>
+          <small>{ownerLabel}</small>
+        </li>
+      )}
+      {shares.map((share, index) => (
+        <li key={index}>
+          {share.kind === "user" ? (
+            <PersonAvatar person={share} size={30} />
+          ) : (
+            <i className={`dl-avatar ${share.kind}`} style={{ width: 30, height: 30 }}>{share.kind === "unit" ? <Users size={15} /> : <Globe size={15} />}</i>
+          )}
+          <span>{share.name}</span>
+          <small>{ACCESS_LABELS[share.access]}</small>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 const LEVEL_LABELS = ["—", "Xem", "Tải lên", "Chỉnh sửa", "Quản trị kho"];
 
 function NodeDetail({ node: initial, reloadToken, onClose, onOpen, onDownload, onOpenFolder, onShare, onSaved }) {
@@ -752,27 +774,23 @@ function NodeDetail({ node: initial, reloadToken, onClose, onOpen, onDownload, o
           <h4>Người có quyền truy cập</h4>
           {node.abilities.can_share && <button className="dl-link-btn" onClick={() => onShare(node)}>Quản lý</button>}
         </div>
-        <ul className="dl-access-list">
-          {node.owner && (
-            <li>
-              <PersonAvatar person={node.owner} size={30} />
-              <span>{node.owner.name}</span>
-              <small>Chủ sở hữu</small>
-            </li>
-          )}
-          {node.shares.map((share, index) => (
-            <li key={index}>
-              {share.kind === "user" ? (
-                <PersonAvatar person={share} size={30} />
+        <h5 className="dl-access-group">Chia sẻ trực tiếp</h5>
+        <AccessList owner={node.owner} ownerLabel="Chủ sở hữu" shares={node.shares} />
+        {!node.shares.length && <p className="dl-detail-note">Chưa chia sẻ riêng cho ai.</p>}
+        {(node.inherited ?? []).map((group) => (
+          <div key={group.folder_id}>
+            <h5 className="dl-access-group">
+              Kế thừa từ{" "}
+              {group.can_open ? (
+                <button className="dl-link-btn" onClick={() => onOpenFolder(group.folder_id)}>“{group.folder_name}”</button>
               ) : (
-                <i className={`dl-avatar ${share.kind}`} style={{ width: 30, height: 30 }}>{share.kind === "unit" ? <Users size={15} /> : <Globe size={15} />}</i>
+                <>“{group.folder_name}”</>
               )}
-              <span>{share.name}</span>
-              <small>{ACCESS_LABELS[share.access]}</small>
-            </li>
-          ))}
-        </ul>
-        {!node.shares.length && <p className="dl-detail-note">Chưa chia sẻ riêng. {node.parent_id ? "Quyền được kế thừa từ thư mục cha." : ""}</p>}
+            </h5>
+            <AccessList owner={group.owner} ownerLabel="Chủ thư mục · Chỉnh sửa" shares={group.shares} />
+          </div>
+        ))}
+        <p className="dl-detail-note">Người có quyền quản trị kho luôn xem và sửa được mọi mục.</p>
       </section>
 
       <section>

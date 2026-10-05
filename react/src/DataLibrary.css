@@ -281,7 +281,7 @@ body.dl-resizing {
 }
 
 .dl-name-text {
-  max-width: calc(100% - 64px);
+  max-width: calc(100% - 46px - var(--marks, 0px));
   display: inline-block;
   vertical-align: middle;
 }
@@ -965,4 +965,20 @@ body.dl-resizing {
 
 .dl-link-btn:hover {
   text-decoration: underline;
+}
+
+.dl-shared-mark {
+  margin-left: 6px;
+  display: inline-grid;
+  place-items: center;
+  color: #8a92a8;
+  vertical-align: middle;
+  cursor: help;
+}
+
+.dl-access-group {
+  margin: 4px 0 0;
+  color: #46516a;
+  font-size: 12px;
+  font-weight: 700;
 }
