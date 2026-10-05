@@ -55,7 +55,7 @@ const navItems = [
   ["Tổng quan", LayoutDashboard],
   ["Thống kê", ChartNoAxesColumnIncreasing],
   ["Giao việc", ClipboardCheck],
-  ["Dữ liệu dùng chung", Database],
+  ["Kho dữ liệu", Database],
   ["Quản lý nhân sự", Users],
   ["Cấu hình giao việc", Settings],
   ["Vai trò & quyền", ShieldCheck],
@@ -364,7 +364,7 @@ function App() {
     "Thống kê": "kpi.view",
     "Quản lý nhân sự": "teachers.view",
     "Giao việc": "tasks.view",
-    "Dữ liệu dùng chung": "library.view",
+    "Kho dữ liệu": "library.view",
     "Cấu hình giao việc": "tasks.assign",
     "Vai trò & quyền": "roles.manage",
   };
@@ -473,7 +473,7 @@ function App() {
             canUpdate={can("tasks.update")}
             selectedTask={selectedTask}
           />
-        ) : active === "Dữ liệu dùng chung" ? (
+        ) : active === "Kho dữ liệu" ? (
           <DataLibrary />
         ) : active === "Vai trò & quyền" ? (
           <RolePermissionMatrix />

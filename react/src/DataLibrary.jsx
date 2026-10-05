@@ -6,6 +6,7 @@ import {
   ClipboardPaste,
   Copy,
   Database,
+  Download,
   Eye,
   File,
   FileImage,
@@ -13,6 +14,7 @@ import {
   FileText,
   Folder,
   FolderInput,
+  FolderOpen,
   FolderPlus,
   Info,
   Lock,
@@ -34,7 +36,9 @@ import { RichTextEditor } from "./TaskManagement";
 import { NameStack } from "./TaskTable";
 import LibraryShareDialog, { ACCESS_LABELS } from "./LibraryShareDialog";
 import ShareFileDialog from "./ShareFileDialog";
-import { formatBytes, openFileInTab } from "./fileUtils";
+import { downloadFile, formatBytes, openFileInTab } from "./fileUtils";
+import ActionMenu, { MenuList, menuPosition } from "./ActionMenu";
+import LibraryFolderTree from "./LibraryFolderTree";
 import "./DataLibrary.css";
 
 
@@ -45,6 +49,8 @@ function fileIcon(mime = "") {
   if (mime.includes("pdf") || mime.includes("word") || mime.startsWith("text/")) return FileText;
   return File;
 }
+
+const SIDEBAR_KEY = "thanhdam_library_sidebar";
 
 const formatDate = (value) => (value ? new Date(value).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" }) : "—");
 
@@ -97,15 +103,6 @@ export default function DataLibrary() {
     const timer = setTimeout(() => setSuccess(""), 3500);
     return () => clearTimeout(timer);
   }, [success]);
-  useEffect(() => {
-    const close = () => setMenu(null);
-    window.addEventListener("click", close);
-    window.addEventListener("blur", close);
-    return () => {
-      window.removeEventListener("click", close);
-      window.removeEventListener("blur", close);
-    };
-  }, []);
 
   const openFolder = (id) => {
     setView("library");
@@ -192,12 +189,36 @@ export default function DataLibrary() {
   };
 
   const openFile = (node) => openFileInTab(`/api/library/nodes/${node.id}/download`, node.mime_type).catch((e) => setError(e.message));
+  const openNode = (node) => (node.type === "folder" ? openFolder(node.id) : openFile(node));
+  const copyNode = (node, action) => {
+    setClipboard({ node, action });
+    setSuccess(action === "cut" ? "Đã cắt. Mở thư mục đích và dán (Ctrl+V)." : "Đã sao chép. Mở thư mục đích và dán (Ctrl+V).");
+  };
+
+  const nodeMenu = (node) => [
+    { key: "open", label: "Mở", icon: node.type === "folder" ? FolderOpen : Eye, onClick: () => openNode(node) },
+    node.type === "file" && { key: "download", label: "Tải về", icon: Download, onClick: () => downloadFile(`/api/library/nodes/${node.id}/download`, node.name).catch((e) => setError(e.message)) },
+    node.type === "file" && { key: "detail", label: "Chi tiết", icon: Info, onClick: () => setDetail(node) },
+    node.abilities.can_share && { key: "share", label: "Chia sẻ", icon: Share2, onClick: () => setSharing(node) },
+    { key: "d1", divider: true },
+    node.abilities.can_move && { key: "cut", label: "Cắt", icon: Scissors, shortcut: "Ctrl+X", onClick: () => copyNode(node, "cut") },
+    { key: "copy", label: "Sao chép", icon: Copy, shortcut: "Ctrl+C", onClick: () => copyNode(node, "copy") },
+    node.abilities.can_rename && { key: "rename", label: "Đổi tên", icon: Pencil, onClick: () => setNameDialog({ mode: "rename", node }) },
+    node.abilities.can_delete && { key: "d2", divider: true },
+    node.abilities.can_delete && { key: "delete", label: "Xóa", icon: Trash2, shortcut: "Del", danger: true, onClick: () => remove(node) },
+  ];
+  const backgroundMenu = () => [
+    { key: "paste", label: clipboard ? `Dán “${clipboard.node.name}”` : "Dán", icon: ClipboardPaste, shortcut: "Ctrl+V", disabled: !clipboard || !canUploadHere, onClick: paste },
+    canUploadHere && { key: "d", divider: true },
+    canUploadHere && { key: "folder", label: "Thư mục mới", icon: FolderPlus, onClick: () => setNameDialog({ mode: "create" }) },
+    canUploadHere && { key: "upload", label: "Tải file lên", icon: Upload, onClick: () => fileInput.current?.click() },
+  ];
 
   const openContextMenu = (event, node = null) => {
     event.preventDefault();
     event.stopPropagation();
     if (node) setSelected(node.id);
-    setMenu({ x: Math.min(event.clientX, window.innerWidth - 220), y: Math.min(event.clientY, window.innerHeight - 320), node });
+    setMenu({ position: menuPosition(event.clientX, event.clientY), items: node ? nodeMenu(node) : backgroundMenu() });
   };
 
   useEffect(() => {
@@ -207,13 +228,11 @@ export default function DataLibrary() {
       const key = event.key.toLowerCase();
       if ((event.ctrlKey || event.metaKey) && key === "c" && node) {
         event.preventDefault();
-        setClipboard({ node, action: "copy" });
-        setSuccess("Đã sao chép. Mở thư mục đích và dán (Ctrl+V).");
+        copyNode(node, "copy");
       }
       if ((event.ctrlKey || event.metaKey) && key === "x" && node?.abilities.can_move) {
         event.preventDefault();
-        setClipboard({ node, action: "cut" });
-        setSuccess("Đã cắt. Mở thư mục đích và dán (Ctrl+V).");
+        copyNode(node, "cut");
       }
       if ((event.ctrlKey || event.metaKey) && key === "v" && clipboard && canUploadHere) {
         event.preventDefault();
@@ -223,15 +242,37 @@ export default function DataLibrary() {
         event.preventDefault();
         remove(node);
       }
+      if (event.key === "Enter" && node) {
+        event.preventDefault();
+        openNode(node);
+      }
     };
     window.addEventListener("keydown", shortcut);
     return () => window.removeEventListener("keydown", shortcut);
   });
 
+  const [sidebarWidth, setSidebarWidth] = useState(() => Number(localStorage.getItem(SIDEBAR_KEY)) || 260);
+  useEffect(() => localStorage.setItem(SIDEBAR_KEY, String(sidebarWidth)), [sidebarWidth]);
+  const startResize = (event) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = sidebarWidth;
+    const move = (e) => setSidebarWidth(Math.min(460, Math.max(190, startWidth + e.clientX - startX)));
+    const up = () => {
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+      document.body.classList.remove("dl-resizing");
+    };
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+    document.body.classList.add("dl-resizing");
+  };
+
   const breadcrumbs = payload?.folder?.breadcrumbs ?? [];
+  const showFolders = payload && (payload.meta.current_page === 1 || !payload.data.length) ? payload.folders : [];
 
   return (
-    <div className="data-library">
+    <div className="data-library" style={{ gridTemplateColumns: `${sidebarWidth}px 8px minmax(0, 1fr)` }}>
       {success && (
         <div className="success-toast" role="status">
           <span>
@@ -247,17 +288,25 @@ export default function DataLibrary() {
         </div>
       )}
       <aside className="dl-sidebar">
-        <button className={view === "library" && !folderId ? "active" : ""} onClick={() => openFolder(null)}>
-          <Database size={17} />
-          <span>Kho dữ liệu</span>
-        </button>
-        <FolderTree tree={payload?.tree ?? []} current={view === "library" ? folderId : null} onOpen={openFolder} />
-        <hr />
-        <button className={view === "mine" ? "active" : ""} onClick={() => { setView("mine"); setDetail(null); }}>
+        <div className="dl-sidebar-scroll">
+          <LibraryFolderTree
+            folders={payload?.tree ?? []}
+            selectedId={view === "library" ? folderId : null}
+            revealId={view === "library" ? folderId : null}
+            onSelect={(folder) => openFolder(folder.id)}
+            storageKey="thanhdam_library_tree"
+            rootLabel="Kho dữ liệu"
+            rootIcon={Database}
+            rootSelected={view === "library" && !folderId}
+            onSelectRoot={() => openFolder(null)}
+          />
+        </div>
+        <button className={`dl-mine-link ${view === "mine" ? "active" : ""}`} onClick={() => { setView("mine"); setDetail(null); }}>
           <UserRound size={17} />
           <span>Tệp của tôi</span>
         </button>
       </aside>
+      <div className="dl-splitter" onMouseDown={startResize} onDoubleClick={() => setSidebarWidth(260)} role="separator" aria-orientation="vertical" aria-label="Kéo để đổi độ rộng" />
 
       {view === "mine" ? (
         <MyFiles onError={setError} onSuccess={setSuccess} error={error} />
@@ -302,9 +351,9 @@ export default function DataLibrary() {
                   <button className="primary-btn" onClick={() => fileInput.current?.click()} disabled={uploading}>
                     <Upload size={16} /> {uploading ? "Đang tải lên..." : "Tải file lên"}
                   </button>
-                  <input ref={fileInput} type="file" multiple hidden onChange={(e) => uploadFiles(e.target.files)} accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.zip,.rar" />
                 </div>
               )}
+              <input ref={fileInput} type="file" multiple hidden onChange={(e) => uploadFiles(e.target.files)} accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.zip,.rar" />
             </div>
           </section>
 
@@ -333,152 +382,86 @@ export default function DataLibrary() {
             )}
             {dragging && <div className="dl-drop-hint"><Upload size={22} /> Thả file để tải lên thư mục này</div>}
 
-            {!!payload?.folders.length && (
-              <div className="dl-folder-grid">
-                {payload.folders.map((folder) => (
-                  <button
-                    key={folder.id}
-                    className={selected === folder.id ? "selected" : ""}
-                    onClick={(e) => { e.stopPropagation(); setSelected(folder.id); }}
-                    onDoubleClick={() => openFolder(folder.id)}
-                    onContextMenu={(e) => openContextMenu(e, folder)}
-                  >
-                    <span className={`dl-folder-icon ${folder.is_system ? "system" : ""}`}>
-                      <Folder size={22} />
-                    </span>
-                    <span className="dl-folder-text">
-                      <b>{folder.name}</b>
-                      <small>
-                        {folder.children_count} mục
-                        {folder.is_system && " · Thư mục hệ thống"}
-                      </small>
-                    </span>
-                    {!folder.abilities.can_upload && <Lock size={13} className="dl-readonly" aria-label="Chỉ xem" />}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            <div className="dl-table-wrap">
-              <table className="dl-table">
-                <thead>
-                  <tr>
-                    <th>Tên</th>
-                    <th>Dung lượng</th>
-                    <th>Chia sẻ với</th>
-                    <th>Người tải lên</th>
-                    <th>Cập nhật</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {payload?.data.map((node) => {
-                    const Icon = fileIcon(node.mime_type);
-                    return (
-                      <tr
-                        key={node.id}
-                        className={selected === node.id ? "selected" : ""}
-                        onClick={(e) => { e.stopPropagation(); setSelected(node.id); }}
-                        onDoubleClick={() => openFile(node)}
-                        onContextMenu={(e) => openContextMenu(e, node)}
-                      >
-                        <td className="dl-name">
-                          <Icon size={18} />
-                          <span>
-                            <b title={node.name}>{node.name}</b>
-                            {node.path?.length > 0 && <small>{node.path.map((p) => p.name).join(" › ")}</small>}
-                          </span>
-                        </td>
-                        <td>{formatBytes(node.size)}</td>
-                        <td>
-                          <NameStack
-                            empty="—"
-                            items={node.shares.map((share, index) => ({ key: `${index}`, label: `${share.name} · ${ACCESS_LABELS[share.access]}`, kind: share.kind === "unit" ? "unit" : "" }))}
-                          />
-                        </td>
-                        <td>{node.owner?.name ?? "—"}</td>
-                        <td>{formatDate(node.updated_at)}</td>
-                        <td>
-                          <div className="row-actions">
-                            <button title="Mở" onClick={(e) => { e.stopPropagation(); openFile(node); }}>
-                              <Eye size={15} />
-                            </button>
-                            <button title="Chi tiết" onClick={(e) => { e.stopPropagation(); setDetail(node); }}>
-                              <Info size={15} />
-                            </button>
-                            {node.abilities.can_share && (
-                              <button title="Chia sẻ" onClick={(e) => { e.stopPropagation(); setSharing(node); }}>
-                                <Share2 size={15} />
-                              </button>
-                            )}
-                            {node.abilities.can_delete && (
-                              <button className="delete" title="Xóa" onClick={(e) => { e.stopPropagation(); remove(node); }}>
-                                <Trash2 size={15} />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              {loading && !payload ? (
-                <div className="empty-state"><Database className="loading-icon" size={34} /><b>Đang tải...</b></div>
-              ) : (
-                payload && !payload.data.length && !payload.folders.length && (
-                  <div className="empty-state">
-                    <Folder size={34} />
-                    <b>{search ? "Không tìm thấy mục phù hợp" : "Thư mục trống"}</b>
-                    {canUploadHere && !search && <span>Kéo thả file vào đây hoặc bấm “Tải file lên”.</span>}
-                  </div>
-                )
-              )}
-            </div>
-            {payload && payload.meta.last_page > 1 && (
-              <div className="pagination">
-                <span>
-                  {payload.meta.total} file · trang {payload.meta.current_page}/{payload.meta.last_page}
-                </span>
-                <div>
-                  <button disabled={page === 1} onClick={() => setPage(page - 1)}><ChevronLeft size={16} /></button>
-                  <button disabled={page === payload.meta.last_page} onClick={() => setPage(page + 1)}><ChevronRight size={16} /></button>
+            <table className="dl-table">
+              <thead>
+                <tr>
+                  <th>Tên</th>
+                  <th>Kích thước</th>
+                  <th>Chia sẻ với</th>
+                  <th>Chủ sở hữu</th>
+                  <th>Cập nhật</th>
+                  <th aria-label="Thao tác" />
+                </tr>
+              </thead>
+              <tbody>
+                {[...showFolders, ...(payload?.data ?? [])].map((node) => {
+                  const isFolder = node.type === "folder";
+                  const Icon = isFolder ? Folder : fileIcon(node.mime_type);
+                  return (
+                    <tr
+                      key={node.id}
+                      className={`${selected === node.id ? "selected" : ""} ${isFolder ? "folder" : ""}`}
+                      onClick={(e) => { e.stopPropagation(); setSelected(node.id); }}
+                      onDoubleClick={() => openNode(node)}
+                      onContextMenu={(e) => openContextMenu(e, node)}
+                    >
+                      <td className="dl-name">
+                        <span className={`dl-node-icon ${isFolder ? (node.is_system ? "system" : "folder") : "file"}`}>
+                          <Icon size={17} />
+                        </span>
+                        <span className="dl-name-text">
+                          <b title={node.name}>{node.name}</b>
+                          {node.path?.length > 0 && <small>{node.path.map((p) => p.name).join(" › ")}</small>}
+                          {isFolder && node.is_system && <small>Thư mục hệ thống</small>}
+                        </span>
+                        {isFolder && !node.abilities.can_upload && <Lock size={12} className="dl-readonly" aria-label="Chỉ xem" />}
+                      </td>
+                      <td className="dl-muted">{isFolder ? `${node.children_count ?? 0} mục` : formatBytes(node.size)}</td>
+                      <td>
+                        <NameStack
+                          empty="—"
+                          items={node.shares.map((share, index) => ({ key: `${index}`, label: `${share.name} · ${ACCESS_LABELS[share.access]}`, kind: share.kind === "unit" ? "unit" : "" }))}
+                        />
+                      </td>
+                      <td className="dl-muted">{node.owner?.name ?? "—"}</td>
+                      <td className="dl-muted">{formatDate(node.updated_at)}</td>
+                      <td className="dl-row-menu" onClick={(e) => e.stopPropagation()}>
+                        <ActionMenu items={nodeMenu(node)} />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {loading && !payload ? (
+              <div className="empty-state"><Database className="loading-icon" size={34} /><b>Đang tải...</b></div>
+            ) : (
+              payload && !payload.data.length && !payload.folders.length && (
+                <div className="empty-state">
+                  <Folder size={34} />
+                  <b>{search ? "Không tìm thấy mục phù hợp" : "Thư mục trống"}</b>
+                  {canUploadHere && !search && <span>Kéo thả file vào đây hoặc bấm “Tải file lên”.</span>}
                 </div>
-              </div>
+              )
             )}
           </section>
+          {payload && payload.meta.last_page > 1 && (
+            <footer className="dl-pagination">
+              <span>
+                {payload.meta.total} file · trang {payload.meta.current_page}/{payload.meta.last_page}
+              </span>
+              <div>
+                <button disabled={page === 1} onClick={() => setPage(page - 1)}><ChevronLeft size={16} /></button>
+                <button disabled={page === payload.meta.last_page} onClick={() => setPage(page + 1)}><ChevronRight size={16} /></button>
+              </div>
+            </footer>
+          )}
         </main>
       )}
 
       {detail && <NodeDetail key={detail.id} node={detail} onClose={() => setDetail(null)} onOpen={openFile} onShare={setSharing} onSaved={async (message) => { await done(message); }} />}
 
-      {menu && (
-        <div className="explorer-context-menu" style={{ left: menu.x, top: menu.y }} onClick={(e) => e.stopPropagation()}>
-          {menu.node ? (
-            <>
-              <button onClick={() => { setMenu(null); menu.node.type === "folder" ? openFolder(menu.node.id) : openFile(menu.node); }}><Eye size={16} />Mở</button>
-              {menu.node.type === "file" && <button onClick={() => { setMenu(null); setDetail(menu.node); }}><Info size={16} />Chi tiết</button>}
-              {menu.node.abilities.can_share && <button onClick={() => { setMenu(null); setSharing(menu.node); }}><Share2 size={16} />Chia sẻ</button>}
-              <hr />
-              {menu.node.abilities.can_move && <button onClick={() => { setMenu(null); setClipboard({ node: menu.node, action: "cut" }); setSuccess("Đã cắt. Mở thư mục đích và dán."); }}><Scissors size={16} />Cắt <kbd>Ctrl+X</kbd></button>}
-              <button onClick={() => { setMenu(null); setClipboard({ node: menu.node, action: "copy" }); setSuccess("Đã sao chép. Mở thư mục đích và dán."); }}><Copy size={16} />Sao chép <kbd>Ctrl+C</kbd></button>
-              {menu.node.abilities.can_rename && <button onClick={() => { setMenu(null); setNameDialog({ mode: "rename", node: menu.node }); }}><Pencil size={16} />Đổi tên</button>}
-              {menu.node.abilities.can_delete && <button className="danger" onClick={() => { setMenu(null); remove(menu.node); }}><Trash2 size={16} />Xóa <kbd>Del</kbd></button>}
-            </>
-          ) : (
-            <>
-              <button disabled={!clipboard || !canUploadHere} onClick={() => { setMenu(null); paste(); }}><ClipboardPaste size={16} />Dán <kbd>Ctrl+V</kbd></button>
-              {canUploadHere && (
-                <>
-                  <hr />
-                  <button onClick={() => { setMenu(null); setNameDialog({ mode: "create" }); }}><FolderPlus size={16} />Thư mục mới</button>
-                  <button onClick={() => { setMenu(null); fileInput.current?.click(); }}><Upload size={16} />Tải file lên</button>
-                </>
-              )}
-            </>
-          )}
-        </div>
-      )}
+      {menu && <MenuList items={menu.items} position={menu.position} onClose={() => setMenu(null)} />}
 
       {nameDialog && (
         <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setNameDialog(null)}>
@@ -504,24 +487,6 @@ export default function DataLibrary() {
           }}
         />
       )}
-    </div>
-  );
-}
-
-function FolderTree({ tree, current, onOpen, parentId = null, depth = 0 }) {
-  const nodes = tree.filter((folder) => folder.parent_id === parentId);
-  if (!nodes.length) return null;
-  return (
-    <div className="dl-tree">
-      {nodes.map((folder) => (
-        <div key={folder.id}>
-          <button className={current === folder.id ? "active" : ""} style={{ paddingLeft: 12 + depth * 14 }} onClick={() => onOpen(folder.id)} title={folder.name}>
-            <Folder size={15} className={folder.is_system ? "system" : ""} />
-            <span>{folder.name}</span>
-          </button>
-          <FolderTree tree={tree} current={current} onOpen={onOpen} parentId={folder.id} depth={depth + 1} />
-        </div>
-      ))}
     </div>
   );
 }
