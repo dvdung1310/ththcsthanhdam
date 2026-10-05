@@ -9,6 +9,8 @@ import {
   ClipboardCheck,
   Clock3,
   Eye,
+  Download,
+  ExternalLink,
   FileText,
   FolderInput,
   Filter,
@@ -56,7 +58,8 @@ import { apiFetch } from "./api";
 import { ColumnPicker, NameStack, useScrollEdges, useTaskColumns } from "./TaskTable";
 import PeoplePicker, { roleChips, useOutsideClose } from "./PeoplePicker";
 import ShareFileDialog from "./ShareFileDialog";
-import { formatBytes, openFileInTab } from "./fileUtils";
+import { downloadFile, formatBytes, openFileInTab } from "./fileUtils";
+import ActionMenu from "./ActionMenu";
 import { useConfirm } from "./ConfirmDialog";
 
 const labels = {
@@ -1118,48 +1121,39 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
               {!!viewing.library_files?.length && (
                 <section className="drawer-section">
                   <h4>File từ kho dữ liệu <em>{viewing.library_files.length}</em></h4>
-                  <div className="detail-attachments">
-                    {viewing.library_files.map((file) => (
-                      <button
-                        type="button"
-                        key={file.id}
-                        onClick={() => openFileInTab(file.download_url.replace(/^.*\/api\//, "/api/"), file.mime_type).catch((e) => setError(e.message))}
-                        title="Mở file trong tab mới"
-                      >
-                        <i>
-                          <FileText size={16} />
-                        </i>
-                        <div>
-                          <b>{file.name}</b>
-                          <small>{formatFileSize(file.size)}</small>
-                        </div>
-                        <Eye size={16} />
-                      </button>
-                    ))}
+                  <div className="drawer-files">
+                    {viewing.library_files.map((file) => {
+                      const url = file.download_url.replace(/^.*\/api\//, "/api/");
+                      return (
+                        <DrawerFile
+                          key={file.id}
+                          name={file.name}
+                          size={file.size}
+                          icon={FileText}
+                          onOpen={() => openFileInTab(url, file.mime_type).catch((e) => setError(e.message))}
+                          onDownload={() => downloadFile(url, file.name).catch((e) => setError(e.message))}
+                        />
+                      );
+                    })}
                   </div>
                 </section>
               )}
               {!!viewing.attachments?.length && (
                 <section className="drawer-section">
                   <h4>File đính kèm <em>{viewing.attachments.length}</em></h4>
-                  <div className="detail-attachments">
-                    {viewing.attachments.map((file) => (
-                      <button
-                        type="button"
-                        key={file.id}
-                        onClick={() => viewTaskAttachment(file)}
-                        title="Mở file trong tab mới"
-                      >
-                        <i>
-                          <Paperclip size={16} />
-                        </i>
-                        <div>
-                          <b>{file.original_name}</b>
-                          <small>{formatFileSize(file.size)}</small>
-                        </div>
-                        <Eye size={16} />
-                      </button>
-                    ))}
+                  <div className="drawer-files">
+                    {viewing.attachments.map((file) => {
+                      const url = `/api/tasks/${viewing.id}/attachments/${file.id}`;
+                      return (
+                        <DrawerFile
+                          key={file.id}
+                          name={file.original_name}
+                          size={file.size}
+                          onOpen={() => viewTaskAttachment(file)}
+                          onDownload={() => downloadFile(url, file.original_name).catch((e) => setError(e.message))}
+                        />
+                      );
+                    })}
                   </div>
                 </section>
               )}
@@ -1199,33 +1193,16 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
                           </div>
                         )}
                         {!!submission.files?.length && (
-                          <div className="submission-resources">
+                          <div className="drawer-files">
                             {submission.files.map((file) => (
-                              <button
-                                type="button"
+                              <DrawerFile
                                 key={file.id}
-                                onClick={() => viewSubmissionAttachment(submission, file)}
-                                title="Mở file bài nộp trong tab mới"
-                              >
-                                <Paperclip size={15} />
-                                <span>{file.original_name}</span>
-                                <small>{formatFileSize(file.size)}</small>
-                                <Eye size={15} />
-                                {file.can_share && (
-                                  <span
-                                    role="button"
-                                    tabIndex={0}
-                                    className="submission-share"
-                                    title="Chia sẻ vào kho dữ liệu"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      setSharingFile({ id: file.id, name: file.original_name });
-                                    }}
-                                  >
-                                    <FolderInput size={14} /> Chia sẻ
-                                  </span>
-                                )}
-                              </button>
+                                name={file.original_name}
+                                size={file.size}
+                                onOpen={() => viewSubmissionAttachment(submission, file)}
+                                onDownload={() => downloadFile(`/api/tasks/${viewing.id}/submissions/${submission.id}/attachments/${file.id}`, file.original_name).catch((e) => setError(e.message))}
+                                onShare={file.can_share ? () => setSharingFile({ id: file.id, name: file.original_name }) : null}
+                              />
                             ))}
                           </div>
                         )}
@@ -1591,6 +1568,30 @@ function formatFileSize(bytes) {
   if (!bytes) return "0 KB";
   if (bytes < 1024 * 1024) return `${Math.ceil(bytes / 1024)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function DrawerFile({ name, size, icon: Icon = Paperclip, onOpen, onDownload, onShare }) {
+  return (
+    <div className="drawer-file">
+      <button type="button" className="drawer-file-main" onClick={onOpen} title="Mở file trong tab mới">
+        <i>
+          <Icon size={16} />
+        </i>
+        <span>
+          <b>{name}</b>
+          <small>{formatFileSize(size)}</small>
+        </span>
+      </button>
+      <ActionMenu
+        items={[
+          { key: "open", label: "Mở trong tab mới", icon: ExternalLink, onClick: onOpen },
+          { key: "download", label: "Tải về", icon: Download, onClick: onDownload },
+          onShare && { key: "d", divider: true },
+          onShare && { key: "share", label: "Chia sẻ vào kho", icon: FolderInput, onClick: onShare },
+        ]}
+      />
+    </div>
+  );
 }
 
 function humanSpan(ms) {
