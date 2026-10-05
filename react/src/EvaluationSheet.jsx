@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useBlocker, useParams } from "react-router";
 import {
   ArrowLeft,
+  Check,
   CheckCircle2,
   ChevronDown,
   ClipboardCopy,
+  CloudOff,
+  LoaderCircle,
+  Plus,
   FileText,
   ListChecks,
   Paperclip,
   Printer,
-  Save,
   Send,
   TriangleAlert,
   Undo2,
@@ -19,10 +22,12 @@ import { apiFetch, apiJson } from "./api";
 import { useConfirm } from "./ConfirmDialog";
 import FilePreview from "./FilePreview";
 import { formatBytes } from "./fileUtils";
-import { STATUS_TONES, computeTotals, formatDay, formatMoment, formatScore, maxBase, parseScore, suggestGrade } from "./evaluationUtils";
+import { SCORE_PATTERN, STATUS_TONES, computeTotals, formatDay, formatMoment, formatScore, maxBase, normalizeScore, parseScore, scoreError, suggestGrade } from "./evaluationUtils";
 import "./Evaluation.css";
 
 const TASK_STATUS = { not_started: "Chưa thực hiện", in_progress: "Đang thực hiện", waiting_approval: "Chờ duyệt", completed: "Hoàn thành" };
+const AUTOSAVE_DELAY = 1500;
+const CLEAN = { self: false, unit: false, review: false };
 const toInput = (value) => (value === null || value === undefined ? "" : String(value).replace(".", ","));
 
 function buildRows(data) {
@@ -41,6 +46,12 @@ function buildRows(data) {
   return rows;
 }
 
+const reviewFields = (form) => ({
+  has_violation: form.has_violation,
+  no_grade_reason: form.no_grade ? form.no_grade_reason || "Không xếp loại tháng" : null,
+  grade: form.grade || null,
+});
+
 const buildForm = (data) => ({
   is_homeroom: data.is_homeroom,
   duties: data.duties ?? "",
@@ -57,8 +68,12 @@ export default function EvaluationSheet() {
   const [data, setData] = useState(null);
   const [rows, setRows] = useState({});
   const [form, setForm] = useState(null);
-  const [dirty, setDirty] = useState({ self: false, unit: false, review: false });
+  const [dirty, setDirty] = useState(CLEAN);
   const [saving, setSaving] = useState(false);
+  const [autosave, setAutosave] = useState({ state: "idle", at: null, error: "" });
+  const [version, setVersion] = useState(0);
+  const latest = useRef({});
+  const inflight = useRef(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [preview, setPreview] = useState(null);
@@ -68,7 +83,7 @@ export default function EvaluationSheet() {
     setData(detail);
     setRows(buildRows(detail));
     setForm(buildForm(detail));
-    setDirty({ self: false, unit: false, review: false });
+    setDirty(CLEAN);
   }, []);
 
   const load = useCallback(async () => {
@@ -89,15 +104,18 @@ export default function EvaluationSheet() {
   }, [success]);
 
   const anyDirty = dirty.self || dirty.unit || dirty.review;
+  const editableColumns = data ? [data.abilities.can_self_score && "self", data.abilities.can_unit_score && "unit", data.abilities.can_review && "final"].filter(Boolean) : [];
+  const invalidList = data ? editableColumns.flatMap((column) => invalidCells(column)) : [];
+  const unsaved = anyDirty || invalidList.length > 0 || autosave.state === "error";
   useEffect(() => {
-    if (!anyDirty) return undefined;
+    if (!unsaved) return undefined;
     const warn = (event) => {
       event.preventDefault();
       event.returnValue = "";
     };
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [anyDirty]);
+  }, [unsaved]);
 
   const abilities = data?.abilities ?? {};
   const selfMode = abilities.can_self_score;
@@ -120,45 +138,140 @@ export default function EvaluationSheet() {
   const resultTotal = totals?.[resultColumn]?.total ?? 0;
   const suggested = data && !form?.no_grade ? suggestGrade(data.grades, resultTotal, isHomeroom, form?.has_violation) : null;
 
+  const touch = (group) => {
+    setDirty((current) => ({ ...current, [group]: true }));
+    setVersion((current) => current + 1);
+  };
   const setCell = (criterionId, field, value, group) => {
     setRows((current) => ({ ...current, [criterionId]: { ...current[criterionId], [field]: value } }));
-    setDirty((current) => ({ ...current, [group]: true }));
+    touch(group);
   };
   const setField = (field, value, group) => {
     setForm((current) => ({ ...current, [field]: value }));
-    setDirty((current) => ({ ...current, [group]: true }));
+    touch(group);
   };
 
-  const invalidCells = (column) =>
+  function invalidCells(column) {
+    return data.sections
+      .filter((section) => !section.homeroom_only || (form?.is_homeroom ?? false))
+      .flatMap((section) => section.criteria.filter((criterion) => scoreError(rows[criterion.id]?.[`${column}_score`], criterion.max_score)));
+  }
+
+  const payload = (column, withNote = true, source = rows) =>
     data.sections.flatMap((section) =>
-      section.criteria.filter((criterion) => {
-        const value = parseScore(rows[criterion.id]?.[`${column}_score`]);
-        return value !== null && (Number.isNaN(value) || value < 0 || value > criterion.max_score);
-      }),
+      section.criteria
+        .filter((criterion) => !scoreError(source[criterion.id]?.[`${column}_score`], criterion.max_score))
+        .map((criterion) => ({
+          criterion_id: criterion.id,
+          score: parseScore(source[criterion.id]?.[`${column}_score`]),
+          ...(withNote ? { note: source[criterion.id]?.[`${column}_note`] || null } : {}),
+        })),
     );
 
-  const payload = (column, withNote = true) =>
-    data.sections.flatMap((section) =>
-      section.criteria.map((criterion) => ({
-        criterion_id: criterion.id,
-        score: parseScore(rows[criterion.id]?.[`${column}_score`]),
-        ...(withNote ? { note: rows[criterion.id]?.[`${column}_note`] || null } : {}),
-      })),
-    );
+  const focusInvalid = () => {
+    const input = document.querySelector(".ev-score-input.invalid input");
+    input?.scrollIntoView({ behavior: "smooth", block: "center" });
+    input?.focus({ preventScroll: true });
+  };
 
-  const guardInvalid = (column) => {
-    const invalid = invalidCells(column);
+  const guardInvalid = (...columns) => {
+    const invalid = columns.flatMap((column) => invalidCells(column));
     if (invalid.length) {
-      setError(`Điểm không hợp lệ ở tiêu chí “${invalid[0].title}” (tối đa ${formatScore(invalid[0].max_score)}).`);
+      setError(`Còn ${invalid.length} ô điểm không hợp lệ (đầu tiên: “${invalid[0].title}”, tối đa ${formatScore(invalid[0].max_score)}). Sửa lại trước khi tiếp tục.`);
+      focusInvalid();
       return true;
     }
     return false;
   };
 
+  const draftRequest = (group, snapshot) => {
+    const { rows: source, form: fields } = snapshot;
+    if (group === "self") {
+      return apiJson(`/api/evaluations/${data.id}/self`, {
+        method: "PUT",
+        body: { is_homeroom: fields.is_homeroom, duties: fields.duties, results: fields.results, scores: payload("self", true, source), submit: false },
+      });
+    }
+    if (group === "unit") {
+      return apiJson(`/api/evaluations/${data.id}/unit`, { method: "PUT", body: { is_homeroom: fields.is_homeroom, scores: payload("unit", true, source), complete: false } });
+    }
+    return apiJson(`/api/evaluations/${data.id}/review`, { method: "PUT", body: { ...reviewFields(fields), scores: payload("final", false, source), approve: false } });
+  };
+
+  const persist = async () => {
+    if (inflight.current) await inflight.current;
+    const { dirty: pending, version: startVersion } = latest.current;
+    const groups = Object.keys(pending).filter((group) => pending[group]);
+    if (!groups.length || !data) return true;
+    const snapshot = { rows: latest.current.rows, form: latest.current.form };
+    setAutosave((current) => ({ ...current, state: "saving" }));
+    const job = (async () => {
+      try {
+        let detail = null;
+        for (const group of groups) detail = (await draftRequest(group, snapshot)).data;
+        setData(detail);
+        if (latest.current.version === startVersion) setDirty(CLEAN);
+        setAutosave({ state: "saved", at: new Date(), error: "" });
+        return true;
+      } catch (e) {
+        setAutosave({ state: "error", at: null, error: e.message });
+        return false;
+      } finally {
+        inflight.current = null;
+      }
+    })();
+    inflight.current = job;
+    return job;
+  };
+
+  latest.current = { ...latest.current, rows, form, dirty, version, persist, invalidCount: invalidList.length, autosaveState: autosave.state };
+
+  useEffect(() => {
+    if (!version || !anyDirty) return undefined;
+    const timer = setTimeout(() => latest.current.persist(), AUTOSAVE_DELAY);
+    return () => clearTimeout(timer);
+  }, [version, anyDirty]);
+
+  useEffect(() => {
+    const flush = () => document.visibilityState === "hidden" && latest.current.persist();
+    document.addEventListener("visibilitychange", flush);
+    return () => document.removeEventListener("visibilitychange", flush);
+  }, []);
+
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => unsaved && currentLocation.pathname !== nextLocation.pathname);
+  useEffect(() => {
+    if (blocker.state !== "blocked") return;
+    (async () => {
+      const saved = await latest.current.persist();
+      const { invalidCount } = latest.current;
+      if (saved && !invalidCount) {
+        blocker.proceed();
+        return;
+      }
+      const leave = await confirm({
+        tone: "danger",
+        icon: TriangleAlert,
+        title: "Có thay đổi chưa được lưu",
+        message: invalidCount
+          ? `Còn ${invalidCount} ô điểm không hợp lệ nên chưa được lưu. Nếu rời trang, các giá trị này sẽ mất; các ô hợp lệ khác đã được lưu.`
+          : "Không lưu được thay đổi gần nhất (mất kết nối hoặc lỗi máy chủ). Nếu rời trang, thay đổi này sẽ mất.",
+        confirmText: "Rời trang",
+        cancelText: "Ở lại",
+      });
+      if (leave) blocker.proceed();
+      else {
+        blocker.reset();
+        if (invalidCount) focusInvalid();
+      }
+    })();
+  }, [blocker.state]);
+
+
   const save = async (request, message) => {
     setSaving(true);
     setError("");
     try {
+      if (inflight.current) await inflight.current;
       const result = await request();
       reset(result.data);
       setSuccess(message ?? result.message);
@@ -174,6 +287,7 @@ export default function EvaluationSheet() {
   const saveSelf = async (submit = false) => {
     if (guardInvalid("self")) return;
     if (submit) {
+      const unexplained = deductedWithoutNote("self");
       const empty = data.sections
         .filter((s) => s.kind !== "bonus" && (!s.homeroom_only || isHomeroom))
         .flatMap((s) => s.criteria)
@@ -185,6 +299,7 @@ export default function EvaluationSheet() {
       const warnings = [
         empty.length ? `${empty.length} tiêu chí chưa chấm (tính là 0 điểm).` : null,
         noEvidence.length ? `${noEvidence.length} tiêu chí cần minh chứng nhưng chưa có minh chứng.` : null,
+        unexplained.length ? `${unexplained.length} tiêu chí bị trừ điểm nhưng chưa ghi lý do.` : null,
       ].filter(Boolean);
       const ok = await confirm({
         tone: warnings.length ? "danger" : undefined,
@@ -202,45 +317,46 @@ export default function EvaluationSheet() {
     );
   };
 
-  const saveUnitAndReview = async (complete = false) => {
-    if ((unitMode && guardInvalid("unit")) || (reviewMode && guardInvalid("final"))) return;
-    if (complete) {
-      const empty = data.sections
-        .filter((s) => !s.homeroom_only || isHomeroom)
-        .filter((s) => s.kind !== "bonus")
-        .flatMap((s) => s.criteria)
-        .filter((c) => parseScore(rows[c.id]?.unit_score) === null);
-      if (empty.length) {
-        const ok = await confirm({ tone: "danger", title: "Còn tiêu chí chưa chấm", message: `${empty.length} tiêu chí chưa có điểm tổ chấm và sẽ tính là 0. Vẫn hoàn tất?`, confirmText: "Hoàn tất" });
-        if (!ok) return;
-      }
+  const completeUnit = async () => {
+    if (guardInvalid("unit")) return;
+    const empty = data.sections
+      .filter((s) => !s.homeroom_only || isHomeroom)
+      .filter((s) => s.kind !== "bonus")
+      .flatMap((s) => s.criteria)
+      .filter((c) => parseScore(rows[c.id]?.unit_score) === null);
+    const unexplained = deductedWithoutNote("unit");
+    if (empty.length || unexplained.length) {
+      const ok = await confirm({
+        tone: empty.length ? "danger" : undefined,
+        title: "Hoàn tất chấm phiếu?",
+        message: [
+          empty.length ? `${empty.length} tiêu chí chưa có điểm tổ chấm và sẽ tính là 0.` : null,
+          unexplained.length ? `${unexplained.length} tiêu chí bị trừ điểm nhưng chưa ghi lý do.` : null,
+        ].filter(Boolean).join(" "),
+        confirmText: "Hoàn tất",
+      });
+      if (!ok) return;
     }
-    setSaving(true);
-    setError("");
-    try {
-      let result = null;
-      if (unitMode && (dirty.unit || complete || !reviewMode)) {
-        result = await apiJson(`/api/evaluations/${data.id}/unit`, { method: "PUT", body: { is_homeroom: form.is_homeroom, scores: payload("unit"), complete } });
-      }
-      if (reviewMode && (dirty.review || !result)) {
-        result = await apiJson(`/api/evaluations/${data.id}/review`, {
-          method: "PUT",
-          body: {
-            has_violation: form.has_violation,
-            no_grade_reason: form.no_grade ? form.no_grade_reason || "Không xếp loại tháng" : null,
-            grade: form.grade || null,
-            scores: payload("final", false),
-          },
-        });
-      }
-      reset(result.data);
-      setSuccess(complete ? "Đã hoàn tất chấm phiếu." : result.message);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setSaving(false);
-    }
+    await save(() => apiJson(`/api/evaluations/${data.id}/unit`, { method: "PUT", body: { is_homeroom: form.is_homeroom, scores: payload("unit"), complete: true } }), "Đã hoàn tất chấm phiếu.");
   };
+
+  const approve = async () => {
+    if (guardInvalid(...(unitMode ? ["unit", "final"] : ["final"]))) return;
+    await save(async () => {
+      if (unitMode && dirty.unit) await apiJson(`/api/evaluations/${data.id}/unit`, { method: "PUT", body: { is_homeroom: form.is_homeroom, scores: payload("unit"), complete: false } });
+      return apiJson(`/api/evaluations/${data.id}/review`, { method: "PUT", body: { ...reviewFields(form), scores: payload("final", false), approve: true } });
+    });
+  };
+
+  function deductedWithoutNote(column) {
+    return data.sections
+      .filter((s) => s.kind !== "bonus" && (!s.homeroom_only || isHomeroom))
+      .flatMap((s) => s.criteria)
+      .filter((c) => {
+        const value = parseScore(rows[c.id]?.[`${column}_score`]);
+        return value !== null && value < c.max_score && !rows[c.id]?.[`${column}_note`]?.trim();
+      });
+  }
 
   const copySelfToUnit = () => {
     setRows((current) => {
@@ -250,7 +366,7 @@ export default function EvaluationSheet() {
       });
       return next;
     });
-    setDirty((current) => ({ ...current, unit: true }));
+    touch("unit");
   };
 
   const fillDuties = async () => {
@@ -343,23 +459,14 @@ export default function EvaluationSheet() {
         </div>
         <div className="ev-sheet-actions">
           <button className="secondary-btn" onClick={() => window.print()}><Printer size={15} /> In phiếu</button>
-          {selfMode && (
-            <>
-              <button className="secondary-btn" disabled={saving} onClick={() => saveSelf(false)}><Save size={15} /> Lưu nháp</button>
-              <button className="primary-btn" disabled={saving} onClick={() => saveSelf(true)}><Send size={15} /> Nộp phiếu</button>
-            </>
+          {editableColumns.length > 0 && <SaveStatus autosave={autosave} dirty={anyDirty} invalid={invalidList.length} onRetry={() => latest.current.persist()} onFocusInvalid={focusInvalid} />}
+          {selfMode && <button className="primary-btn" disabled={saving} onClick={() => saveSelf(true)}><Send size={15} /> Nộp phiếu</button>}
+          {unitMode && abilities.can_return && <button className="secondary-btn" disabled={saving} onClick={() => setReturning(true)}><Undo2 size={15} /> Trả phiếu</button>}
+          {unitMode && data.status !== "unit_scored" && (
+            <button className={reviewMode ? "secondary-btn" : "primary-btn"} disabled={saving} onClick={completeUnit}><CheckCircle2 size={15} /> Hoàn tất chấm</button>
           )}
-          {unitMode && (
-            <>
-              {abilities.can_return && <button className="secondary-btn" disabled={saving} onClick={() => setReturning(true)}><Undo2 size={15} /> Trả phiếu</button>}
-              <button className="secondary-btn" disabled={saving} onClick={() => saveUnitAndReview(false)}><Save size={15} /> Lưu điểm</button>
-              <button className="primary-btn" disabled={saving} onClick={() => saveUnitAndReview(true)}>
-                <CheckCircle2 size={15} /> {data.status === "unit_scored" ? "Cập nhật & hoàn tất" : "Hoàn tất chấm"}
-              </button>
-            </>
-          )}
-          {!unitMode && reviewMode && (
-            <button className="primary-btn" disabled={saving} onClick={() => saveUnitAndReview(false)}><Save size={15} /> Lưu duyệt</button>
+          {reviewMode && (
+            <button className="primary-btn" disabled={saving} onClick={approve}><CheckCircle2 size={15} /> {data.reviewed_at ? "Duyệt lại" : "Duyệt phiếu"}</button>
           )}
         </div>
       </section>
@@ -515,9 +622,9 @@ function SectionCard({ section, rows, totals, isHomeroom, canToggleHomeroom, onT
           ))}
           <div className="ev-section-total">
             <span>{bonus ? "Tổng điểm cộng" : "Tổng mục"}</span>
-            <b>{formatScore(totals.self.sections[section.id])}</b>
-            {showUnit && <b>{formatScore(totals.unit?.sections[section.id])}</b>}
-            {showFinal && <b>{formatScore(totals.final?.sections[section.id])}</b>}
+            <SectionTotal totals={totals.self} id={section.id} />
+            {showUnit && <SectionTotal totals={totals.unit} id={section.id} />}
+            {showFinal && <SectionTotal totals={totals.final} id={section.id} />}
           </div>
         </div>
       )}
@@ -525,30 +632,98 @@ function SectionCard({ section, rows, totals, isHomeroom, canToggleHomeroom, onT
   );
 }
 
-function ScoreCell({ value, note, max, editable, onScore, onNote, placeholder, notePlaceholder = "Ghi chú điểm trừ", highlight, withNote = true }) {
+function SaveStatus({ autosave, dirty, invalid, onRetry, onFocusInvalid }) {
+  if (invalid) {
+    return (
+      <button type="button" className="ev-save-status warn" onClick={onFocusInvalid}>
+        <TriangleAlert size={14} /> {invalid} ô chưa hợp lệ, chưa lưu
+      </button>
+    );
+  }
+  if (autosave.state === "error") {
+    return (
+      <button type="button" className="ev-save-status error" onClick={onRetry} title={autosave.error}>
+        <CloudOff size={14} /> Lưu thất bại · Thử lại
+      </button>
+    );
+  }
+  if (autosave.state === "saving" || dirty) {
+    return <span className="ev-save-status"><LoaderCircle size={14} className="spin" /> Đang lưu...</span>;
+  }
+  if (autosave.state === "saved") {
+    return <span className="ev-save-status ok"><Check size={14} /> Đã lưu lúc {autosave.at.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</span>;
+  }
+  return <span className="ev-save-status muted">Tự động lưu khi nhập</span>;
+}
+
+function SectionTotal({ totals, id }) {
+  if (totals?.invalid.includes(id)) {
+    return <b className="ev-total-invalid" title="Có ô điểm không hợp lệ, chưa được tính"><TriangleAlert size={13} /> {formatScore(totals.sections[id])}</b>;
+  }
+  return <b>{formatScore(totals?.sections[id])}</b>;
+}
+
+function ScoreCell({ value, max, editable, onScore, placeholder, highlight }) {
+  const [hint, setHint] = useState("");
+  useEffect(() => {
+    if (!hint) return undefined;
+    const timer = setTimeout(() => setHint(""), 2500);
+    return () => clearTimeout(timer);
+  }, [hint]);
   const parsed = parseScore(value);
-  const invalid = parsed !== null && (Number.isNaN(parsed) || parsed < 0 || parsed > max);
   if (!editable) {
     return (
       <div className={`ev-cell readonly ${highlight ? "changed" : ""}`}>
         <b>{value === "" ? (placeholder ? formatScore(parseScore(placeholder)) : "—") : formatScore(parsed)}</b>
-        {note && <small title={note}>{note}</small>}
       </div>
     );
   }
+  const error = scoreError(value, max);
+  const message = error ?? hint;
   return (
     <div className={`ev-cell ${highlight ? "changed" : ""}`}>
-      <input
-        className={invalid ? "invalid" : ""}
-        inputMode="decimal"
-        value={value}
-        placeholder={placeholder ?? `/${formatScore(max)}`}
-        onChange={(e) => onScore(e.target.value)}
-        title={invalid ? `Điểm từ 0 đến ${formatScore(max)}` : undefined}
-        aria-invalid={invalid}
-      />
-      {withNote && <input className="ev-note" value={note} onChange={(e) => onNote(e.target.value)} placeholder={notePlaceholder} />}
+      <div className={`ev-score-input ${error ? "invalid" : ""}`}>
+        <input
+          inputMode="decimal"
+          value={value}
+          placeholder={placeholder ?? "—"}
+          onChange={(e) => {
+            const next = e.target.value.trim();
+            if (SCORE_PATTERN.test(next)) {
+              setHint("");
+              onScore(next);
+            } else {
+              setHint("Chỉ nhập số, số lẻ dùng dấu phẩy (VD 7,5)");
+            }
+          }}
+          onBlur={() => value !== normalizeScore(value) && onScore(normalizeScore(value))}
+          aria-invalid={!!error}
+          aria-label={`Điểm, tối đa ${formatScore(max)}`}
+        />
+        <span>/{formatScore(max)}</span>
+      </div>
+      {message && <small className={error ? "ev-cell-error" : "ev-cell-hint"}>{message}</small>}
     </div>
+  );
+}
+
+function NoteField({ label, value, editable, placeholder, onChange, autoFocus }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    node.style.height = "auto";
+    node.style.height = `${node.scrollHeight + 2}px`;
+  }, [value]);
+  return (
+    <label className="ev-note-field">
+      {label && <span>{label}</span>}
+      {editable ? (
+        <textarea ref={ref} rows={1} value={value} autoFocus={autoFocus} maxLength={1000} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} />
+      ) : (
+        <p>{value}</p>
+      )}
+    </label>
   );
 }
 
@@ -558,6 +733,19 @@ function CriterionRow({ criterion, row, bonus, selfMode, unitMode, reviewMode, s
   const lines = (criterion.guidance ?? "").split("\n").filter(Boolean);
   const finalChanged = row.final_score !== "" && parseScore(row.final_score) !== parseScore(row.unit_score);
   const selfValue = parseScore(row.self_score) ?? 0;
+  const [opened, setOpened] = useState({});
+  const needsNote = (score) => {
+    const value = parseScore(score);
+    return value !== null && !Number.isNaN(value) && (bonus ? value > 0 : value < criterion.max_score);
+  };
+  const columns = [
+    { column: "self", label: "Giáo viên", editable: selfMode, value: row.self_note ?? "", score: row.self_score },
+    ...(showUnit ? [{ column: "unit", label: "Tổ chấm", editable: unitMode, value: row.unit_note ?? "", score: row.unit_score }] : []),
+  ];
+  const notes = columns
+    .map((note) => ({ ...note, opened: !!opened[note.column], visible: !!note.value.trim() || (note.editable && (needsNote(note.score) || opened[note.column])) }))
+    .filter((note) => note.visible || note.editable);
+  const labelled = showUnit;
   return (
     <div className="ev-criterion">
       <div className="ev-criterion-title">
@@ -568,6 +756,11 @@ function CriterionRow({ criterion, row, bonus, selfMode, unitMode, reviewMode, s
             Cách tính điểm <ChevronDown size={13} />
           </button>
         )}
+        {notes.filter((note) => !note.visible).map((note) => (
+          <button key={note.column} type="button" className="ev-add-note" onClick={() => setOpened((current) => ({ ...current, [note.column]: true }))}>
+            <Plus size={12} /> {labelled ? `Ghi chú ${note.label.toLowerCase()}` : "Ghi chú"}
+          </button>
+        ))}
         {open && <ul className="ev-guidance">{lines.map((line, index) => <li key={index}>{line}</li>)}</ul>}
         {criterion.requires_evidence && (
           <div className="ev-evidence">
@@ -593,22 +786,16 @@ function CriterionRow({ criterion, row, bonus, selfMode, unitMode, reviewMode, s
       </div>
       <ScoreCell
         value={row.self_score ?? ""}
-        note={row.self_note ?? ""}
         max={criterion.max_score}
         editable={selfMode}
-        notePlaceholder={bonus ? "Ghi chú (nội dung, số lần...)" : undefined}
         onScore={(value) => onCell(criterion.id, "self_score", value, "self")}
-        onNote={(value) => onCell(criterion.id, "self_note", value, "self")}
       />
       {showUnit && (
         <ScoreCell
           value={row.unit_score ?? ""}
-          note={row.unit_note ?? ""}
           max={criterion.max_score}
           editable={unitMode}
-          notePlaceholder={bonus ? "Ghi chú (nội dung, số lần...)" : undefined}
           onScore={(value) => onCell(criterion.id, "unit_score", value, "unit")}
-          onNote={(value) => onCell(criterion.id, "unit_note", value, "unit")}
         />
       )}
       {showFinal && (
@@ -616,11 +803,25 @@ function CriterionRow({ criterion, row, bonus, selfMode, unitMode, reviewMode, s
           value={row.final_score ?? ""}
           max={criterion.max_score}
           editable={reviewMode}
-          withNote={false}
           placeholder={row.unit_score || undefined}
           highlight={finalChanged}
           onScore={(value) => onCell(criterion.id, "final_score", value, "review")}
         />
+      )}
+      {notes.some((note) => note.visible) && (
+        <div className="ev-notes">
+          {notes.filter((note) => note.visible).map((note) => (
+            <NoteField
+              key={note.column}
+              label={labelled ? note.label : null}
+              value={note.value}
+              editable={note.editable}
+              autoFocus={note.opened}
+              placeholder={bonus ? "Nội dung, số lần, minh chứng..." : "Lý do trừ điểm (VD: đi muộn họp hội đồng ngày 3/10)"}
+              onChange={(value) => onCell(criterion.id, `${note.column}_note`, value, note.column)}
+            />
+          ))}
+        </div>
       )}
     </div>
   );
@@ -645,7 +846,11 @@ function Summary({ data, totals, isHomeroom, showUnit, showFinal, suggested, res
           {data.sections.filter((s) => !s.homeroom_only || isHomeroom).map((section) => (
             <tr key={section.id}>
               <td>{section.code} <small>/{formatScore(section.max_score)}</small></td>
-              {columns.map(([key]) => <td key={key}>{formatScore(totals[key]?.sections[section.id])}</td>)}
+              {columns.map(([key]) => (
+                <td key={key} className={totals[key]?.invalid.includes(section.id) ? "invalid" : ""} title={totals[key]?.invalid.includes(section.id) ? "Có ô điểm không hợp lệ, chưa được tính" : undefined}>
+                  {formatScore(totals[key]?.sections[section.id])}
+                </td>
+              ))}
             </tr>
           ))}
         </tbody>
@@ -660,10 +865,13 @@ function Summary({ data, totals, isHomeroom, showUnit, showFinal, suggested, res
           </tr>
           <tr className="grand">
             <td>Tổng</td>
-            {columns.map(([key]) => <td key={key}>{formatScore(totals[key]?.total)}</td>)}
+            {columns.map(([key]) => <td key={key} className={totals[key]?.invalid.length ? "invalid" : ""}>{formatScore(totals[key]?.total)}</td>)}
           </tr>
         </tfoot>
       </table>
+      {columns.some(([key]) => totals[key]?.invalid.length) && (
+        <p className="ev-summary-warn"><TriangleAlert size={13} /> Có ô điểm không hợp lệ, tổng điểm chưa tính các ô này.</p>
+      )}
 
       <div className={`ev-grade ${form.no_grade ? "none" : ""}`}>
         <small>{data.status === "published" ? "Xếp loại" : resultColumn === "self" ? "Xếp loại dự kiến (theo tự chấm)" : "Xếp loại dự kiến"}</small>

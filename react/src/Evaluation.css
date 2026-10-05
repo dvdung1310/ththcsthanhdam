@@ -738,37 +738,68 @@
 .ev-cell {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
 
-.ev-cell input {
-  width: 100%;
+.ev-score-input {
   height: 34px;
-  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
   border: 1px solid #dfe3ec;
   border-radius: 8px;
-  color: #273250;
-  font-size: 14px;
-  font-weight: 700;
-  text-align: center;
+  background: #fff;
 }
 
-.ev-cell input:focus {
+.ev-score-input:focus-within {
   border-color: #8b6cf0;
   outline: 3px solid rgba(139, 108, 240, 0.15);
 }
 
-.ev-cell input.invalid {
+.ev-score-input input {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  padding: 0 4px 0 10px;
+  border: 0;
+  outline: 0;
+  color: #273250;
+  background: transparent;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.ev-score-input span {
+  padding-right: 10px;
+  color: #a0a7b9;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ev-score-input.invalid {
   border-color: #e04a5f;
   background: #fff5f6;
 }
 
-.ev-cell input.ev-note {
-  height: 28px;
-  color: #46516a;
-  font-size: 12px;
-  font-weight: 400;
-  text-align: left;
+.ev-score-input.invalid:focus-within {
+  outline-color: rgba(224, 74, 95, 0.18);
+}
+
+.ev-cell-error,
+.ev-cell-hint {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.ev-cell-error {
+  color: #c2273a;
+}
+
+.ev-cell-hint {
+  color: #b45309;
 }
 
 .ev-cell.readonly {
@@ -781,19 +812,163 @@
   font-size: 14px;
 }
 
-.ev-cell.readonly small {
-  max-width: 100%;
-  overflow: hidden;
-  color: #8a92a8;
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ev-cell.changed input,
+.ev-cell.changed .ev-score-input,
 .ev-cell.changed.readonly b {
   border-color: #f0b35a;
   color: #b45309;
+}
+
+.ev-notes {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.ev-note-field {
+  min-width: 260px;
+  flex: 1 1 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ev-note-field > span {
+  color: #77809a;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.ev-note-field textarea {
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  resize: none;
+  overflow: hidden;
+  border: 1px solid #dfe3ec;
+  border-radius: 8px;
+  color: #273250;
+  background: #fafbfd;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ev-note-field textarea:focus {
+  border-color: #8b6cf0;
+  outline: 3px solid rgba(139, 108, 240, 0.15);
+  background: #fff;
+}
+
+.ev-note-field p {
+  margin: 0;
+  padding: 7px 10px;
+  border-left: 3px solid #e3e6ee;
+  color: #46516a;
+  background: #fafbfd;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.ev-add-note {
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  color: #8a92a8;
+  background: none;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ev-add-note:hover {
+  color: #5a3fd6;
+}
+
+.ev-total-invalid {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: #c2273a;
+}
+
+.ev-summary-table td.invalid {
+  color: #c2273a !important;
+}
+
+.ev-summary-warn {
+  margin: -6px 0 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: #c2273a;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.ev-summary-warn svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.ev-save-status {
+  height: 36px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  border-radius: 9px;
+  color: #77809a;
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ev-save-status.ok {
+  color: #0c8a57;
+}
+
+.ev-save-status.muted {
+  color: #a0a7b9;
+  font-weight: 500;
+}
+
+.ev-save-status.warn {
+  color: #b45309;
+  background: #fff4e0;
+  cursor: pointer;
+}
+
+.ev-save-status.error {
+  color: #c2273a;
+  background: #fdecee;
+  cursor: pointer;
+}
+
+.ev-save-status .spin {
+  animation: ev-spin 0.9s linear infinite;
+}
+
+@keyframes ev-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.app-shell .ev-page :is(.ev-cell-error, .ev-cell-hint) {
+  font-size: 11px !important;
+}
+
+.app-shell .ev-page :is(.ev-note-field p, .ev-note-field textarea) {
+  font-size: 13px !important;
 }
 
 .ev-section-total {
