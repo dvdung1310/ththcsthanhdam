@@ -20,7 +20,7 @@ Route::middleware('api.token')->group(function(){
  Route::post('ai-assistant/ask',[AiAssistantController::class,'ask']);
  Route::middleware('permission:library.view')->group(function(){
   Route::get('library',[LibraryController::class,'index']);Route::get('library/targets',[LibraryController::class,'targets']);Route::get('library/share-options',[LibraryController::class,'shareOptions']);
-  Route::post('library/folders',[LibraryController::class,'storeFolder']);Route::post('library/upload',[LibraryController::class,'upload']);Route::post('library/paste',[LibraryController::class,'paste']);Route::post('library/share-file',[LibraryController::class,'shareFile']);
+  Route::post('library/folders',[LibraryController::class,'storeFolder']);Route::post('library/upload',[LibraryController::class,'upload']);Route::post('library/paste',[LibraryController::class,'paste']);Route::post('library/share-file',[LibraryController::class,'shareFile']);Route::post('library/check-names',[LibraryController::class,'checkNames']);
   Route::put('library/nodes/{node}',[LibraryController::class,'update']);Route::delete('library/nodes/{node}',[LibraryController::class,'destroy']);Route::get('library/nodes/{node}/download',[LibraryController::class,'download'])->name('library.download');
   Route::get('library/nodes/{node}/shares',[LibraryController::class,'shares']);Route::put('library/nodes/{node}/shares',[LibraryController::class,'updateShares']);Route::post('library/nodes/{node}/ai-summary',[AiAssistantController::class,'summarizeLibraryFile']);
   Route::get('my-files',[LibraryController::class,'myFiles']);Route::get('my-files/{file}/download',[LibraryController::class,'downloadMyFile']);

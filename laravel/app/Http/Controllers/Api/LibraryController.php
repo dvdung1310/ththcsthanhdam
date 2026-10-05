@@ -12,6 +12,7 @@ use App\Models\TaskSubmission;
 use App\Models\User;
 use App\Services\FileStore;
 use App\Services\LibraryAccess;
+use App\Services\LibraryNames;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -73,7 +74,9 @@ class LibraryController extends Controller
         $parent = $this->targetFolder($data['parent_id'] ?? null);
         abort_unless($access->can($parent, LibraryAccess::UPLOAD), 403, 'Bạn không có quyền tạo thư mục ở đây.');
         $name = trim($data['name']);
-        abort_if($this->folderNameTaken($parent?->id, $name), 422, 'Tên thư mục đã tồn tại tại vị trí này.');
+        if (LibraryNames::existing($parent?->id, $name)) {
+            return $this->nameTaken($parent?->id, $name, false);
+        }
         $node = LibraryNode::create(['parent_id' => $parent?->id, 'type' => LibraryNode::FOLDER, 'name' => $name, 'owner_id' => $request->user()->id]);
 
         return response()->json(['message' => 'Đã tạo thư mục.', 'data' => $this->serialize($node->load('owner:id,name'), $this->access($request))], 201);
@@ -89,13 +92,43 @@ class LibraryController extends Controller
         ], ['files.*.mimes' => 'Định dạng file không được hỗ trợ.', 'files.*.max' => 'Mỗi file tối đa 20MB.']);
         $folder = $this->targetFolder($request->input('folder_id'));
         abort_unless($access->can($folder, LibraryAccess::UPLOAD), 403, 'Bạn không có quyền tải file vào đây.');
-        $nodes = DB::transaction(fn () => collect($request->file('files'))->map(function ($uploaded) use ($request, $folder) {
-            $file = $this->store->store($uploaded, 'library', $request->user());
+        $resolutions = (array) $request->input('resolutions', []);
+        $uploads = collect($request->file('files'))->values();
+        $conflicts = $uploads->map(fn ($uploaded, $i) => [$i, $uploaded->getClientOriginalName(), LibraryNames::existing($folder?->id, $uploaded->getClientOriginalName())])
+            ->filter(fn ($row) => $row[2] && ! in_array($resolutions[$row[0]] ?? null, ['keep', 'replace', 'skip'], true))
+            ->map(fn ($row) => ['index' => $row[0], ...$this->conflictInfo($row[2], $row[1], $folder?->id, true, $access)])->values();
+        if ($conflicts->isNotEmpty()) {
+            return response()->json(['message' => 'Một số file đã tồn tại trong thư mục này.', 'conflicts' => $conflicts], 409);
+        }
+        $counts = ['added' => 0, 'replaced' => 0, 'skipped' => 0];
+        $released = [];
+        DB::transaction(function () use ($uploads, $resolutions, $folder, $request, $access, &$counts, &$released) {
+            foreach ($uploads as $i => $uploaded) {
+                $name = $uploaded->getClientOriginalName();
+                $existing = LibraryNames::existing($folder?->id, $name);
+                $resolution = $existing ? ($resolutions[$i] ?? 'keep') : null;
+                if ($resolution === 'skip') {
+                    $counts['skipped']++;
 
-            return LibraryNode::create(['parent_id' => $folder?->id, 'type' => LibraryNode::FILE, 'name' => $uploaded->getClientOriginalName(), 'file_id' => $file->id, 'owner_id' => $request->user()->id]);
-        }));
+                    continue;
+                }
+                if ($resolution === 'replace') {
+                    abort_unless(! $existing->isFolder() && $access->can($existing, LibraryAccess::EDIT), 403, "Bạn không có quyền thay thế “{$name}”.");
+                    $released[] = $existing->file_id;
+                    $existing->update(['file_id' => $this->store->store($uploaded, 'library', $request->user())->id]);
+                    $existing->touch();
+                    $counts['replaced']++;
 
-        return response()->json(['message' => 'Đã tải lên '.$nodes->count().' file.'], 201);
+                    continue;
+                }
+                $file = $this->store->store($uploaded, 'library', $request->user());
+                LibraryNode::create(['parent_id' => $folder?->id, 'type' => LibraryNode::FILE, 'name' => $existing ? LibraryNames::available($folder?->id, $name, true) : $name, 'file_id' => $file->id, 'owner_id' => $request->user()->id]);
+                $counts['added']++;
+            }
+        });
+        collect($released)->each(fn ($id) => $this->store->releaseIfUnused($id));
+
+        return response()->json(['message' => $this->summary($counts), 'counts' => $counts], 201);
     }
 
     public function update(Request $request, LibraryNode $node): JsonResponse
@@ -106,7 +139,9 @@ class LibraryController extends Controller
         if (array_key_exists('name', $data)) {
             abort_if($node->is_system && trim($data['name']) !== $node->name, 422, 'Không thể đổi tên thư mục hệ thống.');
             $data['name'] = trim($data['name']);
-            abort_if($node->isFolder() && $this->folderNameTaken($node->parent_id, $data['name'], $node->id), 422, 'Tên thư mục đã tồn tại tại vị trí này.');
+            if (LibraryNames::existing($node->parent_id, $data['name'], $node->id)) {
+                return $this->nameTaken($node->parent_id, $data['name'], ! $node->isFolder(), $node->id);
+            }
         }
         $node->update($data);
 
@@ -131,21 +166,53 @@ class LibraryController extends Controller
             'node_id' => ['required', 'integer', 'exists:library_nodes,id'],
             'target_folder_id' => ['nullable', 'integer', 'exists:library_nodes,id'],
             'action' => ['required', Rule::in(['copy', 'cut'])],
+            'resolution' => ['nullable', Rule::in(['keep', 'replace', 'skip'])],
         ]);
         $node = LibraryNode::findOrFail($data['node_id']);
         $target = $this->targetFolder($data['target_folder_id'] ?? null);
         abort_unless($access->can($target, LibraryAccess::UPLOAD), 403, 'Bạn không có quyền đặt mục vào thư mục này.');
         abort_if($target && $node->isFolder() && $access->isDescendantOrSelf($target->id, $node->id), 422, 'Không thể đặt thư mục vào bên trong chính nó.');
 
-        if ($data['action'] === 'cut') {
-            abort_unless($access->can($node, LibraryAccess::EDIT) && ! $node->is_system, 403, 'Bạn không có quyền di chuyển mục này.');
-            abort_if($node->isFolder() && $this->folderNameTaken($target?->id, $node->name, $node->id), 422, 'Thư mục đích đã có thư mục cùng tên.');
-            $node->update(['parent_id' => $target?->id]);
+        $cut = $data['action'] === 'cut';
+        abort_unless($cut ? $access->can($node, LibraryAccess::EDIT) && ! $node->is_system : $access->can($node, LibraryAccess::READ), 403, $cut ? 'Bạn không có quyền di chuyển mục này.' : 'Bạn không có quyền sao chép mục này.');
+        $isFile = ! $node->isFolder();
+        if ($cut && $node->parent_id === $target?->id) {
+            return response()->json(['message' => 'Mục đã nằm trong thư mục này.']);
+        }
+        if (! $cut && $node->parent_id === $target?->id) {
+            DB::transaction(fn () => $this->copyNode($node, $target?->id, $request->user()->id, LibraryNames::copyName($target?->id, $node->name, $isFile)));
+
+            return response()->json(['message' => 'Đã tạo bản sao.']);
+        }
+        $existing = LibraryNames::existing($target?->id, $node->name, $node->id);
+        $resolution = $data['resolution'] ?? null;
+        if ($existing && ! $resolution) {
+            return response()->json(['message' => "“{$node->name}” đã tồn tại trong thư mục đích.", 'conflict' => $this->conflictInfo($existing, $node->name, $target?->id, $isFile, $access)], 409);
+        }
+        if ($existing && $resolution === 'skip') {
+            return response()->json(['message' => 'Đã bỏ qua.']);
+        }
+        if ($existing && $resolution === 'replace') {
+            abort_unless($isFile && ! $existing->isFolder() && $access->can($existing, LibraryAccess::EDIT), 403, 'Không thể thay thế mục này.');
+            $old = $existing->file_id;
+            DB::transaction(function () use ($existing, $node, $cut) {
+                $existing->update(['file_id' => $node->file_id]);
+                $existing->touch();
+                if ($cut) {
+                    $node->delete();
+                }
+            });
+            $this->store->releaseIfUnused($old);
+
+            return response()->json(['message' => 'Đã thay thế.']);
+        }
+        $name = $existing ? LibraryNames::available($target?->id, $node->name, $isFile, $node->id) : $node->name;
+        if ($cut) {
+            $node->update(['parent_id' => $target?->id, 'name' => $name]);
 
             return response()->json(['message' => 'Đã di chuyển.']);
         }
-        abort_unless($access->can($node, LibraryAccess::READ), 403, 'Bạn không có quyền sao chép mục này.');
-        DB::transaction(fn () => $this->copyNode($node, $target?->id, $request->user()->id, true));
+        DB::transaction(fn () => $this->copyNode($node, $target?->id, $request->user()->id, $name));
 
         return response()->json(['message' => 'Đã sao chép.']);
     }
@@ -281,6 +348,26 @@ class LibraryController extends Controller
         return Storage::disk($file->disk)->response($file->path, $file->original_name, ['Content-Type' => $file->mime_type ?: 'application/octet-stream'], 'inline');
     }
 
+    public function checkNames(Request $request): JsonResponse
+    {
+        $access = $this->access($request);
+        $data = $request->validate([
+            'folder_id' => ['nullable', 'integer', 'exists:library_nodes,id'],
+            'names' => ['required', 'array', 'max:50'],
+            'names.*' => ['required', 'string', 'max:255'],
+            'type' => ['nullable', Rule::in([LibraryNode::FILE, LibraryNode::FOLDER])],
+        ]);
+        $folder = $this->targetFolder($data['folder_id'] ?? null);
+        abort_unless($access->can($folder, LibraryAccess::READ), 403);
+        $isFile = ($data['type'] ?? LibraryNode::FILE) === LibraryNode::FILE;
+
+        return response()->json(['data' => collect($data['names'])->map(function ($name, $i) use ($folder, $isFile, $access) {
+            $existing = LibraryNames::existing($folder?->id, $name);
+
+            return ['index' => $i, 'name' => $name, 'conflict' => (bool) $existing, ...($existing ? $this->conflictInfo($existing, $name, $folder?->id, $isFile, $access) : ['suggested_name' => $name])];
+        })->values()]);
+    }
+
     public function shareFile(Request $request): JsonResponse
     {
         $access = $this->access($request);
@@ -288,6 +375,7 @@ class LibraryController extends Controller
             'file_id' => ['required', 'integer', 'exists:files,id'],
             'folder_id' => ['nullable', 'integer', 'exists:library_nodes,id'],
             'name' => ['nullable', 'string', 'max:255'],
+            'resolution' => ['nullable', Rule::in(['keep', 'replace', 'skip'])],
         ]);
         $file = StoredFile::findOrFail($data['file_id']);
         abort_unless((int) $file->uploaded_by === $request->user()->id || $access->manages(), 403, 'Bạn chỉ chia sẻ được file do chính mình tải lên.');
@@ -299,7 +387,25 @@ class LibraryController extends Controller
         $folder = $this->targetFolder($data['folder_id'] ?? null);
         abort_unless(($folder?->is_system) || $access->can($folder, LibraryAccess::UPLOAD), 403, 'Bạn không có quyền đặt file vào thư mục này.');
         abort_if(LibraryNode::where('parent_id', $folder?->id)->where('file_id', $file->id)->exists(), 422, 'File này đã có trong thư mục đích.');
-        $node = LibraryNode::create(['parent_id' => $folder?->id, 'type' => LibraryNode::FILE, 'name' => trim($data['name'] ?? '') ?: $file->original_name, 'file_id' => $file->id, 'owner_id' => $request->user()->id]);
+        $name = trim($data['name'] ?? '') ?: $file->original_name;
+        $existing = LibraryNames::existing($folder?->id, $name);
+        $resolution = $data['resolution'] ?? null;
+        if ($existing && ! $resolution) {
+            return response()->json(['message' => "“{$name}” đã tồn tại trong thư mục đích.", 'conflict' => $this->conflictInfo($existing, $name, $folder?->id, true, $access)], 409);
+        }
+        if ($existing && $resolution === 'skip') {
+            return response()->json(['message' => 'Đã bỏ qua.']);
+        }
+        if ($existing && $resolution === 'replace') {
+            abort_unless(! $existing->isFolder() && $access->can($existing, LibraryAccess::EDIT), 403, 'Bạn không có quyền thay thế file này.');
+            $old = $existing->file_id;
+            $existing->update(['file_id' => $file->id]);
+            $existing->touch();
+            $this->store->releaseIfUnused($old);
+
+            return response()->json(['message' => 'Đã thay thế file trong kho dữ liệu.', 'data' => ['id' => $existing->id, 'folder_id' => $existing->parent_id]], 200);
+        }
+        $node = LibraryNode::create(['parent_id' => $folder?->id, 'type' => LibraryNode::FILE, 'name' => $existing ? LibraryNames::available($folder?->id, $name, true) : $name, 'file_id' => $file->id, 'owner_id' => $request->user()->id]);
 
         return response()->json(['message' => 'Đã chia sẻ file vào kho dữ liệu.', 'data' => ['id' => $node->id, 'folder_id' => $node->parent_id]], 201);
     }
@@ -328,25 +434,38 @@ class LibraryController extends Controller
         return $folder;
     }
 
-    private function folderNameTaken(?int $parentId, string $name, ?int $ignoreId = null): bool
+    private function conflictInfo(LibraryNode $existing, string $name, ?int $parentId, bool $isFile, LibraryAccess $access): array
     {
-        return LibraryNode::where('type', LibraryNode::FOLDER)->where('parent_id', $parentId)
-            ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
-            ->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))->exists();
+        return [
+            'name' => $name, 'existing_id' => $existing->id, 'existing_type' => $existing->type,
+            'can_replace' => $isFile && ! $existing->isFolder() && $access->can($existing, LibraryAccess::EDIT),
+            'suggested_name' => LibraryNames::available($parentId, $name, $isFile),
+        ];
     }
 
-    private function copyNode(LibraryNode $source, ?int $parentId, int $userId, bool $root = false): void
+    private function nameTaken(?int $parentId, string $name, bool $isFile, ?int $ignoreId = null): JsonResponse
     {
-        $name = $source->name;
-        if ($source->isFolder()) {
-            $base = $source->name.($root ? ' - Bản sao' : '');
-            $name = $base;
-            $index = 2;
-            while ($this->folderNameTaken($parentId, $name)) {
-                $name = $base.' ('.$index++.')';
-            }
-        }
-        $copy = LibraryNode::create(['parent_id' => $parentId, 'type' => $source->type, 'name' => $name, 'file_id' => $source->file_id, 'owner_id' => $userId, 'description' => $source->description]);
+        return response()->json([
+            'message' => "Đã có mục tên “{$name}” trong thư mục này.",
+            'errors' => ['name' => ["Đã có mục tên “{$name}” trong thư mục này."]],
+            'suggested_name' => LibraryNames::available($parentId, $name, $isFile, $ignoreId),
+        ], 409);
+    }
+
+    private function summary(array $counts): string
+    {
+        $parts = array_filter([
+            $counts['added'] ? 'tải lên '.$counts['added'].' file' : null,
+            $counts['replaced'] ? 'thay thế '.$counts['replaced'].' file' : null,
+            $counts['skipped'] ? 'bỏ qua '.$counts['skipped'].' file' : null,
+        ]);
+
+        return $parts ? 'Đã '.implode(', ', $parts).'.' : 'Không có file nào được tải lên.';
+    }
+
+    private function copyNode(LibraryNode $source, ?int $parentId, int $userId, ?string $name = null): void
+    {
+        $copy = LibraryNode::create(['parent_id' => $parentId, 'type' => $source->type, 'name' => $name ?? $source->name, 'file_id' => $source->file_id, 'owner_id' => $userId, 'description' => $source->description]);
         if ($source->isFolder()) {
             $source->children()->get()->each(fn (LibraryNode $child) => $this->copyNode($child, $copy->id, $userId));
         }
@@ -377,10 +496,21 @@ class LibraryController extends Controller
     {
         $ids = $access->accessibleIds();
         $folders = LibraryNode::where('type', LibraryNode::FOLDER)->when($ids !== null, fn ($q) => $q->whereIn('id', $ids ?: [0]))
-            ->orderByDesc('is_system')->orderBy('name')->get(['id', 'parent_id', 'name', 'is_system']);
+            ->orderByDesc('is_system')->orderBy('name')->get(['id', 'parent_id', 'name', 'is_system', 'owner_id', 'type']);
         $visible = $folders->pluck('id')->all();
 
-        return $folders->map(fn ($f) => ['id' => $f->id, 'parent_id' => in_array($f->parent_id, $visible, true) ? $f->parent_id : null, 'name' => $f->name, 'is_system' => $f->is_system])->values();
+        return $folders->map(function (LibraryNode $f) use ($visible, $access) {
+            $level = $access->level($f);
+
+            return [
+                'id' => $f->id, 'type' => LibraryNode::FOLDER, 'parent_id' => in_array($f->parent_id, $visible, true) ? $f->parent_id : null, 'name' => $f->name, 'is_system' => $f->is_system,
+                'abilities' => [
+                    'level' => $level, 'can_upload' => $level >= LibraryAccess::UPLOAD, 'can_edit' => $level >= LibraryAccess::EDIT,
+                    'can_rename' => $level >= LibraryAccess::EDIT && ! $f->is_system, 'can_share' => $level >= LibraryAccess::EDIT,
+                    'can_delete' => $access->canDelete($f), 'can_move' => $level >= LibraryAccess::EDIT && ! $f->is_system,
+                ],
+            ];
+        })->values();
     }
 
     private function serializeShare(LibraryShare $share): array
