@@ -5,7 +5,7 @@ import { apiJson } from "./api";
 import ActionMenu from "./ActionMenu";
 import { useConfirm } from "./ConfirmDialog";
 import TablePagination, { usePagination } from "./TablePagination";
-import { STATUS_TONES, daysPast, formatDay, formatScore } from "./evaluationUtils";
+import { STATUS_TONES, daysPast, formatDay, formatPercent, formatScore, schoolYearLabel, schoolYearOf } from "./evaluationUtils";
 import "./Evaluation.css";
 
 const STATUS_FILTERS = [
@@ -278,7 +278,11 @@ function deadlineNote(row, period) {
 }
 
 function MySheets({ periods }) {
-  const rows = periods.filter((period) => period.my_evaluation);
+  const own = periods.filter((period) => period.my_evaluation);
+  const years = [...new Set(own.map((period) => schoolYearOf(period.year, period.month)))].sort((a, b) => b - a);
+  const [year, setYear] = useState(null);
+  const activeYear = years.includes(year) ? year : years[0];
+  const rows = own.filter((period) => schoolYearOf(period.year, period.month) === activeYear);
   const pager = usePagination(rows, 12);
   if (!rows.length) {
     return (
@@ -293,6 +297,7 @@ function MySheets({ periods }) {
   }
   return (
     <section className="ev-card">
+      <YearHistory rows={rows} years={years} year={activeYear} onYear={(value) => { setYear(value); pager.reset(); }} />
       <div className="ev-table-wrap">
         <table className="ev-table ev-mine-table">
           <thead>
@@ -348,6 +353,64 @@ function MySheets({ periods }) {
       </div>
       {rows.length > 12 && <TablePagination pager={pager} noun="phiếu" sizes={[12, 24, 48]} />}
     </section>
+  );
+}
+
+function YearHistory({ rows, years, year, onYear }) {
+  const published = [...rows].filter((period) => period.status === "published" && period.my_evaluation.total_score != null).sort((a, b) => a.year - b.year || a.month - b.month);
+  const counts = {};
+  published.forEach((period) => {
+    const grade = period.my_evaluation.grade ?? "Không xếp loại";
+    counts[grade] = (counts[grade] ?? 0) + 1;
+  });
+  const percents = published.map((period) => (period.my_evaluation.max_base ? (period.my_evaluation.total_score / period.my_evaluation.max_base) * 100 : null)).filter((value) => value != null);
+  const average = percents.length ? Math.round((percents.reduce((sum, value) => sum + value, 0) / percents.length) * 10) / 10 : null;
+  return (
+    <div className="ev-history">
+      <div className="ev-history-text">
+        {years.length > 1 ? (
+          <select value={year} onChange={(e) => onYear(Number(e.target.value))} aria-label="Năm học">
+            {years.map((item) => <option key={item} value={item}>Năm học {schoolYearLabel(item)}</option>)}
+          </select>
+        ) : (
+          <b>Năm học {schoolYearLabel(year)}</b>
+        )}
+        {published.length ? (
+          <span>
+            {published.length} tháng đã công bố:{" "}
+            {Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([grade, count]) => `${count} ${grade}`).join(" · ")}
+            {average != null && <> · TB <b>{formatPercent(average)}</b></>}
+          </span>
+        ) : (
+          <span className="ev-muted">Chưa có tháng nào được công bố.</span>
+        )}
+      </div>
+      {published.length > 1 && <Sparkline points={published.map((period) => ({ label: `T${period.month}`, value: period.my_evaluation.max_base ? (period.my_evaluation.total_score / period.my_evaluation.max_base) * 100 : 0, grade: period.my_evaluation.grade }))} />}
+    </div>
+  );
+}
+
+function Sparkline({ points }) {
+  const width = 220;
+  const height = 44;
+  const values = points.map((point) => point.value);
+  const min = Math.min(...values, 60);
+  const max = Math.max(...values, 100);
+  const x = (index) => 10 + (index * (width - 20)) / Math.max(1, points.length - 1);
+  const y = (value) => 6 + (1 - (value - min) / Math.max(1, max - min)) * (height - 18);
+  return (
+    <svg className="ev-sparkline" width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Điểm theo tháng (% điểm tối đa)">
+      <line x1="10" x2={width - 10} y1={y(100)} y2={y(100)} className="ref" />
+      <polyline points={points.map((point, index) => `${x(index)},${y(point.value)}`).join(" ")} />
+      {points.map((point, index) => (
+        <g key={point.label}>
+          <circle cx={x(index)} cy={y(point.value)} r="3">
+            <title>{`${point.label}: ${formatPercent(Math.round(point.value * 10) / 10)}${point.grade ? ` · ${point.grade}` : ""}`}</title>
+          </circle>
+          <text x={x(index)} y={height - 1}>{point.label}</text>
+        </g>
+      ))}
+    </svg>
   );
 }
 

@@ -79,3 +79,9 @@ export function daysPast(due, at = new Date()) {
   if (!due) return 0;
   return Math.round((localDay(at) - dayOnly(due)) / 86400000);
 }
+
+export const YEAR_START_MONTH = 8;
+export const schoolYearOf = (year, month) => (month >= YEAR_START_MONTH ? year : year - 1);
+export const schoolYearLabel = (year) => `${year}–${year + 1}`;
+export const GRADE_TONES = ["green", "blue", "purple", "orange", "muted", "muted"];
+export const formatPercent = (value) => (value == null ? "—" : `${formatScore(value)}%`);

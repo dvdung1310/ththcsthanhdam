@@ -49,6 +49,7 @@ import PersonalProfile from "./PersonalProfile";
 import DataLibrary from "./DataLibrary";
 import EvaluationHome from "./EvaluationHome";
 import EvaluationSheet from "./EvaluationSheet";
+import EvaluationSummary from "./EvaluationSummary";
 import EvaluationTemplates from "./EvaluationTemplates";
 import EvaluationPeriodEditor from "./EvaluationPeriodEditor";
 import { apiFetch, getToken, setToken } from "./api";
@@ -76,6 +77,7 @@ const navTree = [
     icon: Award,
     children: [
       { key: "evaluations", label: "Đánh giá tháng", title: "Đánh giá thi đua", path: "/evaluations", permission: "evaluation.view|evaluation.score|evaluation.manage" },
+      { key: "evaluation-summary", label: "Tổng hợp", title: "Tổng hợp thi đua", path: "/evaluations/summary", permission: "evaluation.manage" },
       { key: "evaluation-templates", label: "Bộ tiêu chí", title: "Bộ tiêu chí đánh giá", path: "/evaluations/templates", permission: "evaluation.manage" },
     ],
   },
@@ -597,6 +599,7 @@ function App() {
           <Route path="/evaluations" element={guard("evaluations", <EvaluationHome />)} />
           <Route path="/evaluations/periods/new" element={guard("evaluation-templates", <EvaluationPeriodEditor />)} />
           <Route path="/evaluations/periods/:periodId/edit" element={guard("evaluation-templates", <EvaluationPeriodEditor />)} />
+          <Route path="/evaluations/summary" element={guard("evaluation-summary", <EvaluationSummary />)} />
           <Route path="/evaluations/:evaluationId" element={guard("evaluations", <EvaluationSheet />)} />
           <Route path="/evaluations/templates/:templateId?" element={guard("evaluation-templates", <EvaluationTemplates />)} />
           <Route path="/personnel" element={guard("personnel", <PersonnelManagement view="people" />)} />
