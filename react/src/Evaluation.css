@@ -2021,3 +2021,132 @@
     font-weight: 700;
   }
 }
+
+/* Typography for the evaluation pages; the shared 12px !important rule flattens hierarchy here. */
+.ev-page :is(b, strong, h2, h3, h4) {
+  font-weight: 600;
+}
+
+.ev-page .ev-chip {
+  font-weight: 600;
+}
+
+.app-shell .ev-page .ev-tpl-title h2 {
+  font-size: 20px;
+  letter-spacing: -0.2px;
+}
+
+.app-shell .ev-page .ev-section h3,
+.app-shell .ev-page .ev-tpl-grades h3,
+.app-shell .ev-page .ev-summary-card h3 {
+  font-size: 15px;
+}
+
+.app-shell .ev-page .ev-criterion-title > b {
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.app-shell .ev-page .ev-criterion-title > small,
+.app-shell .ev-page .ev-section header small,
+.app-shell .ev-page .ev-tpl-grades header small {
+  color: #8a92a8;
+  font-size: 12.5px !important;
+}
+
+.app-shell .ev-page .ev-tpl-grades td {
+  color: #46516a;
+  font-size: 13px !important;
+  line-height: 1.5;
+}
+
+.app-shell .ev-page .ev-tpl-grades td:first-child {
+  white-space: nowrap;
+}
+
+.app-shell .ev-page .ev-tpl-grades td b {
+  color: #273250;
+  font-weight: 500;
+}
+
+.app-shell .ev-page .ev-tpl-grades td .ev-sub {
+  font-size: 12px !important;
+}
+
+.app-shell .ev-page .ev-tpl-desc {
+  font-size: 13.5px;
+}
+
+.ev-tpl-info {
+  gap: 10px;
+}
+
+.ev-tpl-info dl {
+  display: grid;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 0;
+}
+
+.app-shell .ev-tpl-info dt,
+.app-shell .ev-tpl-info dd {
+  margin: 0;
+  padding: 11px 0;
+  border-top: 1px solid #f1f2f6;
+}
+
+.app-shell .ev-tpl-info dt:first-of-type,
+.app-shell .ev-tpl-info dt:first-of-type + dd {
+  border-top: 0;
+  padding-top: 2px;
+}
+
+.app-shell .ev-tpl-info dt {
+  color: #77809a;
+  font-size: 12.5px !important;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.app-shell .ev-tpl-info dd {
+  color: #273250;
+  font-size: 13px !important;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.app-shell .ev-tpl-info dd small {
+  margin-top: 3px;
+  font-size: 12px !important;
+  font-weight: 400;
+}
+
+.app-shell .ev-page .ev-stamp b {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.app-shell .ev-page .ev-stamp small {
+  font-size: 12px !important;
+}
+
+.ev-stamp img,
+.ev-stamp i {
+  width: 24px;
+  height: 24px;
+}
+
+.app-shell .ev-tpl-info .ev-tpl-ok,
+.app-shell .ev-tpl-info .ev-tpl-problems {
+  padding-top: 10px;
+  border-top: 1px solid #eceef3;
+}
+
+.app-shell .ev-page .ev-tpl-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.app-shell .ev-page .ev-tpl-table td {
+  font-size: 13px !important;
+}
