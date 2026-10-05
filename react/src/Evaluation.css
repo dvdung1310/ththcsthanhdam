@@ -2431,9 +2431,8 @@
 }
 
 .ev-diff {
-  display: block;
-  margin-top: 2px;
-  font-size: 11px;
+  display: inline-block;
+  font-size: 12px;
   font-weight: 700;
 }
 
@@ -2480,67 +2479,55 @@
   z-index: 2;
 }
 
-.ev-board-table td:first-child {
-  padding-left: 40px;
+.ev-board-filters {
+  padding-top: 0;
 }
 
-.ev-group-row td {
-  height: auto !important;
-  padding: 9px 14px !important;
+.ev-filters select.active {
+  border-color: #c6bdf5;
+  color: #4b33c9;
+  background: #f1eeff;
+}
+
+.ev-board-summary {
+  padding: 10px 18px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
   border-bottom: 1px solid #eceef3;
-  background: #f6f7fb;
+  color: #77809a;
+  font-size: 12.5px;
+}
+
+.ev-board-summary b {
+  color: #273250;
+}
+
+.ev-board-summary .late {
+  padding: 2px 9px;
+  border: 0;
+  border-radius: 99px;
+  color: #c2273a;
+  background: #fdecee;
+  font-size: 12px;
+  font-weight: 700;
   cursor: pointer;
 }
 
-.ev-group-row:hover td {
-  background: #f1f0fb;
+.ev-board-table th.sortable {
+  cursor: pointer;
+  user-select: none;
 }
 
-.ev-group-row td,
-.ev-group-row td:first-child {
-  padding-left: 14px !important;
+.ev-board-table th.sortable:hover,
+.ev-board-table th.sorted {
+  color: #4b33c9;
 }
 
-.ev-group-row td > span {
-  display: inline-flex;
-  align-items: center;
-  vertical-align: middle;
-}
-
-.ev-group-title {
-  min-width: 260px;
-  gap: 8px;
-  color: #273250;
-}
-
-.ev-group-title svg {
-  color: #8a92a8;
-}
-
-.ev-group-title em {
-  min-width: 20px;
-  padding: 0 6px;
-  border-radius: 99px;
-  color: #52607f;
-  background: #e7e9f1;
-  font-size: 11px;
-  font-style: normal;
-  text-align: center;
-}
-
-.ev-group-progress {
-  gap: 16px;
-  color: #77809a;
-  font-size: 12px;
-}
-
-.ev-group-progress b {
-  color: #273250;
-}
-
-.ev-group-progress .late {
-  color: #c2273a;
-  font-weight: 700;
+.ev-board-table th svg {
+  margin-left: 4px;
+  vertical-align: -1px;
 }
 
 .ev-progress {
@@ -2560,18 +2547,11 @@
   background: #9cc3f5;
 }
 
-.app-shell .ev-page .ev-group-row b {
-  font-size: 13px !important;
+.app-shell .ev-page .ev-diff {
+  font-size: 12px !important;
 }
 
-.app-shell .ev-page :is(.ev-diff, .ev-warn, .ev-due) {
+.app-shell .ev-page :is(.ev-warn, .ev-due) {
   font-size: 11px !important;
 }
 
-.ev-board-table th .ev-link-btn {
-  margin-left: 10px;
-  padding: 0;
-  font-size: 11px;
-  letter-spacing: 0;
-  text-transform: none;
-}

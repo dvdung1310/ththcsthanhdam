@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
-import { Award, CalendarPlus, Check, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Trash2, Megaphone, MessageSquare, RotateCcw, Search, Send, Settings2, TriangleAlert, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Award, CalendarPlus, Check, CheckCircle2, ChevronRight, ClipboardList, Trash2, Megaphone, MessageSquare, RotateCcw, Search, Send, Settings2, TriangleAlert, X } from "lucide-react";
 import { apiJson } from "./api";
 import ActionMenu from "./ActionMenu";
 import { useConfirm } from "./ConfirmDialog";
@@ -32,8 +32,6 @@ export default function EvaluationHome() {
   const location = useLocation();
   const [success, setSuccess] = useState(location.state?.message ?? "");
   const [deleting, setDeleting] = useState(null);
-  const [filters, setFilters] = useState({ status: "", department_id: "", search: "" });
-  const [collapsed, setCollapsed] = useState(() => new Set());
 
   const abilities = overview?.abilities ?? {};
   const canBoard = abilities.can_score || abilities.can_manage;
@@ -59,15 +57,13 @@ export default function EvaluationHome() {
 
   const loadBoard = useCallback(async () => {
     if (!periodId || tab !== "board") return;
-    const query = new URLSearchParams({ period_id: periodId });
-    Object.entries(filters).forEach(([key, value]) => value && query.set(key, value));
     try {
-      setBoard(await apiJson(`/api/evaluations?${query}`));
+      setBoard(await apiJson(`/api/evaluations?period_id=${periodId}`));
       setError("");
     } catch (e) {
       setError(e.message);
     }
-  }, [periodId, tab, filters]);
+  }, [periodId, tab]);
 
   useEffect(() => {
     loadOverview();
@@ -76,9 +72,8 @@ export default function EvaluationHome() {
     if (location.state?.message) navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
   }, []);
   useEffect(() => {
-    const timer = setTimeout(loadBoard, filters.search ? 250 : 0);
-    return () => clearTimeout(timer);
-  }, [loadBoard, filters.search]);
+    loadBoard();
+  }, [loadBoard]);
   useEffect(() => {
     if (!success) return undefined;
     const timer = setTimeout(() => setSuccess(""), 3500);
@@ -125,15 +120,6 @@ export default function EvaluationHome() {
     const ok = await confirm({ title: `Mở lại ${period.label}?`, message: "Kỳ chuyển về trạng thái chờ giải trình để điều chỉnh điểm. Cần công bố lại sau khi sửa.", confirmText: "Mở lại" });
     if (ok) run(() => apiJson(`/api/evaluation-periods/${period.id}/reopen`, { method: "POST" }));
   };
-
-  const counts = useMemo(() => {
-    const result = { "": board?.data.length ?? 0 };
-    board?.data.forEach((row) => (result[row.status] = (result[row.status] ?? 0) + 1));
-    return result;
-  }, [board]);
-
-  const groups = useMemo(() => groupByUnit(board?.data), [board]);
-  const groupKeys = groups?.map((group) => group.key) ?? [];
 
   if (!overview) return <div className="ev-page"><div className="empty-state"><Award className="loading-icon" size={34} /><b>Đang tải...</b></div></div>;
 
@@ -192,7 +178,7 @@ export default function EvaluationHome() {
             {overview.data.length > 0 && (
               <label className="ev-period-select">
                 <span>Kỳ đánh giá</span>
-                <select value={periodId ?? ""} onChange={(e) => setParam({ period: e.target.value })}>
+                <select value={periodId ?? ""} onChange={(e) => setParam({ period: e.target.value, status: "", flag: "" })}>
                   {overview.data.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
                 </select>
               </label>
@@ -231,47 +217,7 @@ export default function EvaluationHome() {
               {abilities.can_manage && <span>Bấm “Mở kỳ đánh giá” để tạo phiếu cho giáo viên.</span>}
             </div>
           ) : (
-            <>
-              <div className="ev-filters">
-                <div className="ev-status-chips">
-                  {STATUS_FILTERS.map(([value, label]) => (
-                    <button key={value} className={filters.status === value ? "active" : ""} onClick={() => setFilters((f) => ({ ...f, status: value }))}>
-                      {label} <em>{value ? counts[value] ?? 0 : counts[""]}</em>
-                    </button>
-                  ))}
-                </div>
-                {board?.units?.length > 1 && (
-                  <select value={filters.department_id} onChange={(e) => setFilters((f) => ({ ...f, department_id: e.target.value }))}>
-                    <option value="">Mọi tổ / nhóm</option>
-                    {board.units.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
-                  </select>
-                )}
-                <label className="ev-search">
-                  <Search size={15} />
-                  <input value={filters.search} onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))} placeholder="Tìm giáo viên..." />
-                </label>
-              </div>
-              {board?.not_included?.length > 0 && (
-                <details className="ev-excluded">
-                  <summary>
-                    {board.not_included.length} giáo viên không tham gia kỳ này
-                  </summary>
-                  <p>{board.not_included.join(", ")}</p>
-                </details>
-              )}
-              <BoardTable
-                groups={groups}
-                period={period}
-                collapsed={collapsed}
-                onToggleAll={() => setCollapsed(collapsed.size ? new Set() : new Set(groupKeys))}
-                onToggle={(key) => setCollapsed((current) => {
-                  const next = new Set(current);
-                  next.has(key) ? next.delete(key) : next.add(key);
-                  return next;
-                })}
-                onOpen={(id) => navigate(`/evaluations/${id}`)}
-              />
-            </>
+            <BoardSection board={board?.period?.id === period.id ? board : null} period={period} params={params} setParam={setParam} onOpen={(id) => navigate(`/evaluations/${id}`)} />
           )}
         </section>
       )}
@@ -318,17 +264,6 @@ function DueDate({ label, due, active }) {
       {due && past !== null && (past > 0 ? <em className="ev-due late">quá {past} ngày</em> : past >= -3 && <em className="ev-due soon">{past === 0 ? "hôm nay" : `còn ${-past} ngày`}</em>)}
     </span>
   );
-}
-
-function groupByUnit(rows) {
-  if (!rows) return null;
-  const map = new Map();
-  rows.forEach((row) => {
-    const key = row.unit?.id ?? 0;
-    if (!map.has(key)) map.set(key, { key, name: row.unit?.name ?? "Chưa thuộc tổ", rows: [] });
-    map.get(key).rows.push(row);
-  });
-  return [...map.values()].sort((a, b) => (!a.key) - (!b.key) || a.name.localeCompare(b.name, "vi"));
 }
 
 function deadlineNote(row, period) {
@@ -427,84 +362,219 @@ function ScoreDiff({ self, unit }) {
   );
 }
 
-function GroupRow({ group, period, open, onToggle }) {
-  const total = group.rows.length;
-  const submitted = group.rows.filter((row) => row.status !== "draft").length;
-  const scored = group.rows.filter((row) => row.status === "unit_scored" || row.status === "published").length;
-  const late = group.rows.filter((row) => deadlineNote(row, period)?.tone === "late").length;
+const ATTENTION_FILTERS = [
+  ["late", "Trễ hạn"],
+  ["gap", "Chênh lệch ≥ 2 điểm"],
+  ["comments", "Có giải trình / trao đổi"],
+  ["violation", "Có vi phạm"],
+];
+const STATUS_ORDER = { draft: 0, submitted: 1, unit_scored: 2, published: 3 };
+const scoreGap = (row) => (row.self_total != null && row.unit_total != null ? Math.round((row.unit_total - row.self_total) * 100) / 100 : null);
+const collator = new Intl.Collator("vi");
+const givenName = (name) => (name ?? "").trim().split(/\s+/).at(-1);
+const byName = (a, b) => collator.compare(givenName(a.teacher.name), givenName(b.teacher.name)) || collator.compare(a.teacher.name ?? "", b.teacher.name ?? "");
+const SORTERS = {
+  name: (a, b) => byName(a, b),
+  team: (a, b) => collator.compare(a.team?.name ?? "￿", b.team?.name ?? "￿") || collator.compare(a.group?.name ?? "", b.group?.name ?? ""),
+  status: (a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status],
+};
+const SCORE_KEYS = {
+  self: (row) => row.self_total,
+  unit: (row) => row.unit_total,
+  gap: (row) => (scoreGap(row) == null ? null : Math.abs(scoreGap(row))),
+  final: (row) => row.final_total,
+};
+
+function sortRows(rows, key, descending) {
+  const sign = descending ? -1 : 1;
+  const value = SCORE_KEYS[key];
+  return [...rows].sort((a, b) => {
+    if (value) {
+      const [x, y] = [value(a), value(b)];
+      if (x == null || y == null) return (x == null) - (y == null) || byName(a, b);
+      return sign * (x - y) || byName(a, b);
+    }
+    return sign * (SORTERS[key] ?? SORTERS.name)(a, b) || byName(a, b);
+  });
+}
+
+function matchesAttention(row, flag, period) {
+  if (flag === "late") return deadlineNote(row, period)?.tone === "late";
+  if (flag === "gap") return Math.abs(scoreGap(row) ?? 0) >= 2;
+  if (flag === "comments") return row.comments_count > 0;
+  if (flag === "violation") return row.has_violation;
+  return true;
+}
+
+function BoardSection({ board, period, params, setParam, onOpen }) {
+  const status = params.get("status") ?? "";
+  const team = Number(params.get("team")) || null;
+  const group = Number(params.get("group")) || null;
+  const flag = params.get("flag") ?? "";
+  const search = params.get("q") ?? "";
+  const sortParam = params.get("sort") ?? "name";
+  const sortKey = sortParam.replace(/^-/, "");
+  const descending = sortParam.startsWith("-");
+  const rows = board?.data ?? null;
+
+  const teams = useMemo(() => {
+    const map = new Map();
+    rows?.forEach((row) => row.team && map.set(row.team.id, row.team.name));
+    return [...map].map(([id, name]) => ({ id, name })).sort((a, b) => collator.compare(a.name, b.name));
+  }, [rows]);
+  const groups = useMemo(() => {
+    const map = new Map();
+    rows?.forEach((row) => row.group && row.team?.id === team && map.set(row.group.id, row.group.name));
+    return [...map].map(([id, name]) => ({ id, name })).sort((a, b) => collator.compare(a.name, b.name));
+  }, [rows, team]);
+
+  const scoped = useMemo(() => {
+    if (!rows) return null;
+    const keyword = search.trim().toLowerCase();
+    return rows.filter(
+      (row) =>
+        (!team || row.unit_ids.includes(team)) &&
+        (!group || row.unit_ids.includes(group)) &&
+        (!flag || matchesAttention(row, flag, period)) &&
+        (!keyword || `${row.teacher.name} ${row.teacher.code ?? ""}`.toLowerCase().includes(keyword)),
+    );
+  }, [rows, team, group, flag, search, period]);
+
+  const counts = useMemo(() => {
+    const result = { "": scoped?.length ?? 0 };
+    scoped?.forEach((row) => (result[row.status] = (result[row.status] ?? 0) + 1));
+    return result;
+  }, [scoped]);
+
+  const visible = useMemo(() => {
+    if (!scoped) return null;
+    return sortRows(scoped.filter((row) => !status || row.status === status), sortKey, descending);
+  }, [scoped, status, sortKey, descending]);
+
+  const pager = usePagination(visible ?? [], 20);
+  const update = (values) => {
+    pager.reset();
+    setParam(values);
+  };
+  const sortBy = (key) => update({ sort: sortKey === key && !descending ? `-${key}` : key === "name" ? "" : key });
+
+  const total = scoped?.length ?? 0;
+  const submitted = scoped?.filter((row) => row.status !== "draft").length ?? 0;
+  const scored = scoped?.filter((row) => row.status === "unit_scored" || row.status === "published").length ?? 0;
+  const late = scoped?.filter((row) => deadlineNote(row, period)?.tone === "late").length ?? 0;
+  const filtered = Boolean(team || group || flag || search);
+
+  const header = (key, label, className = "") => (
+    <th className={`${className} sortable ${sortKey === key ? "sorted" : ""}`} onClick={() => sortBy(key)} aria-sort={sortKey === key ? (descending ? "descending" : "ascending") : "none"}>
+      {label}
+      {sortKey === key && (descending ? <ArrowDown size={12} /> : <ArrowUp size={12} />)}
+    </th>
+  );
+
   return (
-    <tr className="ev-group-row" onClick={onToggle}>
-      <td colSpan={8}>
-        <span className="ev-group-title">
-          {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-          <b>{group.name}</b>
-          <em>{total}</em>
-        </span>
-        <span className="ev-group-progress">
+    <>
+      <div className="ev-filters">
+        <div className="ev-status-chips">
+          {STATUS_FILTERS.map(([value, label]) => (
+            <button key={value} className={status === value ? "active" : ""} onClick={() => update({ status: value })}>
+              {label} <em>{counts[value] ?? 0}</em>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="ev-filters ev-board-filters">
+        {teams.length > 1 && (
+          <select value={team ?? ""} onChange={(e) => update({ team: e.target.value, group: "" })} aria-label="Tổ">
+            <option value="">Mọi tổ</option>
+            {teams.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        )}
+        {team && groups.length > 0 && (
+          <select value={group ?? ""} onChange={(e) => update({ group: e.target.value })} aria-label="Nhóm">
+            <option value="">Mọi nhóm</option>
+            {groups.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        )}
+        <select value={flag} onChange={(e) => update({ flag: e.target.value })} aria-label="Cần chú ý" className={flag ? "active" : ""}>
+          <option value="">Cần chú ý: tất cả</option>
+          {ATTENTION_FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select>
+        {filtered && <button className="ev-link-btn" onClick={() => update({ team: "", group: "", flag: "", q: "" })}>Xóa bộ lọc</button>}
+        <label className="ev-search">
+          <Search size={15} />
+          <input value={search} onChange={(e) => update({ q: e.target.value })} placeholder="Tìm tên hoặc mã giáo viên..." />
+        </label>
+      </div>
+
+      {total > 0 && (
+        <div className="ev-board-summary">
           <span>Đã nộp <b>{submitted}/{total}</b></span>
           <span>Tổ chấm <b>{scored}/{total}</b></span>
-          {late > 0 && <span className="late">{late} trễ hạn</span>}
+          {late > 0 && (
+            <button className="late" onClick={() => update({ flag: flag === "late" ? "" : "late" })}>
+              {late} trễ hạn
+            </button>
+          )}
           <span className="ev-progress" aria-hidden="true">
             <i className="scored" style={{ width: `${(scored / total) * 100}%` }} />
             <i className="submitted" style={{ width: `${((submitted - scored) / total) * 100}%` }} />
           </span>
-        </span>
-      </td>
-    </tr>
-  );
-}
+        </div>
+      )}
 
-function BoardTable({ groups, period, collapsed, onToggle, onToggleAll, onOpen }) {
-  if (!groups) return <div className="empty-state"><Award className="loading-icon" size={30} /><b>Đang tải...</b></div>;
-  if (!groups.length) return <div className="empty-state"><Search size={30} /><b>Không có phiếu phù hợp</b></div>;
-  return (
-    <div className="ev-table-wrap ev-board-wrap">
-      <table className="ev-table ev-board-table">
-        <thead>
-          <tr>
-            <th>
-              Giáo viên
-              {groups.length > 1 && (
-                <button className="ev-link-btn" onClick={onToggleAll}>{collapsed.size ? "Mở tất cả" : "Thu gọn tất cả"}</button>
-              )}
-            </th>
-            <th>Trạng thái</th>
-            <th className="num">Tự chấm</th>
-            <th className="num">Tổ chấm</th>
-            <th className="num" title="Điểm sau khi Hiệu trưởng duyệt">Chốt</th>
-            <th>Xếp loại</th>
-            <th aria-label="Giải trình" />
-            <th aria-label="Mở" />
-          </tr>
-        </thead>
-        {groups.map((group) => {
-          const open = !collapsed.has(group.key);
-          return (
-            <tbody key={group.key}>
-              <GroupRow group={group} period={period} open={open} onToggle={() => onToggle(group.key)} />
-              {open && group.rows.map((row) => {
+      {board?.not_included?.length > 0 && (
+        <details className="ev-excluded">
+          <summary>{board.not_included.length} giáo viên không tham gia kỳ này</summary>
+          <p>{board.not_included.join(", ")}</p>
+        </details>
+      )}
+
+      {!visible ? (
+        <div className="empty-state"><Award className="loading-icon" size={30} /><b>Đang tải...</b></div>
+      ) : !visible.length ? (
+        <div className="empty-state"><Search size={30} /><b>Không có phiếu phù hợp</b></div>
+      ) : (
+        <div className="ev-table-wrap ev-board-wrap">
+          <table className="ev-table ev-board-table">
+            <thead>
+              <tr>
+                {header("name", "Giáo viên")}
+                {header("team", "Tổ / nhóm")}
+                {header("status", "Trạng thái")}
+                {header("self", "Tự chấm", "num")}
+                {header("unit", "Tổ chấm", "num")}
+                {header("gap", "Chênh lệch", "num")}
+                {header("final", "Chốt", "num")}
+                <th>Xếp loại</th>
+                <th aria-label="Giải trình" />
+                <th aria-label="Mở" />
+              </tr>
+            </thead>
+            <tbody>
+              {pager.rows.map((row) => {
                 const note = deadlineNote(row, period);
-                const otherUnits = row.teacher.units.filter((name) => name !== group.name);
                 return (
                   <tr key={row.id} className="clickable" onClick={() => onOpen(row.id)}>
                     <td>
                       <span className="ev-person">
-                        {row.teacher.avatar_url ? <img src={row.teacher.avatar_url} alt="" /> : <i>{row.teacher.name?.split(" ").at(-1)?.charAt(0)}</i>}
+                        {row.teacher.avatar_url ? <img src={row.teacher.avatar_url} alt="" /> : <i>{givenName(row.teacher.name).charAt(0)}</i>}
                         <span>
                           <b>{row.teacher.name}</b>
-                          <small>{[...otherUnits, row.is_homeroom ? "GVCN" : null].filter(Boolean).join(" · ") || row.teacher.code}</small>
+                          <small>{[row.teacher.code, row.is_homeroom ? "GVCN" : null].filter(Boolean).join(" · ")}</small>
                         </span>
                       </span>
+                    </td>
+                    <td>
+                      {row.team ? row.team.name : <span className="ev-muted">Chưa thuộc tổ</span>}
+                      {row.group && <small className="ev-sub">{row.group.name}</small>}
                     </td>
                     <td>
                       <span className={`ev-chip ${STATUS_TONES[row.status]}`}>{row.status_label}</span>
                       {note && <small className={note.tone === "late" ? "ev-late" : "ev-warn"}>{note.text}</small>}
                     </td>
                     <td className="num">{formatScore(row.self_total)}</td>
-                    <td className="num">
-                      {formatScore(row.unit_total)}
-                      <ScoreDiff self={row.self_total} unit={row.unit_total} />
-                    </td>
+                    <td className="num">{formatScore(row.unit_total)}</td>
+                    <td className="num"><ScoreDiff self={row.self_total} unit={row.unit_total} /></td>
                     <td className="num">{row.final_total != null ? <b>{formatScore(row.final_total)}</b> : <span className="ev-muted">—</span>}</td>
                     <td>
                       {row.no_grade_reason ? <span className="ev-chip red">Không xếp loại</span> : row.grade ? <b>{row.grade}</b> : row.suggested_grade ? <span className="ev-muted">Gợi ý: {row.suggested_grade}</span> : <span className="ev-muted">—</span>}
@@ -516,10 +586,11 @@ function BoardTable({ groups, period, collapsed, onToggle, onToggleAll, onOpen }
                 );
               })}
             </tbody>
-          );
-        })}
-      </table>
-    </div>
+          </table>
+        </div>
+      )}
+      <TablePagination pager={pager} noun="phiếu" sizes={[20, 50, 100]} />
+    </>
   );
 }
 
