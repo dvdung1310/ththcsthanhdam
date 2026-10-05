@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { Award, CalendarPlus, CheckCircle2, ClipboardList, ListChecks, Megaphone, MessageSquare, RotateCcw, Search, Send, Settings2, TriangleAlert, X } from "lucide-react";
+import { Award, CalendarPlus, CheckCircle2, ClipboardList, ListChecks, Trash2, Users, Megaphone, MessageSquare, RotateCcw, Search, Send, Settings2, TriangleAlert, X } from "lucide-react";
 import { apiJson } from "./api";
 import { useConfirm } from "./ConfirmDialog";
 import { PERIOD_TONES, STATUS_TONES, formatDay, formatScore } from "./evaluationUtils";
@@ -23,6 +23,7 @@ export default function EvaluationHome() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [periodDialog, setPeriodDialog] = useState(null);
+  const [deleting, setDeleting] = useState(null);
   const [filters, setFilters] = useState({ status: "", department_id: "", search: "" });
 
   const abilities = overview?.abilities ?? {};
@@ -89,11 +90,21 @@ export default function EvaluationHome() {
     if (ok) run(() => apiJson(`/api/evaluation-periods/${period.id}/disclose`, { method: "POST" }));
   };
   const publish = async () => {
-    const pending = board?.data.filter((row) => row.status !== "unit_scored" && row.status !== "published").length ?? 0;
+    let pending = [];
+    try {
+      const all = await apiJson(`/api/evaluations?period_id=${period.id}`);
+      pending = all.data.filter((row) => row.status !== "unit_scored" && row.status !== "published");
+    } catch (e) {
+      setError(e.message);
+      return;
+    }
+    const names = pending.slice(0, 10).map((row) => `${row.teacher.name} (${row.status_label.toLowerCase()})`).join(", ");
     const ok = await confirm({
-      tone: pending ? "danger" : undefined,
+      tone: pending.length ? "danger" : undefined,
       title: `Công bố kết quả ${period.label}?`,
-      message: pending ? `Còn ${pending} phiếu chưa chấm xong. Các phiếu này sẽ được công bố theo điểm hiện có. Sau khi công bố, phiếu bị khóa.` : "Sau khi công bố, phiếu bị khóa và giáo viên nhận thông báo kết quả.",
+      message: pending.length
+        ? `Còn ${pending.length} phiếu chưa chấm xong: ${names}${pending.length > 10 ? "…" : ""}. Các phiếu này sẽ được công bố theo điểm hiện có. Nếu ai không cần đánh giá kỳ này, hãy trả phiếu về rồi gỡ khỏi kỳ trong “Sửa kỳ” trước. Sau khi công bố, phiếu bị khóa.`
+        : "Sau khi công bố, phiếu bị khóa và giáo viên nhận thông báo kết quả.",
       confirmText: "Công bố",
     });
     if (ok) run(() => apiJson(`/api/evaluation-periods/${period.id}/publish`, { method: "POST" }));
@@ -175,7 +186,10 @@ export default function EvaluationHome() {
             {period && abilities.can_manage && (
               <div className="ev-period-actions">
                 {period.status !== "published" && (
-                  <button className="secondary-btn" onClick={() => setPeriodDialog({ mode: "edit", period })}><Settings2 size={15} /> Sửa hạn</button>
+                  <>
+                    <button className="secondary-btn" onClick={() => setPeriodDialog({ mode: "edit", period })}><Settings2 size={15} /> Sửa kỳ</button>
+                    <button className="secondary-btn danger" onClick={() => setDeleting(period)}><Trash2 size={15} /> Xóa kỳ</button>
+                  </>
                 )}
                 {period.status === "open" && <button className="secondary-btn" onClick={disclose}><Send size={15} /> Gửi kết quả dự kiến</button>}
                 {period.status !== "published" && <button className="primary-btn" onClick={publish}><Megaphone size={15} /> Công bố</button>}
@@ -211,12 +225,33 @@ export default function EvaluationHome() {
                   <input value={filters.search} onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))} placeholder="Tìm giáo viên..." />
                 </label>
               </div>
+              {board?.not_included?.length > 0 && (
+                <details className="ev-excluded">
+                  <summary>
+                    {board.not_included.length} giáo viên không tham gia kỳ này
+                  </summary>
+                  <p>{board.not_included.join(", ")}</p>
+                </details>
+              )}
               <BoardTable rows={board?.data} onOpen={(id) => navigate(`/evaluations/${id}`)} />
             </>
           )}
         </section>
       )}
 
+      {deleting && (
+        <DeletePeriodDialog
+          period={deleting}
+          onClose={() => setDeleting(null)}
+          onDeleted={async (result) => {
+            setDeleting(null);
+            setSuccess(result.message);
+            setBoard(null);
+            setParam({ period: "" });
+            await loadOverview();
+          }}
+        />
+      )}
       {periodDialog && (
         <PeriodDialog
           dialog={periodDialog}
@@ -334,7 +369,9 @@ function BoardTable({ rows, onOpen }) {
 }
 
 function PeriodDialog({ dialog, existing, onClose, onSaved }) {
+  const confirm = useConfirm();
   const editing = dialog.mode === "edit";
+  const pad = (n) => String(n).padStart(2, "0");
   const next = (() => {
     const now = new Date();
     for (let offset = 0; offset < 24; offset++) {
@@ -343,21 +380,78 @@ function PeriodDialog({ dialog, existing, onClose, onSaved }) {
     }
     return now;
   })();
-  const pad = (n) => String(n).padStart(2, "0");
+  const [tab, setTab] = useState("setup");
   const [form, setForm] = useState(
     editing
       ? { self_due_on: dialog.period.self_due_on ?? "", unit_due_on: dialog.period.unit_due_on ?? "" }
       : { year: next.getFullYear(), month: next.getMonth() + 1, self_due_on: `${next.getFullYear()}-${pad(next.getMonth() + 1)}-25`, unit_due_on: `${next.getFullYear()}-${pad(next.getMonth() + 1)}-28` },
   );
+  const [roster, setRoster] = useState(null);
+  const [selected, setSelected] = useState(new Set());
+  const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    apiJson(`/api/evaluation-periods/roster${editing ? `?period_id=${dialog.period.id}` : ""}`)
+      .then((result) => {
+        setRoster(result);
+        setSelected(new Set(result.data.filter((row) => (editing ? row.evaluation : row.eligible)).map((row) => row.teacher_id)));
+      })
+      .catch((e) => setError(e.message));
+  }, [editing, dialog.period?.id]);
+
+  const rows = roster?.data ?? [];
+  const selectable = (row) => (row.evaluation ? row.removable : row.eligible);
+  const added = rows.filter((row) => !row.evaluation && selected.has(row.teacher_id));
+  const removed = rows.filter((row) => row.evaluation && !selected.has(row.teacher_id));
+  const keyword = search.trim().toLowerCase();
+  const visible = rows.filter((row) => !keyword || `${row.name} ${row.code ?? ""}`.toLowerCase().includes(keyword));
+  const groups = useMemo(() => {
+    const map = new Map();
+    visible.filter((row) => row.eligible || row.evaluation).forEach((row) => {
+      const key = row.unit ?? "Chưa thuộc tổ nào";
+      map.set(key, [...(map.get(key) ?? []), row]);
+    });
+    return [...map.entries()];
+  }, [visible]);
+  const excluded = visible.filter((row) => !row.eligible && !row.evaluation);
+
+  const toggle = (row) =>
+    setSelected((current) => {
+      const nextSet = new Set(current);
+      if (nextSet.has(row.teacher_id)) nextSet.delete(row.teacher_id);
+      else nextSet.add(row.teacher_id);
+      return nextSet;
+    });
+  const toggleGroup = (members, value) =>
+    setSelected((current) => {
+      const nextSet = new Set(current);
+      members.filter(selectable).forEach((row) => (value ? nextSet.add(row.teacher_id) : nextSet.delete(row.teacher_id)));
+      return nextSet;
+    });
+
   const submit = async (event) => {
     event.preventDefault();
+    if (!selected.size) {
+      setTab("people");
+      setError("Chọn ít nhất một giáo viên.");
+      return;
+    }
+    const losing = removed.filter((row) => row.evaluation.has_data);
+    if (editing && losing.length) {
+      const ok = await confirm({
+        tone: "danger",
+        title: `Gỡ ${removed.length} phiếu khỏi kỳ?`,
+        message: `Phiếu của ${losing.map((row) => row.name).join(", ")} đã có dữ liệu tự chấm và sẽ bị xóa vĩnh viễn. Giáo viên sẽ nhận thông báo không thuộc diện đánh giá kỳ này.`,
+        confirmText: "Gỡ phiếu",
+      });
+      if (!ok) return;
+    }
     setSaving(true);
     setError("");
     try {
-      const body = { ...form, self_due_on: form.self_due_on || null, unit_due_on: form.unit_due_on || null };
+      const body = { self_due_on: form.self_due_on || null, unit_due_on: form.unit_due_on || null, teacher_ids: [...selected] };
       const result = editing
         ? await apiJson(`/api/evaluation-periods/${dialog.period.id}`, { method: "PUT", body })
         : await apiJson("/api/evaluation-periods", { method: "POST", body: { ...body, year: Number(form.year), month: Number(form.month) } });
@@ -369,43 +463,187 @@ function PeriodDialog({ dialog, existing, onClose, onSaved }) {
     }
   };
 
+  const changeSummary = editing ? [added.length && `+${added.length} phiếu`, removed.length && `−${removed.length} phiếu`].filter(Boolean).join(", ") : "";
+
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <form className="ev-dialog ev-period-dialog" onSubmit={submit}>
+        <h3>{editing ? `Sửa kỳ ${dialog.period.label}` : "Mở kỳ đánh giá tháng"}</h3>
+        <nav className="ev-tabs small" role="tablist">
+          <button type="button" role="tab" aria-selected={tab === "setup"} className={tab === "setup" ? "active" : ""} onClick={() => setTab("setup")}>
+            <Settings2 size={15} /> Thiết lập
+          </button>
+          <button type="button" role="tab" aria-selected={tab === "people"} className={tab === "people" ? "active" : ""} onClick={() => setTab("people")}>
+            <Users size={15} /> Nhân sự {roster && <em>{selected.size}</em>}
+          </button>
+        </nav>
+
+        {tab === "setup" ? (
+          <div className="ev-dialog-body">
+            {!editing && (
+              <div className="ev-dialog-row">
+                <label>
+                  Tháng
+                  <select value={form.month} onChange={(e) => setForm({ ...form, month: e.target.value })}>
+                    {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>Tháng {i + 1}</option>)}
+                  </select>
+                </label>
+                <label>
+                  Năm
+                  <input type="number" min="2020" max="2100" value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} />
+                </label>
+              </div>
+            )}
+            <div className="ev-dialog-row">
+              <label>
+                Hạn tự chấm
+                <input type="date" value={form.self_due_on} onChange={(e) => setForm({ ...form, self_due_on: e.target.value })} />
+              </label>
+              <label>
+                Hạn tổ chấm
+                <input type="date" value={form.unit_due_on} onChange={(e) => setForm({ ...form, unit_due_on: e.target.value })} />
+              </label>
+            </div>
+            <div className="ev-template-line">
+              <ListChecks size={16} />
+              <span>
+                {editing ? "Bộ tiêu chí của kỳ: " : "Bộ tiêu chí áp dụng: "}
+                <b>{roster?.template?.name ?? "—"}</b>
+                {!editing && <small>Muốn dùng bộ khác, hãy áp dụng bộ đó trong màn <Link to="/evaluations/templates">Bộ tiêu chí</Link> trước khi mở kỳ.</small>}
+              </span>
+            </div>
+            <button type="button" className="ev-people-summary" onClick={() => setTab("people")}>
+              <Users size={16} />
+              <span>
+                {roster ? <><b>{selected.size}</b> giáo viên có phiếu{changeSummary && ` (${changeSummary})`}</> : "Đang tải danh sách nhân sự..."}
+                <small>Xem và chọn người tham gia ở tab Nhân sự</small>
+              </span>
+            </button>
+          </div>
+        ) : (
+          <div className="ev-dialog-body ev-roster">
+            <label className="ev-search">
+              <Search size={15} />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm theo tên hoặc mã giáo viên..." />
+            </label>
+            <div className="ev-roster-list">
+              {!roster && <p className="ev-muted">Đang tải...</p>}
+              {groups.map(([unit, members]) => {
+                const pickable = members.filter(selectable);
+                const allOn = pickable.length > 0 && pickable.every((row) => selected.has(row.teacher_id));
+                return (
+                  <section key={unit}>
+                    <header>
+                      <label>
+                        <input type="checkbox" checked={allOn} disabled={!pickable.length} onChange={(e) => toggleGroup(members, e.target.checked)} />
+                        <b>{unit}</b>
+                      </label>
+                      <small>{members.filter((row) => selected.has(row.teacher_id)).length}/{members.length}</small>
+                    </header>
+                    {members.map((row) => (
+                      <RosterRow key={row.teacher_id} row={row} checked={selected.has(row.teacher_id)} disabled={!selectable(row)} onToggle={() => toggle(row)} />
+                    ))}
+                  </section>
+                );
+              })}
+              {excluded.length > 0 && (
+                <section className="excluded">
+                  <header><b>Không thuộc diện đánh giá</b><small>{excluded.length}</small></header>
+                  <p className="ev-dialog-note">Muốn đánh giá những người này, hãy cập nhật hồ sơ ở màn Quản lý nhân sự trước.</p>
+                  {excluded.map((row) => <RosterRow key={row.teacher_id} row={row} checked={false} disabled onToggle={() => {}} />)}
+                </section>
+              )}
+            </div>
+          </div>
+        )}
+
+        {error && <p className="dl-dialog-error">{error}</p>}
+        <footer>
+          <span className="ev-dialog-count">{roster ? `Đã chọn ${selected.size} giáo viên${changeSummary ? ` · ${changeSummary}` : ""}` : ""}</span>
+          <button type="button" className="secondary-btn" onClick={onClose}>Hủy</button>
+          <button className="primary-btn" disabled={saving || !roster || !selected.size}>
+            {saving ? "Đang lưu..." : editing ? "Lưu thay đổi" : `Mở kỳ (${selected.size} phiếu)`}
+          </button>
+        </footer>
+      </form>
+    </div>
+  );
+}
+
+function RosterRow({ row, checked, disabled, onToggle }) {
+  return (
+    <label className={`ev-roster-row ${disabled ? "disabled" : ""}`} title={row.lock_reason ?? row.reason ?? undefined}>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={onToggle} />
+      <span className="ev-person">
+        {row.avatar_url ? <img src={row.avatar_url} alt="" /> : <i>{row.name?.split(" ").at(-1)?.charAt(0)}</i>}
+        <span>
+          <b>{row.name}</b>
+          <small>{[row.code, row.reason, row.lock_reason].filter(Boolean).join(" · ")}</small>
+        </span>
+      </span>
+      {row.evaluation && (
+        <span className="ev-roster-tags">
+          <span className={`ev-chip ${STATUS_TONES[row.evaluation.status]}`}>{row.evaluation.status_label}</span>
+          {row.evaluation.has_data && row.evaluation.status === "draft" && <span className="ev-chip orange">Có dữ liệu</span>}
+        </span>
+      )}
+    </label>
+  );
+}
+
+function DeletePeriodDialog({ period, onClose, onDeleted }) {
+  const [roster, setRoster] = useState(null);
+  const [label, setLabel] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    apiJson(`/api/evaluation-periods/roster?period_id=${period.id}`).then(setRoster).catch((e) => setError(e.message));
+  }, [period.id]);
+  const sheets = roster?.data.filter((row) => row.evaluation) ?? [];
+  const withData = sheets.filter((row) => row.evaluation.has_data);
+  const needsLabel = withData.length > 0;
+  const submit = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      onDeleted(await apiJson(`/api/evaluation-periods/${period.id}`, { method: "DELETE", body: { confirm_label: label.trim() } }));
+    } catch (e) {
+      setError(e.message);
+      setSaving(false);
+    }
+  };
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <form className="ev-dialog" onSubmit={submit}>
-        <h3>{editing ? `Sửa hạn ${dialog.period.label}` : "Mở kỳ đánh giá tháng"}</h3>
-        {!editing && (
-          <div className="ev-dialog-row">
-            <label>
-              Tháng
-              <select value={form.month} onChange={(e) => setForm({ ...form, month: e.target.value })}>
-                {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>Tháng {i + 1}</option>)}
-              </select>
-            </label>
-            <label>
-              Năm
-              <input type="number" min="2020" max="2100" value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} />
-            </label>
-          </div>
+        <h3>Xóa kỳ đánh giá {period.label}?</h3>
+        {!roster ? (
+          <p className="ev-muted">Đang kiểm tra dữ liệu...</p>
+        ) : (
+          <>
+            <p className="ev-dialog-note">
+              Kỳ có {sheets.length} phiếu. Toàn bộ phiếu, điểm, minh chứng và trao đổi của kỳ sẽ bị xóa; giáo viên nhận thông báo kỳ đã được hủy. Sau đó có thể mở lại tháng này từ đầu.
+            </p>
+            {needsLabel && (
+              <>
+                <div className="ev-notice warn">
+                  <TriangleAlert size={14} /> {withData.length} phiếu đã có người nhập liệu: {withData.slice(0, 8).map((row) => row.name).join(", ")}
+                  {withData.length > 8 ? "…" : ""}. Dữ liệu này sẽ mất vĩnh viễn.
+                </div>
+                <label>
+                  <span>Nhập <b>{period.label}</b> để xác nhận</span>
+                  <input autoFocus value={label} onChange={(e) => setLabel(e.target.value)} placeholder={period.label} />
+                </label>
+              </>
+            )}
+          </>
         )}
-        <div className="ev-dialog-row">
-          <label>
-            Hạn tự chấm
-            <input type="date" value={form.self_due_on} onChange={(e) => setForm({ ...form, self_due_on: e.target.value })} />
-          </label>
-          <label>
-            Hạn tổ chấm
-            <input type="date" value={form.unit_due_on} onChange={(e) => setForm({ ...form, unit_due_on: e.target.value })} />
-          </label>
-        </div>
-        <p className="ev-dialog-note">
-          {editing
-            ? "Giáo viên mới vào trường (nếu có) sẽ được thêm phiếu khi lưu."
-            : "Hệ thống tạo phiếu cho mọi giáo viên đang làm việc (trừ Hiệu trưởng, Thư ký) và gửi thông báo. Ô GVCN được điền sẵn theo tháng trước."}
-        </p>
         {error && <p className="dl-dialog-error">{error}</p>}
         <footer>
           <button type="button" className="secondary-btn" onClick={onClose}>Hủy</button>
-          <button className="primary-btn" disabled={saving}>{saving ? "Đang lưu..." : editing ? "Lưu" : "Mở kỳ"}</button>
+          <button className="primary-btn danger" disabled={saving || !roster || (needsLabel && label.trim() !== period.label)}>
+            <Trash2 size={15} /> {saving ? "Đang xóa..." : "Xóa kỳ"}
+          </button>
         </footer>
       </form>
     </div>

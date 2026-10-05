@@ -1451,6 +1451,247 @@
   font-size: 13px;
 }
 
+.ev-tabs.small {
+  align-self: stretch;
+}
+
+.ev-tabs.small button {
+  flex: 1;
+  justify-content: center;
+}
+
+.ev-tabs em {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 99px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.25);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.ev-tabs button:not(.active) em {
+  color: #5a3fd6;
+  background: #efebff;
+}
+
+.ev-period-dialog {
+  width: min(640px, 100%);
+  max-height: calc(100vh - 40px);
+}
+
+.ev-dialog-body {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.ev-template-line,
+.ev-people-summary {
+  padding: 12px 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid #e3e6ee;
+  border-radius: 11px;
+  color: #46516a;
+  background: #fafbfd;
+  font-size: 13px;
+  text-align: left;
+}
+
+.ev-template-line svg,
+.ev-people-summary svg {
+  flex: none;
+  margin-top: 1px;
+  color: #6a4ee0;
+}
+
+.ev-template-line b,
+.ev-people-summary b {
+  color: #273250;
+}
+
+.ev-template-line small,
+.ev-people-summary small {
+  display: block;
+  margin-top: 3px;
+  color: #8a92a8;
+  font-size: 12px;
+}
+
+.ev-template-line a {
+  color: #5a3fd6;
+  font-weight: 700;
+}
+
+.ev-people-summary {
+  cursor: pointer;
+}
+
+.ev-people-summary:hover {
+  border-color: #c6bdf5;
+  background: #faf9ff;
+}
+
+.ev-roster .ev-search {
+  flex: none;
+  flex-direction: row;
+  margin-left: 0;
+  min-width: 0;
+}
+
+.ev-roster .ev-search input {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.ev-roster-list {
+  max-height: min(52vh, 460px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid #eceef3;
+  border-radius: 11px;
+}
+
+.ev-roster-list section + section {
+  border-top: 1px solid #eceef3;
+}
+
+.ev-roster-list header {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f6f7fb;
+}
+
+.ev-roster-list header label {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.ev-roster-list header b {
+  color: #273250;
+  font-size: 12.5px;
+}
+
+.ev-roster-list header small {
+  color: #8a92a8;
+  font-size: 12px;
+}
+
+.ev-roster-list section.excluded .ev-dialog-note {
+  padding: 6px 12px 0;
+}
+
+.ev-roster-row {
+  padding: 8px 12px;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.ev-roster-row:hover:not(.disabled) {
+  background: #faf9ff;
+}
+
+.ev-roster-row.disabled {
+  cursor: default;
+}
+
+.ev-roster-row.disabled .ev-person {
+  opacity: 0.6;
+}
+
+.ev-roster-row input,
+.ev-roster-list header input {
+  width: 16px;
+  min-height: 16px;
+  height: 16px;
+  padding: 0;
+  accent-color: #5a3fd6;
+}
+
+.ev-roster-row .ev-person {
+  min-width: 0;
+  flex: 1;
+}
+
+.ev-roster-row .ev-person img,
+.ev-roster-row .ev-person i {
+  width: 28px;
+  height: 28px;
+  font-size: 12px;
+}
+
+.ev-roster-row .ev-person b {
+  font-size: 13px;
+}
+
+.ev-roster-tags {
+  display: flex;
+  gap: 4px;
+}
+
+.ev-roster-tags .ev-chip {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.ev-dialog-count {
+  margin-right: auto;
+  align-self: center;
+  color: #77809a;
+  font-size: 12.5px;
+}
+
+.ev-excluded {
+  padding: 10px 18px;
+  border-bottom: 1px solid #eceef3;
+  color: #77809a;
+  font-size: 12.5px;
+}
+
+.ev-excluded summary {
+  cursor: pointer;
+}
+
+.ev-excluded p {
+  margin: 6px 0 0;
+  color: #46516a;
+}
+
+.ev-period-actions .danger,
+.primary-btn.danger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ev-period-actions .danger {
+  color: #c2273a;
+}
+
+.primary-btn.danger {
+  background: linear-gradient(100deg, #d23a4e, #e45869);
+}
+
+.primary-btn.danger:disabled {
+  opacity: 0.45;
+}
+
 @media (max-width: 1100px) {
   .ev-sheet-layout {
     grid-template-columns: minmax(0, 1fr);
