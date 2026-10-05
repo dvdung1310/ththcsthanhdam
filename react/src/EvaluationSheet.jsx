@@ -39,7 +39,6 @@ function buildRows(data) {
         self_note: criterion.self_note ?? "",
         unit_score: toInput(criterion.unit_score),
         unit_note: criterion.unit_note ?? "",
-        final_score: toInput(criterion.final_score),
       };
     }),
   );
@@ -104,7 +103,7 @@ export default function EvaluationSheet() {
   }, [success]);
 
   const anyDirty = dirty.self || dirty.unit || dirty.review;
-  const editableColumns = data ? [data.abilities.can_self_score && "self", data.abilities.can_unit_score && "unit", data.abilities.can_review && "final"].filter(Boolean) : [];
+  const editableColumns = data ? [data.abilities.can_self_score && "self", data.abilities.can_unit_score && "unit"].filter(Boolean) : [];
   const invalidList = data ? editableColumns.flatMap((column) => invalidCells(column)) : [];
   const unsaved = anyDirty || invalidList.length > 0 || autosave.state === "error";
   useEffect(() => {
@@ -122,7 +121,6 @@ export default function EvaluationSheet() {
   const unitMode = abilities.can_unit_score;
   const reviewMode = abilities.can_review;
   const showUnit = !!data && (data.show_result || unitMode);
-  const showFinal = !!data && data.show_result && (reviewMode || data.period.status !== "open" || data.sections.some((s) => s.criteria.some((c) => c.final_score !== null)));
   const isHomeroom = form?.is_homeroom ?? false;
 
   const totals = useMemo(() => {
@@ -130,11 +128,10 @@ export default function EvaluationSheet() {
     return {
       self: computeTotals(data.sections, rows, "self", isHomeroom),
       unit: showUnit ? computeTotals(data.sections, rows, "unit", isHomeroom) : null,
-      final: showFinal ? computeTotals(data.sections, rows, "final", isHomeroom) : null,
     };
-  }, [data, rows, isHomeroom, showUnit, showFinal]);
+  }, [data, rows, isHomeroom, showUnit]);
 
-  const resultColumn = showFinal ? "final" : showUnit ? "unit" : "self";
+  const resultColumn = showUnit ? "unit" : "self";
   const resultTotal = totals?.[resultColumn]?.total ?? 0;
   const suggested = data && !form?.no_grade ? suggestGrade(data.grades, resultTotal, isHomeroom, form?.has_violation) : null;
 
@@ -195,7 +192,7 @@ export default function EvaluationSheet() {
     if (group === "unit") {
       return apiJson(`/api/evaluations/${data.id}/unit`, { method: "PUT", body: { is_homeroom: fields.is_homeroom, scores: payload("unit", true, source), complete: false } });
     }
-    return apiJson(`/api/evaluations/${data.id}/review`, { method: "PUT", body: { ...reviewFields(fields), scores: payload("final", false, source), approve: false } });
+    return apiJson(`/api/evaluations/${data.id}/review`, { method: "PUT", body: { ...reviewFields(fields), approve: false } });
   };
 
   const persist = async () => {
@@ -341,10 +338,10 @@ export default function EvaluationSheet() {
   };
 
   const approve = async () => {
-    if (guardInvalid(...(unitMode ? ["unit", "final"] : ["final"]))) return;
+    if (unitMode && guardInvalid("unit")) return;
     await save(async () => {
       if (unitMode && dirty.unit) await apiJson(`/api/evaluations/${data.id}/unit`, { method: "PUT", body: { is_homeroom: form.is_homeroom, scores: payload("unit"), complete: false } });
-      return apiJson(`/api/evaluations/${data.id}/review`, { method: "PUT", body: { ...reviewFields(form), scores: payload("final", false), approve: true } });
+      return apiJson(`/api/evaluations/${data.id}/review`, { method: "PUT", body: { ...reviewFields(form), approve: true } });
     });
   };
 
@@ -463,10 +460,15 @@ export default function EvaluationSheet() {
           {selfMode && <button className="primary-btn" disabled={saving} onClick={() => saveSelf(true)}><Send size={15} /> Nộp phiếu</button>}
           {unitMode && abilities.can_return && <button className="secondary-btn" disabled={saving} onClick={() => setReturning(true)}><Undo2 size={15} /> Trả phiếu</button>}
           {unitMode && data.status !== "unit_scored" && (
-            <button className={reviewMode ? "secondary-btn" : "primary-btn"} disabled={saving} onClick={completeUnit}><CheckCircle2 size={15} /> Hoàn tất chấm</button>
+            <button className="primary-btn" disabled={saving} onClick={completeUnit}><CheckCircle2 size={15} /> Hoàn tất chấm</button>
           )}
-          {reviewMode && (
-            <button className="primary-btn" disabled={saving} onClick={approve}><CheckCircle2 size={15} /> {data.reviewed_at ? "Duyệt lại" : "Duyệt phiếu"}</button>
+          {reviewMode && !(unitMode && !["unit_scored", "published"].includes(data.status)) && (
+            <button
+              className="primary-btn"
+              disabled={saving || !["unit_scored", "published"].includes(data.status)}
+              title={["unit_scored", "published"].includes(data.status) ? undefined : "Tổ cần hoàn tất chấm trước khi duyệt"}
+              onClick={approve}
+            ><CheckCircle2 size={15} /> {data.reviewed_at ? "Duyệt lại" : "Duyệt phiếu"}</button>
           )}
         </div>
       </section>
@@ -522,7 +524,7 @@ export default function EvaluationSheet() {
               unitMode={unitMode}
               reviewMode={reviewMode}
               showUnit={showUnit}
-              showFinal={showFinal}
+             
               canAddEvidence={abilities.can_add_evidence}
               onCell={setCell}
               onUpload={uploadEvidence}
@@ -541,7 +543,7 @@ export default function EvaluationSheet() {
             totals={totals}
             isHomeroom={isHomeroom}
             showUnit={showUnit}
-            showFinal={showFinal}
+           
             suggested={suggested}
             resultColumn={resultColumn}
             form={form}
@@ -567,7 +569,7 @@ export default function EvaluationSheet() {
   );
 }
 
-function SectionCard({ section, rows, totals, isHomeroom, canToggleHomeroom, onToggleHomeroom, selfMode, unitMode, reviewMode, showUnit, showFinal, canAddEvidence, onCell, onUpload, onRemoveEvidence, onOpenEvidence, onCopySelf }) {
+function SectionCard({ section, rows, totals, isHomeroom, canToggleHomeroom, onToggleHomeroom, selfMode, unitMode, reviewMode, showUnit, canAddEvidence, onCell, onUpload, onRemoveEvidence, onOpenEvidence, onCopySelf }) {
   const disabled = section.homeroom_only && !isHomeroom;
   const bonus = section.kind === "bonus";
   return (
@@ -595,12 +597,11 @@ function SectionCard({ section, rows, totals, isHomeroom, canToggleHomeroom, onT
       {disabled ? (
         <p className="ev-disabled-note">Chỉ áp dụng cho giáo viên chủ nhiệm. Bật “GVCN” ở trên nếu bạn chủ nhiệm lớp trong tháng này.</p>
       ) : (
-        <div className="ev-criteria" style={{ "--score-cols": 1 + Number(showUnit) + Number(showFinal) }}>
+        <div className="ev-criteria" style={{ "--score-cols": 1 + Number(showUnit) }}>
           <div className="ev-criteria-head">
             <span>Tiêu chí</span>
             <span>Tự chấm</span>
             {showUnit && <span>Tổ chấm</span>}
-            {showFinal && <span>Chốt</span>}
           </div>
           {section.criteria.map((criterion) => (
             <CriterionRow
@@ -612,7 +613,7 @@ function SectionCard({ section, rows, totals, isHomeroom, canToggleHomeroom, onT
               unitMode={unitMode}
               reviewMode={reviewMode}
               showUnit={showUnit}
-              showFinal={showFinal}
+             
               canAddEvidence={canAddEvidence}
               onCell={onCell}
               onUpload={onUpload}
@@ -624,7 +625,6 @@ function SectionCard({ section, rows, totals, isHomeroom, canToggleHomeroom, onT
             <span>{bonus ? "Tổng điểm cộng" : "Tổng mục"}</span>
             <SectionTotal totals={totals.self} id={section.id} />
             {showUnit && <SectionTotal totals={totals.unit} id={section.id} />}
-            {showFinal && <SectionTotal totals={totals.final} id={section.id} />}
           </div>
         </div>
       )}
@@ -663,7 +663,7 @@ function SectionTotal({ totals, id }) {
   return <b>{formatScore(totals?.sections[id])}</b>;
 }
 
-function ScoreCell({ value, max, editable, onScore, placeholder, highlight }) {
+function ScoreCell({ value, max, editable, onScore }) {
   const [hint, setHint] = useState("");
   useEffect(() => {
     if (!hint) return undefined;
@@ -673,20 +673,20 @@ function ScoreCell({ value, max, editable, onScore, placeholder, highlight }) {
   const parsed = parseScore(value);
   if (!editable) {
     return (
-      <div className={`ev-cell readonly ${highlight ? "changed" : ""}`}>
-        <b>{value === "" ? (placeholder ? formatScore(parseScore(placeholder)) : "—") : formatScore(parsed)}</b>
+      <div className="ev-cell readonly">
+        <b>{value === "" ? "—" : formatScore(parsed)}</b>
       </div>
     );
   }
   const error = scoreError(value, max);
   const message = error ?? hint;
   return (
-    <div className={`ev-cell ${highlight ? "changed" : ""}`}>
+    <div className="ev-cell">
       <div className={`ev-score-input ${error ? "invalid" : ""}`}>
         <input
           inputMode="decimal"
           value={value}
-          placeholder={placeholder ?? "—"}
+          placeholder="—"
           onChange={(e) => {
             const next = e.target.value.trim();
             if (SCORE_PATTERN.test(next)) {
@@ -727,11 +727,10 @@ function NoteField({ label, value, editable, placeholder, onChange, autoFocus })
   );
 }
 
-function CriterionRow({ criterion, row, bonus, selfMode, unitMode, reviewMode, showUnit, showFinal, canAddEvidence, onCell, onUpload, onRemoveEvidence, onOpenEvidence }) {
+function CriterionRow({ criterion, row, bonus, selfMode, unitMode, reviewMode, showUnit, canAddEvidence, onCell, onUpload, onRemoveEvidence, onOpenEvidence }) {
   const [open, setOpen] = useState(false);
   const fileInput = useRef(null);
   const lines = (criterion.guidance ?? "").split("\n").filter(Boolean);
-  const finalChanged = row.final_score !== "" && parseScore(row.final_score) !== parseScore(row.unit_score);
   const selfValue = parseScore(row.self_score) ?? 0;
   const [opened, setOpened] = useState({});
   const needsNote = (score) => {
@@ -798,16 +797,6 @@ function CriterionRow({ criterion, row, bonus, selfMode, unitMode, reviewMode, s
           onScore={(value) => onCell(criterion.id, "unit_score", value, "unit")}
         />
       )}
-      {showFinal && (
-        <ScoreCell
-          value={row.final_score ?? ""}
-          max={criterion.max_score}
-          editable={reviewMode}
-          placeholder={row.unit_score || undefined}
-          highlight={finalChanged}
-          onScore={(value) => onCell(criterion.id, "final_score", value, "review")}
-        />
-      )}
       {notes.some((note) => note.visible) && (
         <div className="ev-notes">
           {notes.filter((note) => note.visible).map((note) => (
@@ -827,9 +816,9 @@ function CriterionRow({ criterion, row, bonus, selfMode, unitMode, reviewMode, s
   );
 }
 
-function Summary({ data, totals, isHomeroom, showUnit, showFinal, suggested, resultColumn, form, reviewMode, onField }) {
+function Summary({ data, totals, isHomeroom, showUnit, suggested, resultColumn, form, reviewMode, onField }) {
   const base = maxBase(data.sections, isHomeroom);
-  const columns = [["self", "Tự chấm"], ...(showUnit ? [["unit", "Tổ chấm"]] : []), ...(showFinal ? [["final", "Chốt"]] : [])];
+  const columns = [["self", "Tự chấm"], ...(showUnit ? [["unit", "Tổ chấm"]] : [])];
   const chosen = data.grades.find((grade) => grade.code === form.grade);
   const gradeLabel = form.no_grade ? "Không xếp loại" : chosen?.name ?? suggested?.name ?? "Chưa đạt khung xếp loại";
   return (
@@ -1054,7 +1043,6 @@ function PrintSheet({ data, rows, form, totals, suggested, showUnit }) {
       <p>
         Tổng điểm tháng: cá nhân tự chấm <b>{formatScore(totals.self.total)}</b>
         {showUnit && <> — tổ chấm <b>{formatScore(totals.unit?.total)}</b></>}
-        {totals.final && <> — điểm chốt <b>{formatScore(totals.final.total)}</b></>}
       </p>
       <p>Xếp loại thi đua: <b>{grade ?? "……………"}</b></p>
       <div className="ev-print-signs">

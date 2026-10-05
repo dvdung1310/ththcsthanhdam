@@ -93,7 +93,7 @@ export default function EvaluationHome() {
   };
 
   const disclose = async () => {
-    const ok = await confirm({ title: `Gửi kết quả dự kiến ${period.label}?`, message: "Giáo viên sẽ xem được điểm tổ chấm, điểm chốt và xếp loại dự kiến của mình, và có thể gửi giải trình trước khi công bố.", confirmText: "Gửi kết quả" });
+    const ok = await confirm({ title: `Gửi kết quả dự kiến ${period.label}?`, message: "Giáo viên sẽ xem được điểm tổ chấm và xếp loại dự kiến của mình, và có thể gửi giải trình trước khi công bố.", confirmText: "Gửi kết quả" });
     if (ok) run(() => apiJson(`/api/evaluation-periods/${period.id}/disclose`, { method: "POST" }));
   };
   const publish = async () => {
@@ -382,7 +382,6 @@ const SCORE_KEYS = {
   self: (row) => row.self_total,
   unit: (row) => row.unit_total,
   gap: (row) => (scoreGap(row) == null ? null : Math.abs(scoreGap(row))),
-  final: (row) => row.final_total,
 };
 
 function sortRows(rows, key, descending) {
@@ -544,7 +543,6 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
                 {header("self", "Tự chấm", "num")}
                 {header("unit", "Tổ chấm", "num")}
                 {header("gap", "Chênh lệch", "num")}
-                {header("final", "Chốt", "num")}
                 <th>Xếp loại</th>
                 <th aria-label="Giải trình" />
                 <th aria-label="Mở" />
@@ -573,11 +571,19 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
                       {note && <small className={note.tone === "late" ? "ev-late" : "ev-warn"}>{note.text}</small>}
                     </td>
                     <td className="num">{formatScore(row.self_total)}</td>
-                    <td className="num">{formatScore(row.unit_total)}</td>
+                    <td className="num">{row.unit_in_progress ? <span className="ev-muted">Đang chấm</span> : formatScore(row.unit_total)}</td>
                     <td className="num"><ScoreDiff self={row.self_total} unit={row.unit_total} /></td>
-                    <td className="num">{row.final_total != null ? <b>{formatScore(row.final_total)}</b> : <span className="ev-muted">—</span>}</td>
                     <td>
-                      {row.no_grade_reason ? <span className="ev-chip red">Không xếp loại</span> : row.grade ? <b>{row.grade}</b> : row.suggested_grade ? <span className="ev-muted">Gợi ý: {row.suggested_grade}</span> : <span className="ev-muted">—</span>}
+                      {row.no_grade_reason ? (
+                        <span className="ev-chip red">Không xếp loại</span>
+                      ) : row.grade || (row.reviewed && row.suggested_grade) ? (
+                        <b>{row.grade ?? row.suggested_grade}</b>
+                      ) : row.suggested_grade ? (
+                        <span className="ev-muted">Gợi ý: {row.suggested_grade}</span>
+                      ) : (
+                        <span className="ev-muted">—</span>
+                      )}
+                      {row.reviewed && <small className="ev-approved"><Check size={11} /> HT đã duyệt</small>}
                       {row.has_violation && <small className="ev-late">Có vi phạm</small>}
                     </td>
                     <td className="ev-comments">{row.comments_count > 0 && <span title="Trao đổi / giải trình"><MessageSquare size={14} /> {row.comments_count}</span>}</td>

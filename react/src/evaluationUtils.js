@@ -15,11 +15,6 @@ export function formatScore(value) {
 
 const clamp = (value, max) => Math.max(0, Math.min(value, max));
 
-export function cellValue(row, column) {
-  if (column === "final") return row.final_score === "" || row.final_score == null ? row.unit_score : row.final_score;
-  return row[`${column}_score`];
-}
-
 export const SCORE_PATTERN = /^\d*([.,]\d*)?$/;
 
 export function scoreError(value, max) {
@@ -42,7 +37,7 @@ export function computeTotals(sections, rows, column, isHomeroom) {
     if (section.homeroom_only && !isHomeroom) return;
     let sum = 0;
     section.criteria.forEach((criterion) => {
-      const raw = cellValue(rows[criterion.id] ?? {}, column);
+      const raw = rows[criterion.id]?.[`${column}_score`];
       if (scoreError(raw, criterion.max_score)) {
         if (!invalid.includes(section.id)) invalid.push(section.id);
         return;
