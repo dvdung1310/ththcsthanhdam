@@ -20,7 +20,10 @@ export function MenuList({ items, position, onClose }) {
       window.removeEventListener("resize", onClose);
     };
   }, [onClose]);
-  const visible = items.filter(Boolean).filter((item) => !item.hidden);
+  const visible = items
+    .filter(Boolean)
+    .filter((item) => !item.hidden)
+    .filter((item, index, list) => !item.divider || (index > 0 && index < list.length - 1 && !list[index + 1].divider));
   return createPortal(
     <div className="action-menu" ref={ref} role="menu" style={position} onClick={(event) => event.stopPropagation()} onContextMenu={(event) => event.preventDefault()}>
       {visible.map((item, index) =>
