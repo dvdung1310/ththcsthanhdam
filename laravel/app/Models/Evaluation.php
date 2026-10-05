@@ -30,4 +30,9 @@ class Evaluation extends Model
     public function comments() { return $this->hasMany(EvaluationComment::class)->orderBy('id'); }
     public function unitScorer() { return $this->belongsTo(User::class, 'unit_scored_by'); }
     public function reviewer() { return $this->belongsTo(User::class, 'reviewed_by'); }
+
+    public function resolveRouteBinding($value, $field = null)
+    {
+        return parent::resolveRouteBinding($value, $field) ?? abort(404, 'Phiếu đánh giá không còn tồn tại hoặc đã bị gỡ khỏi kỳ.');
+    }
 }

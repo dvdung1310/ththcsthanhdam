@@ -34,7 +34,7 @@ Route::middleware('api.token')->group(function(){
   Route::post('evaluations/{evaluation}/evidence',[EvaluationController::class,'uploadEvidence']);Route::get('evaluations/{evaluation}/evidence/{file}',[EvaluationController::class,'downloadEvidence']);Route::delete('evaluations/{evaluation}/evidence/{file}',[EvaluationController::class,'removeEvidence']);
  });
  Route::middleware('permission:evaluation.manage')->group(function(){
-  Route::post('evaluation-periods',[EvaluationController::class,'openPeriod']);Route::put('evaluation-periods/{period}',[EvaluationController::class,'updatePeriod']);
+  Route::get('evaluation-periods/roster',[EvaluationController::class,'roster']);Route::post('evaluation-periods',[EvaluationController::class,'openPeriod']);Route::put('evaluation-periods/{period}',[EvaluationController::class,'updatePeriod']);Route::delete('evaluation-periods/{period}',[EvaluationController::class,'destroyPeriod']);
   Route::post('evaluation-periods/{period}/disclose',[EvaluationController::class,'disclose']);Route::post('evaluation-periods/{period}/publish',[EvaluationController::class,'publish']);Route::post('evaluation-periods/{period}/reopen',[EvaluationController::class,'reopen']);
   Route::put('evaluations/{evaluation}/review',[EvaluationController::class,'review']);
   Route::get('evaluation-templates',[EvaluationTemplateController::class,'index']);Route::post('evaluation-templates',[EvaluationTemplateController::class,'store']);Route::get('evaluation-templates/{template}',[EvaluationTemplateController::class,'show']);

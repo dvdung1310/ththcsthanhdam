@@ -16,6 +16,7 @@ use App\Models\Task;
 use App\Models\Teacher;
 use App\Models\User;
 use App\Notifications\EvaluationNotification;
+use App\Notifications\EvaluationPeriodNotification;
 use App\Services\EvaluationAccess;
 use App\Services\EvaluationScoring;
 use App\Services\FileStore;
@@ -63,6 +64,42 @@ class EvaluationController extends Controller
         ]);
     }
 
+    public function roster(Request $request): JsonResponse
+    {
+        $data = $request->validate(['period_id' => ['nullable', 'integer', 'exists:evaluation_periods,id']]);
+        $period = isset($data['period_id']) ? EvaluationPeriod::findOrFail($data['period_id']) : null;
+        $evaluations = $period
+            ? $period->evaluations()->withCount(['scores', 'comments'])->get()->keyBy('teacher_id')
+            : collect();
+        $teachers = Teacher::with(['user.roles', 'departments' => fn ($q) => $q->wherePivotNull('ends_on')])
+            ->where(fn ($q) => $q->where('employment_status', '!=', 'terminated')->orWhereIn('id', $evaluations->keys()))
+            ->get()
+            ->sortBy(fn (Teacher $teacher) => $teacher->user?->name)
+            ->values();
+
+        return response()->json([
+            'period' => $period ? $this->periodData($period) : null,
+            'template' => ($template = $period ? $period->template : EvaluationTemplate::where('is_active', true)->first()) ? ['id' => $template->id, 'name' => $template->name] : null,
+            'data' => $teachers->map(function (Teacher $teacher) use ($evaluations, $period) {
+                $evaluation = $evaluations->get($teacher->id);
+                $reason = $this->ineligibleReason($teacher);
+                $locked = $evaluation && $evaluation->status !== Evaluation::DRAFT;
+
+                return [
+                    'teacher_id' => $teacher->id, 'name' => $teacher->user?->name, 'code' => $teacher->employee_code,
+                    'avatar_url' => $this->avatar($teacher->user), 'unit' => $teacher->departments->first()?->name,
+                    'eligible' => $reason === null, 'reason' => $reason,
+                    'evaluation' => $evaluation ? [
+                        'id' => $evaluation->id, 'status' => $evaluation->status, 'status_label' => self::STATUS_LABELS[$evaluation->status],
+                        'has_data' => $evaluation->status !== Evaluation::DRAFT || $evaluation->scores_count > 0 || $evaluation->comments_count > 0 || filled($evaluation->duties) || filled($evaluation->results),
+                    ] : null,
+                    'removable' => ! $evaluation || (! $period?->isLocked() && ! $locked),
+                    'lock_reason' => $locked ? 'Phiếu đã nộp hoặc đã chấm. Trả phiếu về trước khi gỡ.' : null,
+                ];
+            }),
+        ]);
+    }
+
     public function openPeriod(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -70,14 +107,19 @@ class EvaluationController extends Controller
             'month' => ['required', 'integer', 'min:1', 'max:12'],
             'self_due_on' => ['nullable', 'date'],
             'unit_due_on' => ['nullable', 'date', 'after_or_equal:self_due_on'],
-        ], ['unit_due_on.after_or_equal' => 'Hạn tổ chấm phải sau hạn tự chấm.']);
+            'teacher_ids' => ['required', 'array', 'min:1'],
+            'teacher_ids.*' => ['integer', 'distinct'],
+        ], ['unit_due_on.after_or_equal' => 'Hạn tổ chấm phải sau hạn tự chấm.', 'teacher_ids.required' => 'Chọn ít nhất một giáo viên.', 'teacher_ids.min' => 'Chọn ít nhất một giáo viên.']);
         abort_if(EvaluationPeriod::where('year', $data['year'])->where('month', $data['month'])->exists(), 422, 'Kỳ đánh giá tháng này đã được mở.');
         $template = EvaluationTemplate::where('is_active', true)->first();
         abort_unless($template, 422, 'Chưa có bộ tiêu chí đánh giá đang áp dụng.');
+        $teachers = $this->eligibleOnly($data['teacher_ids']);
 
-        $period = DB::transaction(function () use ($data, $template, $request) {
-            $period = EvaluationPeriod::create([...$data, 'template_id' => $template->id, 'status' => EvaluationPeriod::OPEN, 'opened_by' => $request->user()->id]);
-            $this->createMissingEvaluations($period);
+        $period = DB::transaction(function () use ($data, $template, $request, $teachers) {
+            $period = EvaluationPeriod::create([
+                ...collect($data)->except('teacher_ids')->all(), 'template_id' => $template->id, 'status' => EvaluationPeriod::OPEN, 'opened_by' => $request->user()->id,
+            ]);
+            $this->addEvaluations($period, $teachers);
 
             return $period;
         });
@@ -89,15 +131,60 @@ class EvaluationController extends Controller
 
     public function updatePeriod(Request $request, EvaluationPeriod $period): JsonResponse
     {
-        abort_if($period->isLocked(), 422, 'Kỳ đánh giá đã công bố.');
+        abort_if($period->isLocked(), 422, 'Kỳ đánh giá đã công bố. Mở lại kỳ trước khi sửa.');
         $data = $request->validate([
             'self_due_on' => ['nullable', 'date'],
             'unit_due_on' => ['nullable', 'date', 'after_or_equal:self_due_on'],
-        ], ['unit_due_on.after_or_equal' => 'Hạn tổ chấm phải sau hạn tự chấm.']);
-        $period->update($data);
-        $added = $this->createMissingEvaluations($period);
+            'teacher_ids' => ['sometimes', 'array', 'min:1'],
+            'teacher_ids.*' => ['integer', 'distinct'],
+        ], ['unit_due_on.after_or_equal' => 'Hạn tổ chấm phải sau hạn tự chấm.', 'teacher_ids.min' => 'Kỳ đánh giá cần ít nhất một giáo viên.']);
+        $current = $period->evaluations()->with('teacher.user')->get();
+        $wanted = collect($data['teacher_ids'] ?? $current->pluck('teacher_id'))->map(fn ($id) => (int) $id);
+        $removed = $current->reject(fn (Evaluation $evaluation) => $wanted->contains((int) $evaluation->teacher_id))->values();
+        $blocked = $removed->filter(fn (Evaluation $evaluation) => $evaluation->status !== Evaluation::DRAFT);
+        abort_if($blocked->isNotEmpty(), 422, 'Không gỡ được phiếu đã nộp hoặc đã chấm của: '.$blocked->map(fn ($e) => $e->teacher->user?->name)->join(', ').'. Hãy trả phiếu về trước.');
+        $added = $this->eligibleOnly($wanted->diff($current->pluck('teacher_id')->map(fn ($id) => (int) $id))->values()->all());
+        $dueChanged = array_key_exists('self_due_on', $data) && ($data['self_due_on'] ?? null) !== $period->self_due_on?->toDateString();
 
-        return response()->json(['message' => $added ? "Đã cập nhật kỳ đánh giá và thêm phiếu cho {$added} giáo viên mới." : 'Đã cập nhật kỳ đánh giá.', 'data' => $this->periodData($period)]);
+        DB::transaction(function () use ($period, $data, $added, $removed) {
+            $period->update(collect($data)->except('teacher_ids')->all());
+            $this->addEvaluations($period, $added);
+            $removed->each(fn (Evaluation $evaluation) => $this->deleteEvaluation($evaluation));
+        });
+        $period->refresh();
+        $removed->each(fn (Evaluation $evaluation) => $this->notifyPeriod($evaluation->teacher->user, $period->label(), "Bạn không thuộc diện đánh giá kỳ {$period->label()}.", 'evaluation_removed'));
+        $period->evaluations()->with(['teacher.user', 'period'])->get()->each(function (Evaluation $evaluation) use ($added, $dueChanged, $period) {
+            if ($added->contains('id', $evaluation->teacher_id)) {
+                $this->notify($evaluation->teacher->user, $evaluation, $this->openMessage($period), 'evaluation_opened');
+            } elseif ($dueChanged && $period->self_due_on && $evaluation->status === Evaluation::DRAFT) {
+                $this->notify($evaluation->teacher->user, $evaluation, "Hạn tự chấm kỳ {$period->label()} đổi thành {$period->self_due_on->format('d/m/Y')}.", 'evaluation_due_changed');
+            }
+        });
+
+        $parts = array_filter([
+            $added->isNotEmpty() ? "thêm {$added->count()} phiếu" : null,
+            $removed->isNotEmpty() ? "gỡ {$removed->count()} phiếu" : null,
+        ]);
+
+        return response()->json(['message' => 'Đã cập nhật kỳ đánh giá'.($parts ? ' ('.implode(', ', $parts).')' : '').'.', 'data' => $this->periodData($period)]);
+    }
+
+    public function destroyPeriod(Request $request, EvaluationPeriod $period): JsonResponse
+    {
+        abort_if($period->isLocked(), 422, 'Không thể xóa kỳ đánh giá đã công bố.');
+        $evaluations = $period->evaluations()->with('teacher.user')->withCount(['scores', 'comments'])->get();
+        $hasData = $evaluations->contains(fn (Evaluation $e) => $e->status !== Evaluation::DRAFT || $e->scores_count > 0 || $e->comments_count > 0 || filled($e->duties) || filled($e->results));
+        if ($hasData) {
+            abort_unless(trim((string) $request->input('confirm_label')) === $period->label(), 422, "Kỳ đã có dữ liệu chấm. Nhập đúng “{$period->label()}” để xác nhận xóa.");
+        }
+        $label = $period->label();
+        DB::transaction(function () use ($period, $evaluations) {
+            $evaluations->each(fn (Evaluation $evaluation) => $this->deleteEvaluation($evaluation));
+            $period->delete();
+        });
+        $evaluations->each(fn (Evaluation $evaluation) => $this->notifyPeriod($evaluation->teacher->user, $label, "Kỳ đánh giá {$label} đã được hủy.", 'evaluation_period_deleted'));
+
+        return response()->json(['message' => "Đã xóa kỳ đánh giá {$label}."]);
     }
 
     public function disclose(Request $request, EvaluationPeriod $period): JsonResponse
@@ -168,8 +255,14 @@ class EvaluationController extends Controller
             ->values();
         $criteria = $this->criteria($period);
 
+        $notIncluded = $access->manages()
+            ? Teacher::with('user.roles')->where('employment_status', 'working')->whereNotIn('id', $period->evaluations()->pluck('teacher_id'))->get()
+                ->filter(fn (Teacher $teacher) => $this->ineligibleReason($teacher) === null)->map(fn (Teacher $teacher) => $teacher->user?->name)->sort()->values()
+            : null;
+
         return response()->json([
             'period' => $this->periodData($period),
+            'not_included' => $notIncluded,
             'data' => $evaluations->map(function (Evaluation $evaluation) use ($criteria, $access) {
                 $self = $this->scoring->totals($evaluation, $criteria, 'self');
                 $unit = $this->scoring->totals($evaluation, $criteria, 'unit');
@@ -433,27 +526,52 @@ class EvaluationController extends Controller
         return $this->scoring->grade($evaluation->period->template->grades, $total, $evaluation->is_homeroom, $evaluation->has_violation);
     }
 
-    private function createMissingEvaluations(EvaluationPeriod $period): int
+    private function addEvaluations(EvaluationPeriod $period, Collection $teachers): void
     {
-        $existing = $period->evaluations()->pluck('teacher_id');
+        if ($teachers->isEmpty()) {
+            return;
+        }
         $previous = Evaluation::whereIn('period_id', EvaluationPeriod::where('id', '!=', $period->id)
             ->where(fn ($q) => $q->where('year', '<', $period->year)->orWhere(fn ($b) => $b->where('year', $period->year)->where('month', '<', $period->month)))
             ->orderByDesc('year')->orderByDesc('month')->limit(1)->pluck('id'))->pluck('is_homeroom', 'teacher_id');
-        $teachers = $this->eligibleTeachers()->whereNotIn('id', $existing);
         foreach ($teachers as $teacher) {
             Evaluation::create(['period_id' => $period->id, 'teacher_id' => $teacher->id, 'is_homeroom' => (bool) ($previous[$teacher->id] ?? false), 'status' => Evaluation::DRAFT]);
         }
-
-        return $teachers->count();
     }
 
-    private function eligibleTeachers(): Collection
+    private function deleteEvaluation(Evaluation $evaluation): void
     {
-        return Teacher::with('user')->where('employment_status', 'working')
-            ->whereHas('user', fn ($u) => $u->where('status', 'active'))
-            ->whereDoesntHave('user.roles', fn ($r) => $r->whereIn('code', self::EXCLUDED_ROLES)
-                ->where(fn ($q) => $q->whereNull('role_user.expires_at')->orWhere('role_user.expires_at', '>', now())))
-            ->get();
+        $scoreIds = $evaluation->scores()->pluck('id');
+        $attachments = DB::table('file_attachments')->where('attachable_type', EvaluationScore::class)->whereIn('attachable_id', $scoreIds);
+        $fileIds = (clone $attachments)->pluck('file_id');
+        $attachments->delete();
+        DB::table('notifications')->where('data->evaluation_id', $evaluation->id)->delete();
+        $evaluation->delete();
+        $fileIds->unique()->each(fn ($id) => $this->store->releaseIfUnused((int) $id));
+    }
+
+    private function eligibleOnly(array $ids): Collection
+    {
+        $teachers = Teacher::with('user.roles')->whereIn('id', $ids)->get();
+        $invalid = $teachers->filter(fn (Teacher $teacher) => $this->ineligibleReason($teacher) !== null);
+        abort_if($invalid->isNotEmpty() || $teachers->count() !== count(array_unique($ids)), 422, 'Không thể tạo phiếu cho: '.($invalid->map(fn ($t) => $t->user?->name)->join(', ') ?: 'giáo viên không tồn tại').'.');
+
+        return $teachers;
+    }
+
+    private function ineligibleReason(Teacher $teacher): ?string
+    {
+        $statuses = ['on_leave' => 'Đang tạm nghỉ', 'suspended' => 'Đang tạm đình chỉ', 'terminated' => 'Đã nghỉ việc'];
+        if ($teacher->employment_status !== 'working') {
+            return $statuses[$teacher->employment_status] ?? 'Không còn làm việc';
+        }
+        if ($teacher->user?->status !== 'active') {
+            return 'Tài khoản đang bị khóa';
+        }
+        $role = $teacher->user->roles->first(fn (Role $role) => in_array($role->code, self::EXCLUDED_ROLES, true)
+            && ($role->pivot->expires_at === null || Carbon::parse($role->pivot->expires_at)->isFuture()));
+
+        return $role ? "{$role->name} — không thuộc diện đánh giá" : null;
     }
 
     private function scorers(Evaluation $evaluation): Collection
@@ -465,6 +583,15 @@ class EvaluationController extends Controller
 
         return $leaders->isNotEmpty() ? $leaders->values() : User::whereHas('roles', fn ($r) => $r->whereIn('code', [Role::HIEU_TRUONG, Role::THU_KY]))->get()
             ->filter(fn (User $user) => $user->hasPermission('evaluation.manage'))->values();
+    }
+
+    private function notifyPeriod(?User $user, string $label, string $message, string $action): void
+    {
+        try {
+            $user?->notify(new EvaluationPeriodNotification($label, $message, $action));
+        } catch (\Throwable $exception) {
+            Log::error('Không thể lưu thông báo đánh giá.', ['user_id' => $user?->id, 'error' => $exception->getMessage()]);
+        }
     }
 
     private function notify(?User $user, Evaluation $evaluation, string $message, string $action): void
