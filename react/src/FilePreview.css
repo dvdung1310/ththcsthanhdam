@@ -1,0 +1,370 @@
+.file-preview {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  color: #e8eaf2;
+  background: rgba(15, 18, 30, 0.94);
+  outline: none;
+}
+
+.fp-bar {
+  min-height: 60px;
+  padding: 8px 14px 8px 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(20, 24, 40, 0.9);
+}
+
+.fp-icon {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  color: #c9bcff;
+  background: rgba(139, 108, 240, 0.22);
+}
+
+.fp-title {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.fp-title b {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fp-title small {
+  margin-top: 2px;
+  color: #9aa1b8;
+  font-size: 12px;
+}
+
+.fp-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fp-actions button {
+  height: 36px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9px;
+  color: #e8eaf2;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.fp-actions button:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.fp-actions .fp-close {
+  width: 36px;
+  padding: 0;
+  justify-content: center;
+  margin-left: 4px;
+}
+
+.fp-stage {
+  position: relative;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.fp-pdf {
+  width: min(1100px, calc(100% - 120px));
+  height: calc(100% - 32px);
+  border: 0;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+
+.fp-text {
+  width: min(900px, calc(100% - 120px));
+  height: calc(100% - 32px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 8px;
+  color: #273250;
+  background: #fff;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+
+.fp-text pre {
+  min-height: 0;
+  flex: 1;
+  margin: 0;
+  padding: 28px 32px;
+  overflow: auto;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 4;
+}
+
+.fp-note {
+  margin: 0;
+  padding: 9px 16px;
+  color: #92400e;
+  background: #fff7e6;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.fp-image {
+  position: absolute;
+  inset: 0;
+}
+
+.fp-image-stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.fp-image-stage.dragging {
+  cursor: grabbing;
+}
+
+.fp-image-stage img {
+  flex: none;
+  max-width: none;
+  transition: opacity 0.15s ease;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+
+.fp-image-stage:not(.dragging) img {
+  transition: opacity 0.15s ease, transform 0.12s ease;
+}
+
+.fp-tools {
+  position: absolute;
+  bottom: 22px;
+  left: 50%;
+  z-index: 2;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(20, 24, 40, 0.92);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  transform: translateX(-50%);
+}
+
+.fp-tools button {
+  min-width: 34px;
+  height: 34px;
+  padding: 0 8px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  color: #e8eaf2;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.fp-tools button:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.fp-tools button.active {
+  color: #c9bcff;
+  background: rgba(139, 108, 240, 0.25);
+}
+
+.fp-tools .fp-zoom-value {
+  min-width: 56px;
+  font-variant-numeric: tabular-nums;
+}
+
+.fp-tools i {
+  width: 1px;
+  height: 20px;
+  margin: 0 4px;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.fp-tools small {
+  padding: 0 8px 0 6px;
+  color: #9aa1b8;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.fp-nav {
+  position: absolute;
+  top: 50%;
+  z-index: 3;
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  color: #e8eaf2;
+  background: rgba(20, 24, 40, 0.8);
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.fp-nav:hover:not(:disabled) {
+  background: rgba(60, 66, 96, 0.95);
+}
+
+.fp-nav:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.fp-nav.prev {
+  left: 16px;
+}
+
+.fp-nav.next {
+  right: 16px;
+}
+
+.fp-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: #c3c8d8;
+  font-size: 14px;
+}
+
+.fp-spin {
+  animation: fp-spin 0.9s linear infinite;
+}
+
+@keyframes fp-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.fp-card {
+  width: min(420px, calc(100% - 40px));
+  padding: 30px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  border-radius: 16px;
+  color: #273250;
+  background: #fff;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+
+.fp-card-icon {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 6px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  color: #6a4ee0;
+  background: #f1eeff;
+}
+
+.fp-card-icon.error {
+  color: #c2273a;
+  background: #fdecee;
+}
+
+.fp-card > b {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fp-card > small {
+  color: #8a92a8;
+  font-size: 12px;
+}
+
+.fp-card p {
+  margin: 6px 0 12px;
+  color: #6d7690;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.fp-card .primary-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+@media (max-width: 700px) {
+  .fp-actions span {
+    display: none;
+  }
+
+  .fp-actions button {
+    width: 36px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .fp-pdf,
+  .fp-text {
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+  }
+
+  .fp-text pre {
+    padding: 18px;
+  }
+
+  .fp-nav {
+    top: auto;
+    bottom: 84px;
+    width: 40px;
+    height: 40px;
+  }
+
+  .fp-tools small {
+    display: none;
+  }
+}
