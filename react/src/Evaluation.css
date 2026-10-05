@@ -2028,6 +2028,17 @@
     white-space: normal;
   }
 
+  .ev-print,
+  .ev-print :is(th, td, p, b, span, small, div, h1, h2) {
+    color: #000 !important;
+  }
+
+  .ev-print th {
+    background: transparent !important;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
   .ev-print th {
     font-weight: 700;
     text-align: center;
