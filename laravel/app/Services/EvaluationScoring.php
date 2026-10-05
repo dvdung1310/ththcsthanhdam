@@ -58,7 +58,7 @@ class EvaluationScoring
             return null;
         }
 
-        return $column === 'final' ? ($score->final_score ?? $score->unit_score) : $score->{$column.'_score'};
+        return $score->{$column.'_score'};
     }
 
     public function clamp(float $value, float $max): float

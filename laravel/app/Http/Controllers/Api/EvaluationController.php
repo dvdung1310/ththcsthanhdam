@@ -275,7 +275,8 @@ class EvaluationController extends Controller
             'data' => $evaluations->map(function (Evaluation $evaluation) use ($criteria, $access) {
                 $self = $this->scoring->totals($evaluation, $criteria, 'self');
                 $unit = $this->scoring->totals($evaluation, $criteria, 'unit');
-                $final = $this->scoring->totals($evaluation, $criteria, 'final');
+                $unitDone = $evaluation->status === Evaluation::UNIT_SCORED
+                    || ($evaluation->status === Evaluation::PUBLISHED && $evaluation->scores->contains(fn (EvaluationScore $score) => $score->unit_score !== null));
 
                 return [
                     'id' => $evaluation->id,
@@ -283,10 +284,11 @@ class EvaluationController extends Controller
                     'is_homeroom' => $evaluation->is_homeroom,
                     'status' => $evaluation->status, 'status_label' => self::STATUS_LABELS[$evaluation->status],
                     'self_total' => $evaluation->status === Evaluation::DRAFT ? null : $self['total'],
-                    'unit_total' => $evaluation->status === Evaluation::UNIT_SCORED || $evaluation->scores->contains(fn (EvaluationScore $score) => $score->unit_score !== null) ? $unit['total'] : null,
-                    'final_total' => $this->isReviewed($evaluation) ? $final['total'] : null,
+                    'unit_total' => $unitDone ? $unit['total'] : null,
+                    'unit_in_progress' => ! $unitDone && $evaluation->status === Evaluation::SUBMITTED && $evaluation->scores->contains(fn (EvaluationScore $score) => $score->unit_score !== null),
+                    'reviewed' => $evaluation->reviewed_at !== null,
                     'grade' => $this->gradeName($evaluation->period, $evaluation->grade),
-                    'suggested_grade' => $evaluation->no_grade_reason ? null : $this->suggestedGrade($evaluation, $final['total'])['name'] ?? null,
+                    'suggested_grade' => $evaluation->no_grade_reason || ! $unitDone ? null : $this->suggestedGrade($evaluation, $unit['total'])['name'] ?? null,
                     'no_grade_reason' => $evaluation->no_grade_reason,
                     'has_violation' => $evaluation->has_violation,
                     'submitted_at' => $evaluation->submitted_at?->toIso8601String(),
@@ -374,18 +376,14 @@ class EvaluationController extends Controller
         $access = $this->access($request);
         abort_unless($access->manages(), 403, 'Bạn không có quyền duyệt phiếu đánh giá.');
         abort_if($evaluation->period->isLocked(), 422, 'Kỳ đánh giá đã công bố.');
-        $criteria = $this->criteria($evaluation->period);
         $grades = collect($evaluation->period->template->grades)->pluck('code')->all();
         $data = $request->validate([
             'has_violation' => ['sometimes', 'boolean'],
             'no_grade_reason' => ['nullable', 'string', 'max:255'],
             'grade' => ['nullable', Rule::in($grades)],
-            'scores' => ['sometimes', 'array'],
-            'scores.*.criterion_id' => ['required', Rule::in($criteria->whereNotNull('parent_id')->pluck('id')->all())],
-            'scores.*.score' => ['nullable', 'numeric', 'min:0'],
         ]);
-        $this->assertWithinMax($data['scores'] ?? [], $criteria);
         $approve = $request->boolean('approve', true);
+        abort_if($approve && ! in_array($evaluation->status, [Evaluation::UNIT_SCORED, Evaluation::PUBLISHED], true), 422, 'Tổ chưa hoàn tất chấm phiếu này, chưa duyệt được.');
 
         DB::transaction(function () use ($evaluation, $data, $request, $approve) {
             $evaluation->update([
@@ -394,9 +392,6 @@ class EvaluationController extends Controller
                 'grade' => array_key_exists('grade', $data) ? $data['grade'] : $evaluation->grade,
                 ...($approve ? ['reviewed_by' => $request->user()->id, 'reviewed_at' => now()] : []),
             ]);
-            foreach ($data['scores'] ?? [] as $row) {
-                EvaluationScore::updateOrCreate(['evaluation_id' => $evaluation->id, 'criterion_id' => $row['criterion_id']], ['final_score' => $row['score']]);
-            }
             $this->refreshResult($evaluation->fresh(['scores', 'period']));
         });
 
@@ -527,7 +522,7 @@ class EvaluationController extends Controller
     private function refreshResult(Evaluation $evaluation): void
     {
         $evaluation->loadMissing(['scores', 'period']);
-        $total = $this->hasUnitScores($evaluation) ? $this->scoring->totals($evaluation, $this->criteria($evaluation->period), 'final')['total'] : null;
+        $total = $this->hasUnitScores($evaluation) ? $this->scoring->totals($evaluation, $this->criteria($evaluation->period), 'unit')['total'] : null;
         $evaluation->update(['total_score' => $total]);
     }
 
@@ -643,12 +638,7 @@ class EvaluationController extends Controller
     private function hasUnitScores(Evaluation $evaluation): bool
     {
         return in_array($evaluation->status, [Evaluation::UNIT_SCORED, Evaluation::PUBLISHED], true)
-            || $evaluation->scores->contains(fn (EvaluationScore $score) => $score->unit_score !== null || $score->final_score !== null);
-    }
-
-    private function isReviewed(Evaluation $evaluation): bool
-    {
-        return $evaluation->reviewed_at !== null;
+            || $evaluation->scores->contains(fn (EvaluationScore $score) => $score->unit_score !== null);
     }
 
     private function placement(Teacher $teacher): array
@@ -701,9 +691,8 @@ class EvaluationController extends Controller
         $totals = [
             'self' => $this->scoring->totals($evaluation, $criteria, 'self'),
             'unit' => $showResult ? $this->scoring->totals($evaluation, $criteria, 'unit') : null,
-            'final' => $showResult ? $this->scoring->totals($evaluation, $criteria, 'final') : null,
         ];
-        $suggested = $showResult && ! $evaluation->no_grade_reason ? $this->suggestedGrade($evaluation, $totals['final']['total']) : null;
+        $suggested = $showResult && ! $evaluation->no_grade_reason ? $this->suggestedGrade($evaluation, $totals['unit']['total']) : null;
         $selfEditable = $isOwn && $this->selfEditable($evaluation);
 
         return [
@@ -736,7 +725,6 @@ class EvaluationController extends Controller
                         'requires_evidence' => $criterion->requires_evidence,
                         'self_score' => $this->number($score?->self_score), 'self_note' => $score?->self_note,
                         'unit_score' => $showResult ? $this->number($score?->unit_score) : null, 'unit_note' => $showResult ? $score?->unit_note : null,
-                        'final_score' => $showResult ? $this->number($score?->final_score) : null,
                         'evidence' => $score ? ($evidence->get($score->id) ?? collect())->map(fn ($file) => [
                             'id' => $file->id, 'name' => $file->original_name, 'mime_type' => $file->mime_type, 'size' => (int) $file->size, 'uploaded_by' => (int) $file->uploaded_by,
                         ])->values() : [],
