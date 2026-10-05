@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { apiFetch, apiJson } from "./api";
+import { uploadProblem } from "./uploadLimits";
 import { useConfirm } from "./ConfirmDialog";
 import FilePreview from "./FilePreview";
 import { formatBytes } from "./fileUtils";
@@ -383,6 +384,11 @@ export default function EvaluationSheet() {
   const uploadEvidence = async (criterionId, fileList) => {
     const files = [...fileList];
     if (!files.length) return;
+    const problem = await uploadProblem(files);
+    if (problem) {
+      setError(problem);
+      return;
+    }
     const body = new FormData();
     body.append("criterion_id", criterionId);
     files.forEach((file) => body.append("files[]", file));

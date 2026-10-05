@@ -73,6 +73,8 @@ return [
         'password' => env('ADMIN_PASSWORD'),
     ],
 
+    'seed_demo' => (bool) env('SEED_DEMO', false),
+
     /*
     |--------------------------------------------------------------------------
     | Application Locale Configuration

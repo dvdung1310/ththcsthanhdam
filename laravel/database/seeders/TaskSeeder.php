@@ -9,27 +9,13 @@ use App\Models\Teacher;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 class TaskSeeder extends Seeder
 {
-    private const TYPES = [
-        'Chuyên môn' => 'Kế hoạch dạy học, sinh hoạt chuyên môn, dự giờ, ra đề.',
-        'Hành chính' => 'Hồ sơ, giấy tờ và thủ tục hành chính của nhà trường.',
-        'Báo cáo' => 'Báo cáo định kỳ hoặc đột xuất gửi Ban giám hiệu.',
-        'Sự kiện' => 'Tổ chức, tham gia các sự kiện và hoạt động ngoại khóa.',
-        'Công tác chủ nhiệm' => 'Công việc liên quan lớp chủ nhiệm và phụ huynh.',
-        'Phong trào' => 'Thi đua, phong trào của trường và các đoàn thể.',
-    ];
-
     private array $users = [];
 
     public function run(): void
     {
-        foreach (self::TYPES as $name => $description) {
-            TaskCategory::firstOrCreate(['name' => $name], ['code' => strtoupper(Str::slug($name, '_')), 'description' => $description, 'is_active' => true]);
-        }
-
         $tasks = [
             ['Xây dựng kế hoạch chuyên môn học kỳ I', 'Chuyên môn', 'mai.nt', [], 'high', Task::NOT_STARTED, 7 * 24, [], ['Tổ tự nhiên']],
             ['Rà soát chương trình môn học theo khung mới', 'Chuyên môn', 'mai.nt', [], 'normal', Task::IN_PROGRESS, 3 * 24, [], ['Tổ xã hội'], ['updates' => [['ha.pt', 'Đã họp tổ, đang tổng hợp ý kiến các thành viên.']]]],

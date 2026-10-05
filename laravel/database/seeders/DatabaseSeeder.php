@@ -13,7 +13,7 @@ class DatabaseSeeder extends Seeder
     {
         $this->call(ProductionSeeder::class);
 
-        if (app()->isLocal()) {
+        if (app()->isLocal() || config('app.seed_demo')) {
             $this->call(DemoSeeder::class);
         }
     }

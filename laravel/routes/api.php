@@ -16,6 +16,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Broadcasting\BroadcastController;
 Route::post('auth/login',[AuthController::class,'login']);
 Route::middleware('api.token')->group(function(){
+ Route::get('upload-limits',fn()=>response()->json(\App\Services\UploadLimits::toArray()));
  Route::get('dashboard',[\App\Http\Controllers\Api\DashboardController::class,'index'])->middleware('permission:dashboard.view');
  Route::post('broadcasting/auth',[BroadcastController::class,'authenticate']);
  Route::get('notifications',[NotificationController::class,'index']);Route::get('notifications/unread-count',[NotificationController::class,'unreadCount']);Route::post('notifications/read-all',[NotificationController::class,'markAllRead']);Route::post('notifications/{notification}/read',[NotificationController::class,'markRead']);

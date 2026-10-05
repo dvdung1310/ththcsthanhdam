@@ -16,5 +16,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias(['api.token' => \App\Http\Middleware\ApiTokenAuth::class, 'permission' => \App\Http\Middleware\RequirePermission::class]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        $exceptions->render(fn (\Illuminate\Http\Exceptions\PostTooLargeException $e) => response()->json([
+            'message' => 'Tổng dung lượng gửi lên vượt quá giới hạn '.\App\Services\UploadLimits::megabytes(\App\Services\UploadLimits::maxRequestBytes()).' của máy chủ. Hãy tải ít file hơn mỗi lần.',
+        ], 413));
     })->create();
