@@ -226,11 +226,17 @@ class LibraryController extends Controller
             return implode(' › ', $parts);
         };
 
+        $ids = $access->accessibleIds();
+        $visible = $folders->filter(fn ($f) => $ids === null || $f->is_system || in_array($f->id, $ids, true));
+        $visibleIds = $visible->pluck('id')->all();
+
         return response()->json([
             'root' => $access->canWriteRoot(),
-            'data' => $folders->filter(fn ($f) => $f->is_system || $access->can($f->id, LibraryAccess::UPLOAD))
-                ->map(fn ($f) => ['id' => $f->id, 'name' => $f->name, 'path' => $path($f->id), 'is_system' => $f->is_system])
-                ->sortBy(fn ($f) => ($f['is_system'] ? '0' : '1').$f['path'])->values(),
+            'folders' => $visible->map(fn ($f) => [
+                'id' => $f->id, 'parent_id' => in_array($f->parent_id, $visibleIds, true) ? $f->parent_id : null,
+                'name' => $f->name, 'path' => $path($f->id), 'is_system' => $f->is_system,
+                'can_target' => $f->is_system || $access->can($f->id, LibraryAccess::UPLOAD),
+            ])->values(),
         ]);
     }
 
