@@ -310,20 +310,38 @@ class LibraryController extends Controller
     public function myFiles(Request $request): JsonResponse
     {
         $user = $request->user();
+        $access = $this->access($request);
         $search = trim($request->string('search')->toString());
-        $paginator = DB::table('file_attachments')->join('files', 'files.id', '=', 'file_attachments.file_id')
+        $completedSubmissions = fn ($q) => $q->select(DB::raw(1))->from('task_submissions')->join('tasks', 'tasks.id', '=', 'task_submissions.task_id')
+            ->whereColumn('task_submissions.id', 'file_attachments.attachable_id')->where('tasks.status', Task::COMPLETED);
+        $inLibrary = fn ($q) => $q->select(DB::raw(1))->from('library_nodes')->whereColumn('library_nodes.file_id', 'files.id');
+        $query = DB::table('file_attachments')->join('files', 'files.id', '=', 'file_attachments.file_id')
             ->where('files.uploaded_by', $user->id)->whereIn('attachable_type', [Task::class, TaskSubmission::class])
             ->when($search !== '', fn ($q) => $q->where('files.original_name', 'like', "%{$search}%"))
-            ->orderByDesc('files.created_at')->orderByDesc('files.id')
-            ->select('files.id', 'files.original_name', 'files.size', 'files.mime_type', 'files.created_at', 'file_attachments.attachable_type', 'file_attachments.attachable_id')
+            ->when($request->string('source')->toString(), fn ($q, $source) => $q->where('attachable_type', $source === 'submission' ? TaskSubmission::class : Task::class))
+            ->when($request->string('file_type')->toString(), fn ($q, $type) => $this->filterMime($q, $type));
+        match ($request->string('status')->toString()) {
+            'shared' => $query->whereExists($inLibrary),
+            'unshared' => $query->whereNotExists($inLibrary)->where(fn ($q) => $q->where('attachable_type', Task::class)->orWhereExists($completedSubmissions)),
+            'pending' => $query->whereNotExists($inLibrary)->where('attachable_type', TaskSubmission::class)->whereNotExists($completedSubmissions),
+            default => null,
+        };
+        match ($request->string('sort')->toString()) {
+            'oldest' => $query->orderBy('files.created_at')->orderBy('files.id'),
+            'name_asc' => $query->orderBy('files.original_name'),
+            'name_desc' => $query->orderByDesc('files.original_name'),
+            'size_desc' => $query->orderByDesc('files.size'),
+            default => $query->orderByDesc('files.created_at')->orderByDesc('files.id'),
+        };
+        $paginator = $query->select('files.id', 'files.original_name', 'files.size', 'files.mime_type', 'files.created_at', 'file_attachments.attachable_type', 'file_attachments.attachable_id')
             ->paginate(min(max($request->integer('per_page', 20), 5), 100));
         $rows = collect($paginator->items());
         $submissionTasks = TaskSubmission::whereIn('id', $rows->where('attachable_type', TaskSubmission::class)->pluck('attachable_id'))->pluck('task_id', 'id');
         $tasks = Task::withTrashed()->whereIn('id', $rows->where('attachable_type', Task::class)->pluck('attachable_id')->merge($submissionTasks->values()))->get(['id', 'code', 'title', 'status'])->keyBy('id');
-        $shared = LibraryNode::whereIn('file_id', $rows->pluck('id'))->get(['id', 'file_id', 'parent_id'])->groupBy('file_id');
+        $nodes = LibraryNode::with('parent:id,name')->whereIn('file_id', $rows->pluck('id'))->orderBy('id')->get(['id', 'file_id', 'parent_id'])->groupBy('file_id');
 
         return response()->json([
-            'data' => $rows->map(function ($row) use ($submissionTasks, $tasks, $shared) {
+            'data' => $rows->map(function ($row) use ($submissionTasks, $tasks, $nodes, $access) {
                 $isSubmission = $row->attachable_type === TaskSubmission::class;
                 $task = $tasks->get($isSubmission ? $submissionTasks->get($row->attachable_id) : $row->attachable_id);
 
@@ -333,7 +351,10 @@ class LibraryController extends Controller
                     'source' => $isSubmission ? 'submission' : 'attachment',
                     'task' => $task ? ['id' => $task->id, 'code' => $task->code, 'title' => $task->title, 'status' => $task->status] : null,
                     'can_share' => ! $isSubmission || $task?->status === Task::COMPLETED,
-                    'shared_count' => $shared->get($row->id)?->count() ?? 0,
+                    'locations' => ($nodes->get($row->id) ?? collect())->map(fn ($node) => [
+                        'node_id' => $node->id, 'folder_id' => $node->parent_id, 'folder_name' => $node->parent?->name ?? 'Kho dữ liệu',
+                        'can_open' => $access->can($node, LibraryAccess::READ),
+                    ])->values(),
                 ];
             }),
             'meta' => ['current_page' => $paginator->currentPage(), 'last_page' => $paginator->lastPage(), 'per_page' => $paginator->perPage(), 'total' => $paginator->total()],
