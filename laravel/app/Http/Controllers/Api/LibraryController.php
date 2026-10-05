@@ -34,7 +34,7 @@ class LibraryController extends Controller
         abort_if($folder && (! $folder->isFolder() || ! $access->can($folder, LibraryAccess::READ)), 403, 'Bạn không có quyền xem thư mục này.');
         $search = trim($request->string('search')->toString());
 
-        $scope = LibraryNode::query()->with(['owner:id,name', 'file:id,size,mime_type,original_name', 'shares.user:id,name', 'shares.department:id,name']);
+        $scope = LibraryNode::query()->with(['owner:id,name,avatar_path', 'file:id,size,mime_type,original_name', 'shares.user:id,name,avatar_path', 'shares.department:id,name']);
         if ($search !== '') {
             $ids = $access->accessibleIds();
             $scope->when($ids !== null, fn ($q) => $q->whereIn('id', $ids ?: [0]))->where('name', 'like', "%{$search}%");
@@ -79,7 +79,7 @@ class LibraryController extends Controller
         }
         $node = LibraryNode::create(['parent_id' => $parent?->id, 'type' => LibraryNode::FOLDER, 'name' => $name, 'owner_id' => $request->user()->id]);
 
-        return response()->json(['message' => 'Đã tạo thư mục.', 'data' => $this->serialize($node->load('owner:id,name'), $this->access($request))], 201);
+        return response()->json(['message' => 'Đã tạo thư mục.', 'data' => $this->serialize($node->load('owner:id,name,avatar_path'), $this->access($request))], 201);
     }
 
     public function upload(Request $request): JsonResponse
@@ -131,6 +131,19 @@ class LibraryController extends Controller
         return response()->json(['message' => $this->summary($counts), 'counts' => $counts], 201);
     }
 
+    public function show(Request $request, LibraryNode $node): JsonResponse
+    {
+        $access = $this->access($request);
+        abort_unless($access->can($node, LibraryAccess::READ), 403, 'Bạn không có quyền xem mục này.');
+        $node->load(['owner:id,name,avatar_path', 'file.uploader:id,name,avatar_path', 'shares.user:id,name,avatar_path', 'shares.department:id,name'])->loadCount('children');
+
+        return response()->json(['data' => [
+            ...$this->serialize($node, $access, true),
+            'uploader' => $this->person($node->file?->uploader),
+            'stats' => $node->isFolder() ? $this->folderStats($node) : null,
+        ]]);
+    }
+
     public function update(Request $request, LibraryNode $node): JsonResponse
     {
         $access = $this->access($request);
@@ -145,7 +158,7 @@ class LibraryController extends Controller
         }
         $node->update($data);
 
-        return response()->json(['message' => 'Đã cập nhật.', 'data' => $this->serialize($node->fresh(['owner:id,name', 'file']), $access)]);
+        return response()->json(['message' => 'Đã cập nhật.', 'data' => $this->serialize($node->fresh(['owner:id,name,avatar_path', 'file']), $access)]);
     }
 
     public function destroy(Request $request, LibraryNode $node): JsonResponse
@@ -534,6 +547,19 @@ class LibraryController extends Controller
         })->values();
     }
 
+    private function person(?User $user): ?array
+    {
+        return $user ? ['id' => $user->id, 'name' => $user->name, 'avatar_url' => $user->avatar_path ? route('avatars.show', ['filename' => basename($user->avatar_path)]) : null] : null;
+    }
+
+    private function folderStats(LibraryNode $folder): array
+    {
+        $row = DB::selectOne('WITH RECURSIVE sub AS (SELECT id, type, file_id FROM library_nodes WHERE parent_id = ? UNION ALL SELECT n.id, n.type, n.file_id FROM library_nodes n JOIN sub ON n.parent_id = sub.id)
+            SELECT COALESCE(SUM(sub.type = ?), 0) AS folders, COALESCE(SUM(sub.type = ?), 0) AS files, COALESCE(SUM(f.size), 0) AS size FROM sub LEFT JOIN files f ON f.id = sub.file_id', [$folder->id, LibraryNode::FOLDER, LibraryNode::FILE]);
+
+        return ['folders' => (int) $row->folders, 'files' => (int) $row->files, 'size' => (int) $row->size];
+    }
+
     private function serializeShare(LibraryShare $share): array
     {
         $kind = $share->user_id ? 'user' : ($share->department_id ? 'unit' : 'everyone');
@@ -554,12 +580,12 @@ class LibraryController extends Controller
         return [
             'id' => $node->id, 'type' => $node->type, 'name' => $node->name, 'parent_id' => $node->parent_id, 'is_system' => $node->is_system,
             'description' => $node->description,
-            'owner' => $node->owner ? ['id' => $node->owner->id, 'name' => $node->owner->name] : null,
+            'owner' => $this->person($node->owner),
             'size' => $node->file?->size, 'mime_type' => $node->file?->mime_type,
             'children_count' => $node->children_count ?? null,
             'created_at' => $node->created_at?->toIso8601String(), 'updated_at' => $node->updated_at?->toIso8601String(),
             'path' => $withPath && $node->parent_id ? $this->breadcrumbs(LibraryNode::find($node->parent_id), $access) : null,
-            'shares' => $shares->map(fn ($s) => ['kind' => $s->user_id ? 'user' : ($s->department_id ? 'unit' : 'everyone'), 'name' => $s->user?->name ?? $s->department?->name ?? 'Mọi người', 'access' => $s->access])->values(),
+            'shares' => $shares->map(fn ($s) => ['kind' => $s->user_id ? 'user' : ($s->department_id ? 'unit' : 'everyone'), 'name' => $s->user?->name ?? $s->department?->name ?? 'Mọi người', 'avatar_url' => $this->person($s->user)['avatar_url'] ?? null, 'access' => $s->access])->values(),
             'abilities' => [
                 'level' => $level,
                 'can_upload' => $node->isFolder() && $level >= LibraryAccess::UPLOAD,
