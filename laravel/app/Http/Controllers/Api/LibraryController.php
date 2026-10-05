@@ -267,6 +267,14 @@ class LibraryController extends Controller
         ]);
     }
 
+    public function downloadMyFile(Request $request, StoredFile $file)
+    {
+        abort_unless((int) $file->uploaded_by === $request->user()->id, 403, 'Bạn chỉ mở được file do chính mình tải lên.');
+        abort_unless(Storage::disk($file->disk)->exists($file->path), 404, 'File không tồn tại.');
+
+        return Storage::disk($file->disk)->response($file->path, $file->original_name, ['Content-Type' => $file->mime_type ?: 'application/octet-stream'], 'inline');
+    }
+
     public function shareFile(Request $request): JsonResponse
     {
         $access = $this->access($request);
