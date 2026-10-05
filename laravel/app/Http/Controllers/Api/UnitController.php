@@ -18,10 +18,11 @@ class UnitController extends Controller
     public function index(Request $request): JsonResponse
     {
         $unitIds = $request->user()->managedUnitIds();
-        $members = DB::table('teacher_department')->whereNull('ends_on')->selectRaw('department_id, COUNT(*) as total')->groupBy('department_id')->pluck('total', 'department_id');
+        $memberships = DB::table('teacher_department')->whereNull('ends_on')->get(['teacher_id', 'department_id']);
+        $members = fn (int $id) => $memberships->whereIn('department_id', Department::withDescendants([$id]))->pluck('teacher_id')->unique()->count();
 
         return response()->json([
-            'units' => Department::ordered($unitIds, false)->map(fn ($unit) => [...$unit, 'members' => (int) ($members[$unit['id']] ?? 0)])->values(),
+            'units' => Department::ordered($unitIds, false)->map(fn ($unit) => [...$unit, 'members' => $members($unit['id'])])->values(),
             'can_configure' => $unitIds === null && $request->user()->hasPermission('teachers.manage'),
         ]);
     }
