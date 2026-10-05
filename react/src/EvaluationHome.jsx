@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { Award, CalendarPlus, CheckCircle2, ClipboardList, ListChecks, Trash2, Users, Megaphone, MessageSquare, RotateCcw, Search, Send, Settings2, TriangleAlert, X } from "lucide-react";
+import { Award, CalendarPlus, CheckCircle2, ChevronRight, ClipboardList, ListChecks, Trash2, Users, Megaphone, MessageSquare, RotateCcw, Search, Send, Settings2, TriangleAlert, X } from "lucide-react";
 import { apiJson } from "./api";
 import { useConfirm } from "./ConfirmDialog";
 import { PERIOD_TONES, STATUS_TONES, formatDay, formatScore } from "./evaluationUtils";
@@ -395,6 +395,8 @@ function PeriodDialog({ dialog, existing, onClose, onSaved }) {
   const [roster, setRoster] = useState(null);
   const [selected, setSelected] = useState(new Set());
   const [search, setSearch] = useState("");
+  const [show, setShow] = useState("all");
+  const [collapsed, setCollapsed] = useState(new Set(["excluded"]));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -412,16 +414,42 @@ function PeriodDialog({ dialog, existing, onClose, onSaved }) {
   const added = rows.filter((row) => !row.evaluation && selected.has(row.teacher_id));
   const removed = rows.filter((row) => row.evaluation && !selected.has(row.teacher_id));
   const keyword = search.trim().toLowerCase();
-  const visible = rows.filter((row) => !keyword || `${row.name} ${row.code ?? ""}`.toLowerCase().includes(keyword));
-  const groups = useMemo(() => {
-    const map = new Map();
-    visible.filter((row) => row.eligible || row.evaluation).forEach((row) => {
-      const key = row.unit ?? "Chưa thuộc tổ nào";
-      map.set(key, [...(map.get(key) ?? []), row]);
+  const narrowing = Boolean(keyword) || show !== "all";
+  const matches = (row) =>
+    (!keyword || `${row.name} ${row.code ?? ""}`.toLowerCase().includes(keyword)) &&
+    (show === "all" || (show === "selected") === selected.has(row.teacher_id));
+  const tree = useMemo(() => {
+    const units = roster?.units ?? [];
+    const known = new Set(units.map((unit) => unit.id));
+    const members = rows.filter((row) => (row.eligible || row.evaluation) && matches(row));
+    const build = (unit, depth) => {
+      const node = {
+        key: `u${unit.id}`,
+        name: unit.name,
+        type: unit.type,
+        depth,
+        rows: members.filter((row) => row.unit_id === unit.id),
+        children: units.filter((child) => child.parent_id === unit.id).map((child) => build(child, depth + 1)),
+      };
+      node.all = [...node.rows, ...node.children.flatMap((child) => child.all)];
+      node.children = node.children.filter((child) => child.all.length);
+      return node;
+    };
+    const roots = units.filter((unit) => !unit.parent_id || !known.has(unit.parent_id)).map((unit) => build(unit, 0)).filter((node) => node.all.length);
+    const orphans = members.filter((row) => !row.unit_id || !known.has(row.unit_id));
+    if (orphans.length) roots.push({ key: "orphans", name: "Chưa thuộc tổ nào", depth: 0, rows: orphans, children: [], all: orphans });
+    return roots;
+  }, [roster, rows, keyword, show, selected]);
+  const excluded = show !== "all" ? [] : rows.filter((row) => !row.eligible && !row.evaluation && matches(row));
+  const allKeys = (nodes) => nodes.flatMap((node) => [node.key, ...allKeys(node.children)]);
+  const isOpen = (key) => narrowing || !collapsed.has(key);
+  const toggleOpen = (key) =>
+    setCollapsed((current) => {
+      const nextSet = new Set(current);
+      if (nextSet.has(key)) nextSet.delete(key);
+      else nextSet.add(key);
+      return nextSet;
     });
-    return [...map.entries()];
-  }, [visible]);
-  const excluded = visible.filter((row) => !row.eligible && !row.evaluation);
 
   const toggle = (row) =>
     setSelected((current) => {
@@ -528,35 +556,52 @@ function PeriodDialog({ dialog, existing, onClose, onSaved }) {
           </div>
         ) : (
           <div className="ev-dialog-body ev-roster">
-            <label className="ev-search">
-              <Search size={15} />
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm theo tên hoặc mã giáo viên..." />
-            </label>
+            <div className="ev-roster-toolbar">
+              <label className="ev-search">
+                <Search size={15} />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm theo tên hoặc mã giáo viên..." />
+              </label>
+              <div className="ev-segment" role="group" aria-label="Lọc">
+                {[["all", "Tất cả"], ["selected", "Đã chọn"], ["unselected", "Chưa chọn"]].map(([value, label]) => (
+                  <button key={value} type="button" className={show === value ? "active" : ""} onClick={() => setShow(value)}>{label}</button>
+                ))}
+              </div>
+              <span className="ev-roster-expand">
+                <button type="button" className="dl-link-btn" onClick={() => setCollapsed(new Set())}>Mở rộng tất cả</button>
+                <button type="button" className="dl-link-btn" onClick={() => setCollapsed(new Set([...allKeys(tree), "excluded"]))}>Thu gọn tất cả</button>
+              </span>
+            </div>
             <div className="ev-roster-list">
               {!roster && <p className="ev-muted">Đang tải...</p>}
-              {groups.map(([unit, members]) => {
-                const pickable = members.filter(selectable);
-                const allOn = pickable.length > 0 && pickable.every((row) => selected.has(row.teacher_id));
-                return (
-                  <section key={unit}>
-                    <header>
-                      <label>
-                        <input type="checkbox" checked={allOn} disabled={!pickable.length} onChange={(e) => toggleGroup(members, e.target.checked)} />
-                        <b>{unit}</b>
-                      </label>
-                      <small>{members.filter((row) => selected.has(row.teacher_id)).length}/{members.length}</small>
-                    </header>
-                    {members.map((row) => (
-                      <RosterRow key={row.teacher_id} row={row} checked={selected.has(row.teacher_id)} disabled={!selectable(row)} onToggle={() => toggle(row)} />
-                    ))}
-                  </section>
-                );
-              })}
+              {roster && !tree.length && !excluded.length && <p className="ev-muted ev-roster-empty">Không có giáo viên phù hợp.</p>}
+              {tree.map((node) => (
+                <RosterNode
+                  key={node.key}
+                  node={node}
+                  units={roster.units}
+                  selected={selected}
+                  selectable={selectable}
+                  isOpen={isOpen}
+                  onToggleOpen={toggleOpen}
+                  onToggleGroup={toggleGroup}
+                  onToggleRow={toggle}
+                />
+              ))}
               {excluded.length > 0 && (
-                <section className="excluded">
-                  <header><b>Không thuộc diện đánh giá</b><small>{excluded.length}</small></header>
-                  <p className="ev-dialog-note">Muốn đánh giá những người này, hãy cập nhật hồ sơ ở màn Quản lý nhân sự trước.</p>
-                  {excluded.map((row) => <RosterRow key={row.teacher_id} row={row} checked={false} disabled onToggle={() => {}} />)}
+                <section className="ev-roster-node excluded">
+                  <header style={{ paddingLeft: 10 }}>
+                    <button type="button" className={`ev-roster-chevron ${isOpen("excluded") ? "open" : ""}`} onClick={() => toggleOpen("excluded")} aria-label="Mở hoặc thu gọn">
+                      <ChevronRight size={15} />
+                    </button>
+                    <b>Không thuộc diện đánh giá</b>
+                    <small>{excluded.length}</small>
+                  </header>
+                  {isOpen("excluded") && (
+                    <>
+                      <p className="ev-dialog-note">Muốn đánh giá những người này, hãy cập nhật hồ sơ ở màn Quản lý nhân sự trước.</p>
+                      {excluded.map((row) => <RosterRow key={row.teacher_id} row={row} units={roster.units} depth={0} checked={false} disabled onToggle={() => {}} />)}
+                    </>
+                  )}
                 </section>
               )}
             </div>
@@ -576,15 +621,68 @@ function PeriodDialog({ dialog, existing, onClose, onSaved }) {
   );
 }
 
-function RosterRow({ row, checked, disabled, onToggle }) {
+function TriCheckbox({ checked, indeterminate, disabled, onChange, label }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate;
+  }, [indeterminate]);
+  return <input ref={ref} type="checkbox" checked={checked} disabled={disabled} onChange={onChange} aria-label={label} />;
+}
+
+function RosterNode({ node, units, selected, selectable, isOpen, onToggleOpen, onToggleGroup, onToggleRow }) {
+  const pickable = node.all.filter(selectable);
+  const chosen = node.all.filter((row) => selected.has(row.teacher_id)).length;
+  const allOn = pickable.length > 0 && pickable.every((row) => selected.has(row.teacher_id));
+  const open = isOpen(node.key);
   return (
-    <label className={`ev-roster-row ${disabled ? "disabled" : ""}`} title={row.lock_reason ?? row.reason ?? undefined}>
+    <section className={`ev-roster-node depth-${node.depth}`}>
+      <header style={{ paddingLeft: 10 + node.depth * 22 }}>
+        <button type="button" className={`ev-roster-chevron ${open ? "open" : ""}`} onClick={() => onToggleOpen(node.key)} aria-label={open ? "Thu gọn" : "Mở rộng"}>
+          <ChevronRight size={15} />
+        </button>
+        <TriCheckbox
+          checked={allOn}
+          indeterminate={!allOn && chosen > 0}
+          disabled={!pickable.length}
+          onChange={() => onToggleGroup(node.all, !allOn)}
+          label={`Chọn cả ${node.name}`}
+        />
+        <b onClick={() => onToggleOpen(node.key)}>{node.name}</b>
+        {node.type && <em>{node.type === "to" ? "Tổ" : "Nhóm"}</em>}
+        <small>{chosen}/{node.all.length} đã chọn</small>
+      </header>
+      {open && (
+        <>
+          {node.rows.map((row) => (
+            <RosterRow key={row.teacher_id} row={row} units={units} depth={node.depth + 1} checked={selected.has(row.teacher_id)} disabled={!selectable(row)} onToggle={() => onToggleRow(row)} />
+          ))}
+          {node.children.map((child) => (
+            <RosterNode key={child.key} node={child} units={units} selected={selected} selectable={selectable} isOpen={isOpen} onToggleOpen={onToggleOpen} onToggleGroup={onToggleGroup} onToggleRow={onToggleRow} />
+          ))}
+        </>
+      )}
+    </section>
+  );
+}
+
+function RosterRow({ row, units, depth, checked, disabled, onToggle }) {
+  const unitName = (id) => units.find((unit) => unit.id === id)?.name;
+  return (
+    <label className={`ev-roster-row ${disabled ? "disabled" : ""}`} style={{ paddingLeft: 10 + depth * 22 + 21 }} title={row.lock_reason ?? row.reason ?? undefined}>
       <input type="checkbox" checked={checked} disabled={disabled} onChange={onToggle} />
       <span className="ev-person">
         {row.avatar_url ? <img src={row.avatar_url} alt="" /> : <i>{row.name?.split(" ").at(-1)?.charAt(0)}</i>}
         <span>
-          <b>{row.name}</b>
-          <small>{[row.code, row.reason, row.lock_reason].filter(Boolean).join(" · ")}</small>
+          <span className="ev-roster-name">
+            <b>{row.name}</b>
+            {row.roles?.map((role, index) => (
+              <span key={index} className="ev-role-chip">
+                {role.name}
+                {role.unit_id && role.unit_id !== row.unit_id ? ` · ${unitName(role.unit_id) ?? ""}` : ""}
+              </span>
+            ))}
+          </span>
+          <small>{[row.code, row.other_units?.length ? `Cũng thuộc: ${row.other_units.join(", ")}` : null, row.reason, row.lock_reason].filter(Boolean).join(" · ")}</small>
         </span>
       </span>
       {row.evaluation && (

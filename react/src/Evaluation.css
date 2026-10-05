@@ -1508,41 +1508,147 @@
   border-radius: 11px;
 }
 
-.ev-roster-list section + section {
-  border-top: 1px solid #eceef3;
-}
-
-.ev-roster-list header {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  padding: 8px 12px;
+.ev-roster-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  background: #f6f7fb;
+  gap: 8px 10px;
 }
 
-.ev-roster-list header label {
+.ev-roster-toolbar .ev-search {
+  flex: 1 1 220px;
+}
+
+.ev-segment {
+  padding: 3px;
   display: inline-flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
+  gap: 2px;
+  border: 1px solid #e3e6ee;
+  border-radius: 9px;
+  background: #fafbfd;
+}
+
+.ev-segment button {
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  color: #52607f;
+  background: transparent;
+  font-size: 12.5px;
+  font-weight: 600;
   cursor: pointer;
 }
 
-.ev-roster-list header b {
-  color: #273250;
-  font-size: 12.5px;
+.ev-segment button.active {
+  color: #4b33c9;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(31, 42, 86, 0.12);
 }
 
-.ev-roster-list header small {
+.ev-roster-expand {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 12px;
+}
+
+.ev-roster-empty {
+  padding: 18px;
+  text-align: center;
+}
+
+.ev-roster-node + .ev-roster-node,
+.ev-roster-node > .ev-roster-node {
+  border-top: 1px solid #eceef3;
+}
+
+.ev-roster-node header {
+  min-height: 40px;
+  padding: 6px 12px 6px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f6f7fb;
+}
+
+.ev-roster-node.depth-1 header,
+.ev-roster-node.depth-2 header {
+  background: #fbfbfd;
+}
+
+.ev-roster-node header b {
+  color: #273250;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ev-roster-node.depth-1 header b {
+  font-weight: 500;
+}
+
+.ev-roster-node header em {
+  padding: 1px 7px;
+  border-radius: 99px;
+  color: #77809a;
+  background: #eceef3;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.ev-roster-node header small {
+  margin-left: auto;
   color: #8a92a8;
   font-size: 12px;
 }
 
-.ev-roster-list section.excluded .ev-dialog-note {
-  padding: 6px 12px 0;
+.ev-roster-chevron {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 6px;
+  color: #8a92a8;
+  background: transparent;
+  cursor: pointer;
+}
+
+.ev-roster-chevron:hover {
+  color: #5a3fd6;
+  background: #ece8ff;
+}
+
+.ev-roster-chevron svg {
+  transition: transform 0.15s ease;
+}
+
+.ev-roster-chevron.open svg {
+  transform: rotate(90deg);
+}
+
+.ev-roster-node.excluded .ev-dialog-note {
+  padding: 8px 12px 4px 40px;
+}
+
+.ev-roster-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+
+.ev-role-chip {
+  padding: 1px 7px;
+  border-radius: 99px;
+  color: #5a3fd6;
+  background: #f1eeff;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .ev-roster-row {
@@ -1567,7 +1673,7 @@
 }
 
 .ev-roster-row input,
-.ev-roster-list header input {
+.ev-roster-node header input {
   width: 16px;
   min-height: 16px;
   height: 16px;
