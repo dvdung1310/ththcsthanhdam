@@ -27,6 +27,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class EvaluationController extends Controller
@@ -47,7 +48,7 @@ class EvaluationController extends Controller
         $access = $this->access($request);
         $own = $request->user()->teacher?->id;
         $periods = EvaluationPeriod::withCount('evaluations')->orderByDesc('year')->orderByDesc('month')->get();
-        $mine = $own ? Evaluation::where('teacher_id', $own)->get()->keyBy('period_id') : collect();
+        $mine = $own ? Evaluation::with('scores')->where('teacher_id', $own)->get()->keyBy('period_id') : collect();
 
         return response()->json([
             'data' => $periods->map(fn (EvaluationPeriod $period) => [
@@ -55,6 +56,8 @@ class EvaluationController extends Controller
                 'evaluations_count' => $period->evaluations_count,
                 'my_evaluation' => ($evaluation = $mine->get($period->id)) ? [
                     'id' => $evaluation->id, 'status' => $evaluation->status, 'status_label' => self::STATUS_LABELS[$evaluation->status],
+                    'self_total' => $evaluation->status === Evaluation::DRAFT ? null : $this->scoring->totals($evaluation, $this->criteria($period), 'self')['total'],
+                    'submitted_at' => $evaluation->submitted_at?->toIso8601String(),
                     'total_score' => $this->visibleResult($evaluation, $period) ? $this->number($evaluation->total_score) : null,
                     'grade' => $this->visibleResult($evaluation, $period) ? $this->gradeName($period, $evaluation->grade) : null,
                 ] : null,
@@ -74,7 +77,7 @@ class EvaluationController extends Controller
         $teachers = Teacher::with(['user.roles', 'departments' => fn ($q) => $q->wherePivotNull('ends_on')->orderByDesc('teacher_department.is_primary')])
             ->where(fn ($q) => $q->where('employment_status', '!=', 'terminated')->orWhereIn('id', $evaluations->keys()))
             ->get()
-            ->sortBy(fn (Teacher $teacher) => $teacher->user?->name)
+            ->sort(fn (Teacher $a, Teacher $b) => $this->compareNames($a->user?->name, $b->user?->name))
             ->values();
 
         return response()->json([
@@ -257,7 +260,7 @@ class EvaluationController extends Controller
             ->when(trim($data['search'] ?? ''), fn ($q, $search) => $q->whereHas('teacher', fn ($t) => $t->where('employee_code', 'like', "%{$search}%")->orWhereHas('user', fn ($u) => $u->where('name', 'like', "%{$search}%"))))
             ->get()
             ->filter(fn (Evaluation $evaluation) => $access->canScore($evaluation))
-            ->sortBy(fn (Evaluation $evaluation) => $evaluation->teacher->user?->name)
+            ->sort(fn (Evaluation $a, Evaluation $b) => $this->compareNames($a->teacher->user?->name, $b->teacher->user?->name))
             ->values();
         $criteria = $this->criteria($period);
 
@@ -280,13 +283,15 @@ class EvaluationController extends Controller
                     'is_homeroom' => $evaluation->is_homeroom,
                     'status' => $evaluation->status, 'status_label' => self::STATUS_LABELS[$evaluation->status],
                     'self_total' => $evaluation->status === Evaluation::DRAFT ? null : $self['total'],
-                    'unit_total' => $this->hasUnitScores($evaluation) ? $unit['total'] : null,
-                    'final_total' => $this->hasUnitScores($evaluation) ? $final['total'] : null,
+                    'unit_total' => $evaluation->status === Evaluation::UNIT_SCORED || $evaluation->scores->contains(fn (EvaluationScore $score) => $score->unit_score !== null) ? $unit['total'] : null,
+                    'final_total' => $this->isReviewed($evaluation) ? $final['total'] : null,
                     'grade' => $this->gradeName($evaluation->period, $evaluation->grade),
                     'suggested_grade' => $evaluation->no_grade_reason ? null : $this->suggestedGrade($evaluation, $final['total'])['name'] ?? null,
                     'no_grade_reason' => $evaluation->no_grade_reason,
                     'has_violation' => $evaluation->has_violation,
                     'submitted_at' => $evaluation->submitted_at?->toIso8601String(),
+                    'unit_scored_at' => $evaluation->unit_scored_at?->toIso8601String(),
+                    'unit' => ($primary = $this->primaryUnit($evaluation->teacher)) ? ['id' => $primary->id, 'name' => $primary->name] : null,
                     'comments_count' => $evaluation->comments()->count(),
                     'can_score' => $access->canScore($evaluation),
                 ];
@@ -638,6 +643,27 @@ class EvaluationController extends Controller
     {
         return in_array($evaluation->status, [Evaluation::UNIT_SCORED, Evaluation::PUBLISHED], true)
             || $evaluation->scores->contains(fn (EvaluationScore $score) => $score->unit_score !== null || $score->final_score !== null);
+    }
+
+    private function isReviewed(Evaluation $evaluation): bool
+    {
+        return $evaluation->reviewed_at !== null || $evaluation->scores->contains(fn (EvaluationScore $score) => $score->final_score !== null);
+    }
+
+    private function primaryUnit(Teacher $teacher): ?Department
+    {
+        return $teacher->departments->filter(fn ($d) => $d->pivot->ends_on === null)->sortByDesc(fn ($d) => (int) $d->pivot->is_primary)->first();
+    }
+
+    private function compareNames(?string $a, ?string $b): int
+    {
+        static $collator = null;
+        $collator ??= new \Collator('vi_VN');
+        $key = fn (?string $name) => [Str::afterLast(trim($name ?? ''), ' '), $name ?? ''];
+        [$givenA, $fullA] = $key($a);
+        [$givenB, $fullB] = $key($b);
+
+        return $collator->compare($givenA, $givenB) ?: $collator->compare($fullA, $fullB);
     }
 
     private function visibleResult(Evaluation $evaluation, EvaluationPeriod $period): bool
