@@ -37,6 +37,12 @@ class DemoSeeder extends Seeder
 
     public function run(): void
     {
+        if (app()->isProduction()) {
+            $this->command?->error('DemoSeeder không chạy trên môi trường production.');
+
+            return;
+        }
+
         DB::transaction(function () {
             $admin = User::where('email', config('app.admin.email'))->firstOrFail();
             $units = $this->seedUnits();
@@ -60,7 +66,7 @@ class DemoSeeder extends Seeder
             }
         });
 
-        $this->call([TaskSeeder::class, LibrarySeeder::class]);
+        $this->call([TaskSeeder::class, LibrarySeeder::class, TaskHistorySeeder::class, EvaluationHistorySeeder::class]);
     }
 
     private function seedUnits(): array
