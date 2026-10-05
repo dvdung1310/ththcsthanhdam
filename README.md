@@ -26,6 +26,22 @@ npm install
 npm run dev
 ```
 
+## Upload limits
+
+The app accepts files up to 20 MB each. PHP's defaults (`upload_max_filesize=2M`, `post_max_size=8M`) reject larger files before they reach Laravel. Use the settings in `laravel/deploy/php/uploads.ini`:
+
+```ini
+upload_max_filesize = 20M
+post_max_size = 100M
+max_file_uploads = 20
+memory_limit = 256M
+```
+
+- Local (`php artisan serve`): `export PHP_INI_SCAN_DIR=":$PWD/laravel/deploy/php"` before starting the server.
+- Production: copy the file into PHP-FPM's `conf.d` (e.g. `/etc/php/8.3/fpm/conf.d/99-uploads.ini`) and restart PHP-FPM. With nginx, also set `client_max_body_size 100m;`.
+
+`GET /api/upload-limits` returns the effective limits. The UI checks files against them before uploading.
+
 ## Database seeding
 
 `DatabaseSeeder` always runs `ProductionSeeder`. It runs `DemoSeeder` only when `APP_ENV=local` or `SEED_DEMO=true`. Every seeder is idempotent: running it again does not duplicate data.
