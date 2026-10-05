@@ -551,7 +551,7 @@ class LibraryController extends Controller
 
     private function shareRow(LibraryShare $share): array
     {
-        return ['kind' => $share->user_id ? 'user' : ($share->department_id ? 'unit' : 'everyone'), 'name' => $share->user?->name ?? $share->department?->name ?? 'Mọi người', 'avatar_url' => $this->person($share->user)['avatar_url'] ?? null, 'access' => $share->access];
+        return ['kind' => $share->user_id ? 'user' : ($share->department_id ? 'unit' : 'everyone'), 'id' => $share->user_id ?? $share->department_id, 'name' => $share->user?->name ?? $share->department?->name ?? 'Mọi người', 'avatar_url' => $this->person($share->user)['avatar_url'] ?? null, 'access' => $share->access];
     }
 
     private function inheritedAccess(LibraryNode $node, LibraryAccess $access): array
