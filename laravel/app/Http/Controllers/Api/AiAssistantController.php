@@ -6,8 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Task;
 use App\Models\Teacher;
 use App\Models\Department;
-use App\Models\OfficialDocument;
+use App\Models\LibraryNode;
 use App\Models\Role;
+use App\Services\LibraryAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,11 +17,12 @@ use Illuminate\Support\Facades\Storage;
 
 class AiAssistantController extends Controller
 {
-    public function summarizeDocument(Request $request, OfficialDocument $document): JsonResponse
+    public function summarizeLibraryFile(Request $request, LibraryNode $node): JsonResponse
     {
+        abort_unless((new LibraryAccess($request->user()))->can($node, LibraryAccess::EDIT), 403, 'Bạn không có quyền tóm tắt file này.');
         $apiKey = config('services.openai.key');
         if (! $apiKey) return response()->json(['message' => 'AI chưa được cấu hình OPENAI_API_KEY.'], 503);
-        $document->load('file');
+        $document = $node->load('file');
         if (! $document->file || ! Storage::disk($document->file->disk)->exists($document->file->path)) {
             return response()->json(['message' => 'Tài liệu chưa có file hoặc file không tồn tại.'], 422);
         }
@@ -30,7 +32,7 @@ class AiAssistantController extends Controller
         $dataUrl = 'data:'.$mime.';base64,'.base64_encode($contents);
         $fileInput = str_starts_with($mime, 'image/')
             ? ['type' => 'input_image', 'image_url' => $dataUrl, 'detail' => 'high']
-            : ['type' => 'input_file', 'filename' => $document->file->original_name, 'file_data' => $dataUrl];
+            : ['type' => 'input_file', 'filename' => $document->name, 'file_data' => $dataUrl];
 
         $response = Http::withToken($apiKey)->timeout(120)->post('https://api.openai.com/v1/responses', [
             'model' => config('services.openai.model', 'gpt-5'),
@@ -42,7 +44,7 @@ class AiAssistantController extends Controller
                 'role' => 'user',
                 'content' => [
                     $fileInput,
-                    ['type' => 'input_text', 'text' => "Hãy đọc toàn bộ nội dung thực tế trong file đính kèm và tóm tắt theo đúng các mục: **Mục đích**, **Các ý chính**, **Mốc thời gian, số liệu và đối tượng quan trọng**, **Việc cần thực hiện**, **Lưu ý về tài liệu**. Tiêu đề bản ghi tham khảo là “{$document->title}” và tên file là “{$document->file->original_name}”; nếu chúng không khớp nội dung thật thì không được dừng tóm tắt, chỉ nêu sự khác biệt tại mục Lưu ý. Tiêu đề từng mục phải in đậm bằng cú pháp **...**; nội dung dùng danh sách gạch đầu dòng, ngắn gọn và không thêm thông tin ngoài file."],
+                    ['type' => 'input_text', 'text' => "Hãy đọc toàn bộ nội dung thực tế trong file đính kèm và tóm tắt theo đúng các mục: **Mục đích**, **Các ý chính**, **Mốc thời gian, số liệu và đối tượng quan trọng**, **Việc cần thực hiện**, **Lưu ý về tài liệu**. Tiêu đề bản ghi tham khảo là “{$document->name}” và tên file là “{$document->file->original_name}”; nếu chúng không khớp nội dung thật thì không được dừng tóm tắt, chỉ nêu sự khác biệt tại mục Lưu ý. Tiêu đề từng mục phải in đậm bằng cú pháp **...**; nội dung dùng danh sách gạch đầu dòng, ngắn gọn và không thêm thông tin ngoài file."],
                 ],
             ]],
         ]);
