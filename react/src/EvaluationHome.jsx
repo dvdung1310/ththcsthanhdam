@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
-import { Award, CalendarPlus, CheckCircle2, ChevronRight, ClipboardList, ListChecks, Trash2, Users, Megaphone, MessageSquare, RotateCcw, Search, Send, Settings2, TriangleAlert, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
+import { Award, CalendarPlus, CheckCircle2, ClipboardList, Trash2, Megaphone, MessageSquare, RotateCcw, Search, Send, Settings2, TriangleAlert, X } from "lucide-react";
 import { apiJson } from "./api";
 import { useConfirm } from "./ConfirmDialog";
 import { PERIOD_TONES, STATUS_TONES, formatDay, formatScore } from "./evaluationUtils";
@@ -21,8 +21,8 @@ export default function EvaluationHome() {
   const [overview, setOverview] = useState(null);
   const [board, setBoard] = useState(null);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [periodDialog, setPeriodDialog] = useState(null);
+  const location = useLocation();
+  const [success, setSuccess] = useState(location.state?.message ?? "");
   const [deleting, setDeleting] = useState(null);
   const [filters, setFilters] = useState({ status: "", department_id: "", search: "" });
 
@@ -63,6 +63,9 @@ export default function EvaluationHome() {
   useEffect(() => {
     loadOverview();
   }, [loadOverview]);
+  useEffect(() => {
+    if (location.state?.message) navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+  }, []);
   useEffect(() => {
     const timer = setTimeout(loadBoard, filters.search ? 250 : 0);
     return () => clearTimeout(timer);
@@ -143,7 +146,7 @@ export default function EvaluationHome() {
         </p>
         {abilities.can_manage && (
           <div className="ev-hero-actions">
-            <button className="primary-btn" onClick={() => setPeriodDialog({ mode: "open" })}>
+            <button className="primary-btn" onClick={() => navigate("/evaluations/periods/new")}>
               <CalendarPlus size={16} /> Mở kỳ đánh giá
             </button>
           </div>
@@ -193,7 +196,7 @@ export default function EvaluationHome() {
               <div className="ev-period-actions">
                 {period.status !== "published" && (
                   <>
-                    <button className="secondary-btn" onClick={() => setPeriodDialog({ mode: "edit", period })}><Settings2 size={15} /> Sửa kỳ</button>
+                    <button className="secondary-btn" onClick={() => navigate(`/evaluations/periods/${period.id}/edit`)}><Settings2 size={15} /> Sửa kỳ</button>
                     <button className="secondary-btn danger" onClick={() => setDeleting(period)}><Trash2 size={15} /> Xóa kỳ</button>
                   </>
                 )}
@@ -255,18 +258,6 @@ export default function EvaluationHome() {
             setBoard(null);
             setParam({ period: "" });
             await loadOverview();
-          }}
-        />
-      )}
-      {periodDialog && (
-        <PeriodDialog
-          dialog={periodDialog}
-          existing={overview.data}
-          onClose={() => setPeriodDialog(null)}
-          onSaved={(result) => {
-            setPeriodDialog(null);
-            setSuccess(result.message);
-            loadOverview().then(() => setParam({ tab: "board", period: result.data.id }));
           }}
         />
       )}
@@ -371,327 +362,6 @@ function BoardTable({ rows, onOpen }) {
         </tbody>
       </table>
     </div>
-  );
-}
-
-function PeriodDialog({ dialog, existing, onClose, onSaved }) {
-  const confirm = useConfirm();
-  const editing = dialog.mode === "edit";
-  const pad = (n) => String(n).padStart(2, "0");
-  const next = (() => {
-    const now = new Date();
-    for (let offset = 0; offset < 24; offset++) {
-      const date = new Date(now.getFullYear(), now.getMonth() + offset, 1);
-      if (!existing.some((p) => p.year === date.getFullYear() && p.month === date.getMonth() + 1)) return date;
-    }
-    return now;
-  })();
-  const [tab, setTab] = useState("setup");
-  const [form, setForm] = useState(
-    editing
-      ? { self_due_on: dialog.period.self_due_on ?? "", unit_due_on: dialog.period.unit_due_on ?? "" }
-      : { year: next.getFullYear(), month: next.getMonth() + 1, self_due_on: `${next.getFullYear()}-${pad(next.getMonth() + 1)}-25`, unit_due_on: `${next.getFullYear()}-${pad(next.getMonth() + 1)}-28` },
-  );
-  const [roster, setRoster] = useState(null);
-  const [selected, setSelected] = useState(new Set());
-  const [search, setSearch] = useState("");
-  const [show, setShow] = useState("all");
-  const [collapsed, setCollapsed] = useState(new Set(["excluded"]));
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    apiJson(`/api/evaluation-periods/roster${editing ? `?period_id=${dialog.period.id}` : ""}`)
-      .then((result) => {
-        setRoster(result);
-        setSelected(new Set(result.data.filter((row) => (editing ? row.evaluation : row.eligible)).map((row) => row.teacher_id)));
-      })
-      .catch((e) => setError(e.message));
-  }, [editing, dialog.period?.id]);
-
-  const rows = roster?.data ?? [];
-  const selectable = (row) => (row.evaluation ? row.removable : row.eligible);
-  const added = rows.filter((row) => !row.evaluation && selected.has(row.teacher_id));
-  const removed = rows.filter((row) => row.evaluation && !selected.has(row.teacher_id));
-  const keyword = search.trim().toLowerCase();
-  const narrowing = Boolean(keyword) || show !== "all";
-  const matches = (row) =>
-    (!keyword || `${row.name} ${row.code ?? ""}`.toLowerCase().includes(keyword)) &&
-    (show === "all" || (show === "selected") === selected.has(row.teacher_id));
-  const tree = useMemo(() => {
-    const units = roster?.units ?? [];
-    const known = new Set(units.map((unit) => unit.id));
-    const members = rows.filter((row) => (row.eligible || row.evaluation) && matches(row));
-    const build = (unit, depth) => {
-      const node = {
-        key: `u${unit.id}`,
-        name: unit.name,
-        type: unit.type,
-        depth,
-        rows: members.filter((row) => row.unit_id === unit.id),
-        children: units.filter((child) => child.parent_id === unit.id).map((child) => build(child, depth + 1)),
-      };
-      node.all = [...node.rows, ...node.children.flatMap((child) => child.all)];
-      node.children = node.children.filter((child) => child.all.length);
-      return node;
-    };
-    const roots = units.filter((unit) => !unit.parent_id || !known.has(unit.parent_id)).map((unit) => build(unit, 0)).filter((node) => node.all.length);
-    const orphans = members.filter((row) => !row.unit_id || !known.has(row.unit_id));
-    if (orphans.length) roots.push({ key: "orphans", name: "Chưa thuộc tổ nào", depth: 0, rows: orphans, children: [], all: orphans });
-    return roots;
-  }, [roster, rows, keyword, show, selected]);
-  const excluded = show !== "all" ? [] : rows.filter((row) => !row.eligible && !row.evaluation && matches(row));
-  const allKeys = (nodes) => nodes.flatMap((node) => [node.key, ...allKeys(node.children)]);
-  const isOpen = (key) => narrowing || !collapsed.has(key);
-  const toggleOpen = (key) =>
-    setCollapsed((current) => {
-      const nextSet = new Set(current);
-      if (nextSet.has(key)) nextSet.delete(key);
-      else nextSet.add(key);
-      return nextSet;
-    });
-
-  const toggle = (row) =>
-    setSelected((current) => {
-      const nextSet = new Set(current);
-      if (nextSet.has(row.teacher_id)) nextSet.delete(row.teacher_id);
-      else nextSet.add(row.teacher_id);
-      return nextSet;
-    });
-  const toggleGroup = (members, value) =>
-    setSelected((current) => {
-      const nextSet = new Set(current);
-      members.filter(selectable).forEach((row) => (value ? nextSet.add(row.teacher_id) : nextSet.delete(row.teacher_id)));
-      return nextSet;
-    });
-
-  const submit = async (event) => {
-    event.preventDefault();
-    if (!selected.size) {
-      setTab("people");
-      setError("Chọn ít nhất một giáo viên.");
-      return;
-    }
-    const losing = removed.filter((row) => row.evaluation.has_data);
-    if (editing && losing.length) {
-      const ok = await confirm({
-        tone: "danger",
-        title: `Gỡ ${removed.length} phiếu khỏi kỳ?`,
-        message: `Phiếu của ${losing.map((row) => row.name).join(", ")} đã có dữ liệu tự chấm và sẽ bị xóa vĩnh viễn. Giáo viên sẽ nhận thông báo không thuộc diện đánh giá kỳ này.`,
-        confirmText: "Gỡ phiếu",
-      });
-      if (!ok) return;
-    }
-    setSaving(true);
-    setError("");
-    try {
-      const body = { self_due_on: form.self_due_on || null, unit_due_on: form.unit_due_on || null, teacher_ids: [...selected] };
-      const result = editing
-        ? await apiJson(`/api/evaluation-periods/${dialog.period.id}`, { method: "PUT", body })
-        : await apiJson("/api/evaluation-periods", { method: "POST", body: { ...body, year: Number(form.year), month: Number(form.month) } });
-      onSaved(result);
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const changeSummary = editing ? [added.length && `+${added.length} phiếu`, removed.length && `−${removed.length} phiếu`].filter(Boolean).join(", ") : "";
-
-  return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <form className="ev-dialog ev-period-dialog" onSubmit={submit}>
-        <h3>{editing ? `Sửa kỳ ${dialog.period.label}` : "Mở kỳ đánh giá tháng"}</h3>
-        <nav className="ev-tabs small" role="tablist">
-          <button type="button" role="tab" aria-selected={tab === "setup"} className={tab === "setup" ? "active" : ""} onClick={() => setTab("setup")}>
-            <Settings2 size={15} /> Thiết lập
-          </button>
-          <button type="button" role="tab" aria-selected={tab === "people"} className={tab === "people" ? "active" : ""} onClick={() => setTab("people")}>
-            <Users size={15} /> Nhân sự {roster && <em>{selected.size}</em>}
-          </button>
-        </nav>
-
-        {tab === "setup" ? (
-          <div className="ev-dialog-body">
-            {!editing && (
-              <div className="ev-dialog-row">
-                <label>
-                  Tháng
-                  <select value={form.month} onChange={(e) => setForm({ ...form, month: e.target.value })}>
-                    {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>Tháng {i + 1}</option>)}
-                  </select>
-                </label>
-                <label>
-                  Năm
-                  <input type="number" min="2020" max="2100" value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} />
-                </label>
-              </div>
-            )}
-            <div className="ev-dialog-row">
-              <label>
-                Hạn tự chấm
-                <input type="date" value={form.self_due_on} onChange={(e) => setForm({ ...form, self_due_on: e.target.value })} />
-              </label>
-              <label>
-                Hạn tổ chấm
-                <input type="date" value={form.unit_due_on} onChange={(e) => setForm({ ...form, unit_due_on: e.target.value })} />
-              </label>
-            </div>
-            <div className="ev-template-line">
-              <ListChecks size={16} />
-              <span>
-                {editing ? "Bộ tiêu chí của kỳ: " : "Bộ tiêu chí áp dụng: "}
-                <b>{roster?.template?.name ?? "—"}</b>
-                {!editing && <small>Muốn dùng bộ khác, hãy áp dụng bộ đó trong màn <Link to="/evaluations/templates">Bộ tiêu chí</Link> trước khi mở kỳ.</small>}
-              </span>
-            </div>
-            <button type="button" className="ev-people-summary" onClick={() => setTab("people")}>
-              <Users size={16} />
-              <span>
-                {roster ? <><b>{selected.size}</b> giáo viên có phiếu{changeSummary && ` (${changeSummary})`}</> : "Đang tải danh sách nhân sự..."}
-                <small>Xem và chọn người tham gia ở tab Nhân sự</small>
-              </span>
-            </button>
-          </div>
-        ) : (
-          <div className="ev-dialog-body ev-roster">
-            <div className="ev-roster-toolbar">
-              <label className="ev-search">
-                <Search size={15} />
-                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm theo tên hoặc mã giáo viên..." />
-              </label>
-              <div className="ev-segment" role="group" aria-label="Lọc">
-                {[["all", "Tất cả"], ["selected", "Đã chọn"], ["unselected", "Chưa chọn"]].map(([value, label]) => (
-                  <button key={value} type="button" className={show === value ? "active" : ""} onClick={() => setShow(value)}>{label}</button>
-                ))}
-              </div>
-              <span className="ev-roster-expand">
-                <button type="button" className="dl-link-btn" onClick={() => setCollapsed(new Set())}>Mở rộng tất cả</button>
-                <button type="button" className="dl-link-btn" onClick={() => setCollapsed(new Set([...allKeys(tree), "excluded"]))}>Thu gọn tất cả</button>
-              </span>
-            </div>
-            <div className="ev-roster-list">
-              {!roster && <p className="ev-muted">Đang tải...</p>}
-              {roster && !tree.length && !excluded.length && <p className="ev-muted ev-roster-empty">Không có giáo viên phù hợp.</p>}
-              {tree.map((node) => (
-                <RosterNode
-                  key={node.key}
-                  node={node}
-                  units={roster.units}
-                  selected={selected}
-                  selectable={selectable}
-                  isOpen={isOpen}
-                  onToggleOpen={toggleOpen}
-                  onToggleGroup={toggleGroup}
-                  onToggleRow={toggle}
-                />
-              ))}
-              {excluded.length > 0 && (
-                <section className="ev-roster-node excluded">
-                  <header style={{ paddingLeft: 10 }}>
-                    <button type="button" className={`ev-roster-chevron ${isOpen("excluded") ? "open" : ""}`} onClick={() => toggleOpen("excluded")} aria-label="Mở hoặc thu gọn">
-                      <ChevronRight size={15} />
-                    </button>
-                    <b>Không thuộc diện đánh giá</b>
-                    <small>{excluded.length}</small>
-                  </header>
-                  {isOpen("excluded") && (
-                    <>
-                      <p className="ev-dialog-note">Muốn đánh giá những người này, hãy cập nhật hồ sơ ở màn Quản lý nhân sự trước.</p>
-                      {excluded.map((row) => <RosterRow key={row.teacher_id} row={row} units={roster.units} depth={0} checked={false} disabled onToggle={() => {}} />)}
-                    </>
-                  )}
-                </section>
-              )}
-            </div>
-          </div>
-        )}
-
-        {error && <p className="dl-dialog-error">{error}</p>}
-        <footer>
-          <span className="ev-dialog-count">{roster ? `Đã chọn ${selected.size} giáo viên${changeSummary ? ` · ${changeSummary}` : ""}` : ""}</span>
-          <button type="button" className="secondary-btn" onClick={onClose}>Hủy</button>
-          <button className="primary-btn" disabled={saving || !roster || !selected.size}>
-            {saving ? "Đang lưu..." : editing ? "Lưu thay đổi" : `Mở kỳ (${selected.size} phiếu)`}
-          </button>
-        </footer>
-      </form>
-    </div>
-  );
-}
-
-function TriCheckbox({ checked, indeterminate, disabled, onChange, label }) {
-  const ref = useRef(null);
-  useEffect(() => {
-    if (ref.current) ref.current.indeterminate = indeterminate;
-  }, [indeterminate]);
-  return <input ref={ref} type="checkbox" checked={checked} disabled={disabled} onChange={onChange} aria-label={label} />;
-}
-
-function RosterNode({ node, units, selected, selectable, isOpen, onToggleOpen, onToggleGroup, onToggleRow }) {
-  const pickable = node.all.filter(selectable);
-  const chosen = node.all.filter((row) => selected.has(row.teacher_id)).length;
-  const allOn = pickable.length > 0 && pickable.every((row) => selected.has(row.teacher_id));
-  const open = isOpen(node.key);
-  return (
-    <section className={`ev-roster-node depth-${node.depth}`}>
-      <header style={{ paddingLeft: 10 + node.depth * 22 }}>
-        <button type="button" className={`ev-roster-chevron ${open ? "open" : ""}`} onClick={() => onToggleOpen(node.key)} aria-label={open ? "Thu gọn" : "Mở rộng"}>
-          <ChevronRight size={15} />
-        </button>
-        <TriCheckbox
-          checked={allOn}
-          indeterminate={!allOn && chosen > 0}
-          disabled={!pickable.length}
-          onChange={() => onToggleGroup(node.all, !allOn)}
-          label={`Chọn cả ${node.name}`}
-        />
-        <b onClick={() => onToggleOpen(node.key)}>{node.name}</b>
-        {node.type && <em>{node.type === "to" ? "Tổ" : "Nhóm"}</em>}
-        <small>{chosen}/{node.all.length} đã chọn</small>
-      </header>
-      {open && (
-        <>
-          {node.rows.map((row) => (
-            <RosterRow key={row.teacher_id} row={row} units={units} depth={node.depth + 1} checked={selected.has(row.teacher_id)} disabled={!selectable(row)} onToggle={() => onToggleRow(row)} />
-          ))}
-          {node.children.map((child) => (
-            <RosterNode key={child.key} node={child} units={units} selected={selected} selectable={selectable} isOpen={isOpen} onToggleOpen={onToggleOpen} onToggleGroup={onToggleGroup} onToggleRow={onToggleRow} />
-          ))}
-        </>
-      )}
-    </section>
-  );
-}
-
-function RosterRow({ row, units, depth, checked, disabled, onToggle }) {
-  const unitName = (id) => units.find((unit) => unit.id === id)?.name;
-  return (
-    <label className={`ev-roster-row ${disabled ? "disabled" : ""}`} style={{ paddingLeft: 10 + depth * 22 + 21 }} title={row.lock_reason ?? row.reason ?? undefined}>
-      <input type="checkbox" checked={checked} disabled={disabled} onChange={onToggle} />
-      <span className="ev-person">
-        {row.avatar_url ? <img src={row.avatar_url} alt="" /> : <i>{row.name?.split(" ").at(-1)?.charAt(0)}</i>}
-        <span>
-          <span className="ev-roster-name">
-            <b>{row.name}</b>
-            {row.roles?.map((role, index) => (
-              <span key={index} className="ev-role-chip">
-                {role.name}
-                {role.unit_id && role.unit_id !== row.unit_id ? ` · ${unitName(role.unit_id) ?? ""}` : ""}
-              </span>
-            ))}
-          </span>
-          <small>{[row.code, row.other_units?.length ? `Cũng thuộc: ${row.other_units.join(", ")}` : null, row.reason, row.lock_reason].filter(Boolean).join(" · ")}</small>
-        </span>
-      </span>
-      {row.evaluation && (
-        <span className="ev-roster-tags">
-          <span className={`ev-chip ${STATUS_TONES[row.evaluation.status]}`}>{row.evaluation.status_label}</span>
-          {row.evaluation.has_data && row.evaluation.status === "draft" && <span className="ev-chip orange">Có dữ liệu</span>}
-        </span>
-      )}
-    </label>
   );
 }
 

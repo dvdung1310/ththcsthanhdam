@@ -50,6 +50,7 @@ import DataLibrary from "./DataLibrary";
 import EvaluationHome from "./EvaluationHome";
 import EvaluationSheet from "./EvaluationSheet";
 import EvaluationTemplates from "./EvaluationTemplates";
+import EvaluationPeriodEditor from "./EvaluationPeriodEditor";
 import { apiFetch, getToken, setToken } from "./api";
 import "./PermissionStates.css";
 import "./SystemTypography.css";
@@ -594,6 +595,8 @@ function App() {
           <Route path="/tasks/:taskCode?" element={guard("tasks", <TaskRoute canAssign={can("tasks.assign")} canUpdate={can("tasks.update")} selectedTask={selectedTask} />)} />
           <Route path="/library/*" element={guard("library", <LibraryRoute />)} />
           <Route path="/evaluations" element={guard("evaluations", <EvaluationHome />)} />
+          <Route path="/evaluations/periods/new" element={guard("evaluation-templates", <EvaluationPeriodEditor />)} />
+          <Route path="/evaluations/periods/:periodId/edit" element={guard("evaluation-templates", <EvaluationPeriodEditor />)} />
           <Route path="/evaluations/:evaluationId" element={guard("evaluations", <EvaluationSheet />)} />
           <Route path="/evaluations/templates/:templateId?" element={guard("evaluation-templates", <EvaluationTemplates />)} />
           <Route path="/personnel" element={guard("personnel", <PersonnelManagement view="people" />)} />
