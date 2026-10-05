@@ -659,6 +659,7 @@ function NodeDetail({ node, onClose, onOpen, onShare, onSaved }) {
 }
 
 const SOURCE_LABELS = { attachment: "Tài liệu giao việc", submission: "Bài nộp" };
+const TASK_STATUS = { not_started: "Chưa thực hiện", in_progress: "Đang thực hiện", waiting_approval: "Chờ duyệt", completed: "Hoàn thành", cancelled: "Đã hủy" };
 
 function MyFiles({ onError, onSuccess, error, onOpenLocation }) {
   const [data, setData] = useState(null);
@@ -671,6 +672,7 @@ function MyFiles({ onError, onSuccess, error, onOpenLocation }) {
   const [selected, setSelected] = useState(null);
   const [menu, setMenu] = useState(null);
   const [sharing, setSharing] = useState(null);
+  const [detailKey, setDetailKey] = useState(null);
 
   const load = useCallback(async () => {
     onError("");
@@ -698,12 +700,16 @@ function MyFiles({ onError, onSuccess, error, onOpenLocation }) {
   const rowKey = (file) => `${file.id}-${file.source}`;
   const url = (file) => `/api/my-files/${file.id}/download`;
   const openFile = (file) => openFileInTab(url(file), file.mime_type).catch((e) => onError(e.message));
+  const download = (file) => downloadFile(url(file), file.name).catch((e) => onError(e.message));
+  const share = (file) => setSharing({ id: file.id, name: file.name });
+  const detailFile = detailKey ? data?.data.find((file) => rowKey(file) === detailKey) : null;
 
   const fileMenu = (file) => [
     { key: "open", label: "Mở", icon: Eye, onClick: () => openFile(file) },
-    { key: "download", label: "Tải về", icon: Download, onClick: () => downloadFile(url(file), file.name).catch((e) => onError(e.message)) },
+    { key: "download", label: "Tải về", icon: Download, onClick: () => download(file) },
+    { key: "detail", label: "Chi tiết", icon: Info, onClick: () => setDetailKey(rowKey(file)) },
     { key: "d1", divider: true },
-    { key: "share", label: file.can_share ? "Chia sẻ vào kho" : "Chia sẻ vào kho (chờ việc hoàn thành)", icon: FolderInput, disabled: !file.can_share, onClick: () => setSharing({ id: file.id, name: file.name }) },
+    { key: "share", label: file.can_share ? "Chia sẻ vào kho" : "Chia sẻ vào kho (chờ việc hoàn thành)", icon: FolderInput, disabled: !file.can_share, onClick: () => share(file) },
     ...file.locations
       .filter((location) => location.can_open)
       .slice(0, 3)
@@ -842,6 +848,9 @@ function MyFiles({ onError, onSuccess, error, onOpenLocation }) {
         </footer>
       )}
       {menu && <MenuList items={menu.items} position={menu.position} onClose={() => setMenu(null)} />}
+      {detailFile && (
+        <MyFileDetail key={detailKey} file={detailFile} onClose={() => setDetailKey(null)} onOpen={openFile} onDownload={download} onShare={share} onOpenLocation={onOpenLocation} />
+      )}
       {sharing && (
         <ShareFileDialog
           file={sharing}
@@ -854,6 +863,63 @@ function MyFiles({ onError, onSuccess, error, onOpenLocation }) {
         />
       )}
     </main>
+  );
+}
+
+function MyFileDetail({ file, onClose, onOpen, onDownload, onShare, onOpenLocation }) {
+  const Icon = fileIcon(file.mime_type);
+  const extension = file.name.includes(".") ? file.name.split(".").pop().toUpperCase() : "—";
+  return (
+    <aside className="dl-detail" aria-label={`Chi tiết ${file.name}`}>
+      <header>
+        <Icon size={22} />
+        <h3 title={file.name}>{file.name}</h3>
+        <button onClick={onClose} aria-label="Đóng"><X size={18} /></button>
+      </header>
+      <dl>
+        <div><dt>Nguồn</dt><dd><span className={`dl-source ${file.source}`}>{SOURCE_LABELS[file.source]}</span></dd></div>
+        <div><dt>Định dạng</dt><dd>{extension}</dd></div>
+        <div><dt>Dung lượng</dt><dd>{formatBytes(file.size)}</dd></div>
+        <div><dt>Ngày tải lên</dt><dd>{formatDate(file.created_at)}</dd></div>
+      </dl>
+      <div className="dl-detail-actions">
+        <button className="secondary-btn" onClick={() => onOpen(file)}><Eye size={15} /> Mở file</button>
+        <button className="secondary-btn" onClick={() => onDownload(file)}><Download size={15} /> Tải về</button>
+        {file.can_share && <button className="secondary-btn" onClick={() => onShare(file)}><FolderInput size={15} /> Chia sẻ vào kho</button>}
+      </div>
+      <section>
+        <div className="dl-detail-head"><h4>Công việc</h4></div>
+        {file.task ? (
+          <div className="dl-detail-task">
+            <b>{file.task.code}</b>
+            <span>{file.task.title}</span>
+            <small className={`dl-task-status ${file.task.status}`}>{TASK_STATUS[file.task.status] ?? file.task.status}</small>
+          </div>
+        ) : (
+          <p className="dl-detail-note">Công việc chứa file này đã bị xóa.</p>
+        )}
+      </section>
+      <section>
+        <div className="dl-detail-head"><h4>Trong kho dữ liệu</h4></div>
+        {file.locations.length ? (
+          <ul className="dl-detail-locations">
+            {file.locations.map((location) => (
+              <li key={location.node_id}>
+                {location.can_open ? (
+                  <button type="button" onClick={() => onOpenLocation(location)}><Folder size={15} /> {location.folder_name}</button>
+                ) : (
+                  <span title="Bạn không còn quyền xem thư mục này"><Lock size={14} /> {location.folder_name}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="dl-detail-note">
+            {file.can_share ? "Chưa chia sẻ vào kho. Chia sẻ để đồng nghiệp tìm và dùng lại file này." : "Bài nộp chỉ chia sẻ vào kho được khi công việc đã hoàn thành."}
+          </p>
+        )}
+      </section>
+    </aside>
   );
 }
 
