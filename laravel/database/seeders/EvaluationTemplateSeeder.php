@@ -8,7 +8,7 @@ use Illuminate\Database\Seeder;
 
 class EvaluationTemplateSeeder extends Seeder
 {
-    public const NAME = 'Đánh giá thi đua tháng 2026-2027';
+    public const NAME = 'Đánh giá thi đua tháng';
 
     private const GRADES = [
         ['code' => 'xuat_sac', 'name' => 'Xuất sắc', 'homeroom_min' => 100, 'regular_min' => 80, 'clean_required' => true, 'condition' => 'Không vi phạm QCCM, Đạo đức nhà giáo. Hoàn thành xuất sắc công việc.'],
