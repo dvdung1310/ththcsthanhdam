@@ -1,12 +1,14 @@
-import { useEffect, useState } from "react";
-import { FolderInput, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Database, FolderInput, Search, X } from "lucide-react";
 import { apiJson } from "./api";
+import LibraryFolderTree from "./LibraryFolderTree";
 import "./ShareFileDialog.css";
 
 export default function ShareFileDialog({ file, onClose, onDone }) {
   const [targets, setTargets] = useState(null);
-  const [folderId, setFolderId] = useState("");
+  const [selected, setSelected] = useState(null);
   const [name, setName] = useState(file.name || "");
+  const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -14,10 +16,19 @@ export default function ShareFileDialog({ file, onClose, onDone }) {
     apiJson("/api/library/targets")
       .then((payload) => {
         setTargets(payload);
-        setFolderId(payload.data[0]?.id ?? (payload.root ? "root" : ""));
+        const shared = payload.folders.find((f) => f.is_system && f.can_target);
+        setSelected(shared ? shared.id : payload.root ? "root" : null);
       })
       .catch((e) => setError(e.message));
   }, []);
+
+  const keyword = search.trim().toLowerCase();
+  const matches = useMemo(
+    () => (targets && keyword ? targets.folders.filter((f) => f.can_target && f.path.toLowerCase().includes(keyword)) : []),
+    [targets, keyword],
+  );
+  const selectedFolder = targets?.folders.find((f) => f.id === selected);
+  const selectedPath = selected === "root" ? "Kho dữ liệu (thư mục gốc)" : selectedFolder?.path;
 
   const submit = async (event) => {
     event.preventDefault();
@@ -26,7 +37,7 @@ export default function ShareFileDialog({ file, onClose, onDone }) {
     try {
       const payload = await apiJson("/api/library/share-file", {
         method: "POST",
-        body: { file_id: file.id, folder_id: folderId === "root" ? null : folderId, name: name.trim() || null },
+        body: { file_id: file.id, folder_id: selected === "root" ? null : selected, name: name.trim() || null },
       });
       onDone?.(payload.message);
     } catch (e) {
@@ -37,7 +48,7 @@ export default function ShareFileDialog({ file, onClose, onDone }) {
   };
 
   return (
-    <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+    <div className="modal-backdrop share-file-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <form className="share-file-dialog" onSubmit={submit}>
         <header>
           <span>
@@ -55,23 +66,48 @@ export default function ShareFileDialog({ file, onClose, onDone }) {
           Tên hiển thị trong kho
           <input value={name} onChange={(event) => setName(event.target.value)} maxLength={255} />
         </label>
-        <label>
-          Thư mục đích
-          <select value={folderId} onChange={(event) => setFolderId(event.target.value)} disabled={!targets}>
-            {targets?.root && <option value="root">Kho dữ liệu (thư mục gốc)</option>}
-            {targets?.data.map((folder) => (
-              <option key={folder.id} value={folder.id}>
-                {folder.path}
-              </option>
-            ))}
-          </select>
-        </label>
-        {error && <p className="share-file-error">{error}</p>}
+        <div className="sfd-picker">
+          <span className="sfd-label">Thư mục đích</span>
+          <label className="sfd-search">
+            <Search size={15} />
+            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm thư mục..." />
+          </label>
+          <div className="sfd-tree">
+            {!targets ? (
+              <p className="sfd-empty">{error || "Đang tải thư mục..."}</p>
+            ) : keyword ? (
+              matches.length ? (
+                matches.map((folder) => (
+                  <button type="button" key={folder.id} className={`sfd-match ${selected === folder.id ? "selected" : ""}`} onClick={() => setSelected(folder.id)}>
+                    {folder.path}
+                  </button>
+                ))
+              ) : (
+                <p className="sfd-empty">Không có thư mục phù hợp mà bạn được đặt file vào.</p>
+              )
+            ) : (
+              <LibraryFolderTree
+                folders={targets.folders}
+                selectedId={selected}
+                revealId={typeof selected === "number" ? selected : null}
+                onSelect={(folder) => setSelected(folder.id)}
+                isDisabled={(folder) => !folder.can_target}
+                rootLabel="Kho dữ liệu"
+                rootIcon={Database}
+                rootSelected={selected === "root"}
+                rootDisabled={!targets.root}
+                onSelectRoot={() => setSelected("root")}
+              />
+            )}
+          </div>
+          <p className="sfd-destination">{selectedPath ? <>Sẽ lưu vào: <b>{selectedPath}</b></> : "Chưa chọn thư mục đích."}</p>
+        </div>
+        {error && targets && <p className="share-file-error">{error}</p>}
         <footer>
           <button type="button" className="secondary-btn" onClick={onClose}>
             Hủy
           </button>
-          <button className="primary-btn" disabled={saving || !targets || folderId === ""}>
+          <button className="primary-btn" disabled={saving || !selected}>
             {saving ? "Đang chia sẻ..." : "Chia sẻ"}
           </button>
         </footer>
