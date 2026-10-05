@@ -54,3 +54,14 @@ export function maxBase(sections, isHomeroom) {
 
 export const formatDay = (value) => (value ? new Date(value).toLocaleDateString("vi-VN") : "—");
 export const formatMoment = (value) => (value ? new Date(value).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" }) : "—");
+
+const dayOnly = (value) => {
+  const [year, month, day] = String(value).slice(0, 10).split("-").map(Number);
+  return new Date(year, month - 1, day);
+};
+const localDay = (value) => (String(value).length > 10 ? new Date(new Date(value).toDateString()) : dayOnly(value));
+
+export function daysPast(due, at = new Date()) {
+  if (!due) return 0;
+  return Math.round((localDay(at) - dayOnly(due)) / 86400000);
+}

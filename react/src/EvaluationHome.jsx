@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
-import { Award, CalendarPlus, CheckCircle2, ClipboardList, Trash2, Megaphone, MessageSquare, RotateCcw, Search, Send, Settings2, TriangleAlert, X } from "lucide-react";
+import { Award, CalendarPlus, Check, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Trash2, Megaphone, MessageSquare, RotateCcw, Search, Send, Settings2, TriangleAlert, X } from "lucide-react";
 import { apiJson } from "./api";
+import ActionMenu from "./ActionMenu";
 import { useConfirm } from "./ConfirmDialog";
-import { PERIOD_TONES, STATUS_TONES, formatDay, formatScore } from "./evaluationUtils";
+import TablePagination, { usePagination } from "./TablePagination";
+import { STATUS_TONES, daysPast, formatDay, formatScore } from "./evaluationUtils";
 import "./Evaluation.css";
 
 const STATUS_FILTERS = [
@@ -12,6 +14,12 @@ const STATUS_FILTERS = [
   ["submitted", "Đã nộp"],
   ["unit_scored", "Tổ đã chấm"],
   ["published", "Đã công bố"],
+];
+
+const PERIOD_STEPS = [
+  ["open", "Chấm phiếu"],
+  ["disclosed", "Giải trình"],
+  ["published", "Công bố"],
 ];
 
 export default function EvaluationHome() {
@@ -25,6 +33,7 @@ export default function EvaluationHome() {
   const [success, setSuccess] = useState(location.state?.message ?? "");
   const [deleting, setDeleting] = useState(null);
   const [filters, setFilters] = useState({ status: "", department_id: "", search: "" });
+  const [collapsed, setCollapsed] = useState(() => new Set());
 
   const abilities = overview?.abilities ?? {};
   const canBoard = abilities.can_score || abilities.can_manage;
@@ -123,6 +132,9 @@ export default function EvaluationHome() {
     return result;
   }, [board]);
 
+  const groups = useMemo(() => groupByUnit(board?.data), [board]);
+  const groupKeys = groups?.map((group) => group.key) ?? [];
+
   if (!overview) return <div className="ev-page"><div className="empty-state"><Award className="loading-icon" size={34} /><b>Đang tải...</b></div></div>;
 
   return (
@@ -185,24 +197,29 @@ export default function EvaluationHome() {
                 </select>
               </label>
             )}
-            {period && (
-              <div className="ev-period-meta">
-                <span className={`ev-chip ${PERIOD_TONES[period.status]}`}>{period.status_label}</span>
-                <span>Hạn tự chấm <b>{formatDay(period.self_due_on)}</b></span>
-                <span>Hạn tổ chấm <b>{formatDay(period.unit_due_on)}</b></span>
-              </div>
-            )}
+            {period && <PeriodSteps status={period.status} />}
             {period && abilities.can_manage && (
               <div className="ev-period-actions">
-                {period.status !== "published" && (
-                  <>
-                    <button className="secondary-btn" onClick={() => navigate(`/evaluations/periods/${period.id}/edit`)}><Settings2 size={15} /> Sửa kỳ</button>
-                    <button className="secondary-btn danger" onClick={() => setDeleting(period)}><Trash2 size={15} /> Xóa kỳ</button>
-                  </>
-                )}
-                {period.status === "open" && <button className="secondary-btn" onClick={disclose}><Send size={15} /> Gửi kết quả dự kiến</button>}
-                {period.status !== "published" && <button className="primary-btn" onClick={publish}><Megaphone size={15} /> Công bố</button>}
+                {period.status === "open" && <button className="primary-btn" onClick={disclose}><Send size={15} /> Gửi kết quả dự kiến</button>}
+                {period.status === "disclosed" && <button className="primary-btn" onClick={publish}><Megaphone size={15} /> Công bố</button>}
                 {period.status === "published" && <button className="secondary-btn" onClick={reopen}><RotateCcw size={15} /> Mở lại</button>}
+                {period.status !== "published" && (
+                  <ActionMenu
+                    className="ev-period-more"
+                    items={[
+                      { key: "edit", label: "Sửa kỳ", icon: Settings2, onClick: () => navigate(`/evaluations/periods/${period.id}/edit`) },
+                      { key: "publish", label: "Công bố ngay", icon: Megaphone, onClick: publish, hidden: period.status !== "open" },
+                      { divider: true },
+                      { key: "delete", label: "Xóa kỳ", icon: Trash2, danger: true, onClick: () => setDeleting(period) },
+                    ]}
+                  />
+                )}
+              </div>
+            )}
+            {period && (
+              <div className="ev-period-meta">
+                <DueDate label="Hạn tự chấm" due={period.self_due_on} active={period.status === "open"} />
+                <DueDate label="Hạn tổ chấm" due={period.unit_due_on} active={period.status === "open"} />
               </div>
             )}
           </div>
@@ -242,7 +259,18 @@ export default function EvaluationHome() {
                   <p>{board.not_included.join(", ")}</p>
                 </details>
               )}
-              <BoardTable rows={board?.data} onOpen={(id) => navigate(`/evaluations/${id}`)} />
+              <BoardTable
+                groups={groups}
+                period={period}
+                collapsed={collapsed}
+                onToggleAll={() => setCollapsed(collapsed.size ? new Set() : new Set(groupKeys))}
+                onToggle={(key) => setCollapsed((current) => {
+                  const next = new Set(current);
+                  next.has(key) ? next.delete(key) : next.add(key);
+                  return next;
+                })}
+                onOpen={(id) => navigate(`/evaluations/${id}`)}
+              />
             </>
           )}
         </section>
@@ -265,8 +293,58 @@ export default function EvaluationHome() {
   );
 }
 
+function PeriodSteps({ status }) {
+  const current = PERIOD_STEPS.findIndex(([key]) => key === status);
+  return (
+    <ol className="ev-steps">
+      {PERIOD_STEPS.map(([key, label], index) => {
+        const state = index < current || status === "published" ? "done" : index === current ? "current" : "";
+        return (
+          <li key={key} className={state}>
+            <i>{state === "done" ? <Check size={12} /> : index + 1}</i>
+            {label}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function DueDate({ label, due, active }) {
+  const past = active ? daysPast(due) : null;
+  return (
+    <span>
+      {label} <b>{formatDay(due)}</b>
+      {due && past !== null && (past > 0 ? <em className="ev-due late">quá {past} ngày</em> : past >= -3 && <em className="ev-due soon">{past === 0 ? "hôm nay" : `còn ${-past} ngày`}</em>)}
+    </span>
+  );
+}
+
+function groupByUnit(rows) {
+  if (!rows) return null;
+  const map = new Map();
+  rows.forEach((row) => {
+    const key = row.unit?.id ?? 0;
+    if (!map.has(key)) map.set(key, { key, name: row.unit?.name ?? "Chưa thuộc tổ", rows: [] });
+    map.get(key).rows.push(row);
+  });
+  return [...map.values()].sort((a, b) => (!a.key) - (!b.key) || a.name.localeCompare(b.name, "vi"));
+}
+
+function deadlineNote(row, period) {
+  if (period.status === "open") {
+    const selfPast = daysPast(period.self_due_on);
+    const unitPast = daysPast(period.unit_due_on);
+    if (row.status === "draft" && period.self_due_on && selfPast > 0) return { tone: "late", text: `Trễ hạn ${selfPast} ngày` };
+    if (row.status === "submitted" && period.unit_due_on && unitPast > 0) return { tone: "late", text: `Tổ chấm trễ ${unitPast} ngày` };
+  }
+  if (row.submitted_at && period.self_due_on && daysPast(period.self_due_on, row.submitted_at) > 0) return { tone: "warn", text: "Nộp sau hạn" };
+  return null;
+}
+
 function MySheets({ periods }) {
   const rows = periods.filter((period) => period.my_evaluation);
+  const pager = usePagination(rows, 12);
   if (!rows.length) {
     return (
       <section className="ev-card">
@@ -280,86 +358,166 @@ function MySheets({ periods }) {
   }
   return (
     <section className="ev-card">
-      <table className="ev-table">
-        <thead>
-          <tr>
-            <th>Kỳ đánh giá</th>
-            <th>Trạng thái phiếu</th>
-            <th>Hạn tự chấm</th>
-            <th className="num">Tổng điểm</th>
-            <th>Xếp loại</th>
-            <th aria-label="Thao tác" />
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((period) => {
-            const sheet = period.my_evaluation;
-            const late = sheet.status === "draft" && period.self_due_on && new Date(period.self_due_on) < new Date(new Date().toDateString());
-            return (
-              <tr key={period.id}>
-                <td><b>{period.label}</b><small className="ev-sub">{period.status_label}</small></td>
-                <td>
-                  <span className={`ev-chip ${STATUS_TONES[sheet.status]}`}>{sheet.status_label}</span>
-                  {late && <small className="ev-late">Quá hạn</small>}
-                </td>
-                <td>{formatDay(period.self_due_on)}</td>
-                <td className="num">{formatScore(sheet.total_score)}</td>
-                <td>{sheet.grade ?? <span className="ev-muted">—</span>}</td>
-                <td className="ev-row-action">
-                  <Link className={sheet.status === "draft" && period.status === "open" ? "primary-btn" : "secondary-btn"} to={`/evaluations/${sheet.id}`}>
-                    {sheet.status === "draft" && period.status === "open" ? "Tự chấm" : "Xem phiếu"}
-                  </Link>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      <div className="ev-table-wrap">
+        <table className="ev-table ev-mine-table">
+          <thead>
+            <tr>
+              <th>Kỳ đánh giá</th>
+              <th>Trạng thái phiếu</th>
+              <th className="num">Tự chấm</th>
+              <th className="num">Kết quả</th>
+              <th>Xếp loại</th>
+              <th aria-label="Thao tác" />
+            </tr>
+          </thead>
+          <tbody>
+            {pager.rows.map((period) => {
+              const sheet = period.my_evaluation;
+              const editable = period.status === "open" && sheet.status === "draft";
+              const past = daysPast(period.self_due_on);
+              return (
+                <tr key={period.id}>
+                  <td><b>{period.label}</b><small className="ev-sub">{period.status_label}</small></td>
+                  <td>
+                    <span className={`ev-chip ${STATUS_TONES[sheet.status]}`}>{sheet.status_label}</span>
+                    {editable && period.self_due_on ? (
+                      <small className={past > 0 ? "ev-late" : "ev-sub"}>
+                        {past > 0 ? `Quá hạn ${past} ngày` : past === 0 ? "Hạn nộp hôm nay" : `Hạn ${formatDay(period.self_due_on)} · còn ${-past} ngày`}
+                      </small>
+                    ) : (
+                      sheet.submitted_at && <small className="ev-sub">Nộp {formatDay(sheet.submitted_at)}</small>
+                    )}
+                  </td>
+                  <td className="num">{formatScore(sheet.self_total)}</td>
+                  <td className="num">
+                    {sheet.total_score != null ? (
+                      <>
+                        <b>{formatScore(sheet.total_score)}</b>
+                        {period.status === "disclosed" && <small className="ev-sub">dự kiến</small>}
+                      </>
+                    ) : (
+                      <span className="ev-muted">{sheet.status === "draft" ? "—" : "Chờ kết quả"}</span>
+                    )}
+                  </td>
+                  <td>{sheet.grade ?? <span className="ev-muted">—</span>}</td>
+                  <td className="ev-row-action">
+                    <Link className={editable ? "primary-btn" : "secondary-btn"} to={`/evaluations/${sheet.id}`}>
+                      {editable ? "Tự chấm" : "Xem phiếu"}
+                    </Link>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {rows.length > 12 && <TablePagination pager={pager} noun="phiếu" sizes={[12, 24, 48]} />}
     </section>
   );
 }
 
-function BoardTable({ rows, onOpen }) {
-  if (!rows) return <div className="empty-state"><Award className="loading-icon" size={30} /><b>Đang tải...</b></div>;
-  if (!rows.length) return <div className="empty-state"><Search size={30} /><b>Không có phiếu phù hợp</b></div>;
+function ScoreDiff({ self, unit }) {
+  if (self == null || unit == null) return null;
+  const diff = Math.round((unit - self) * 100) / 100;
+  if (!diff) return null;
   return (
-    <div className="ev-table-wrap">
-      <table className="ev-table">
+    <small className={`ev-diff ${diff < 0 ? "down" : "up"} ${Math.abs(diff) >= 2 ? "big" : ""}`} title="Chênh lệch so với điểm tự chấm">
+      {diff < 0 ? "▼" : "▲"} {formatScore(Math.abs(diff))}
+    </small>
+  );
+}
+
+function GroupRow({ group, period, open, onToggle }) {
+  const total = group.rows.length;
+  const submitted = group.rows.filter((row) => row.status !== "draft").length;
+  const scored = group.rows.filter((row) => row.status === "unit_scored" || row.status === "published").length;
+  const late = group.rows.filter((row) => deadlineNote(row, period)?.tone === "late").length;
+  return (
+    <tr className="ev-group-row" onClick={onToggle}>
+      <td colSpan={8}>
+        <span className="ev-group-title">
+          {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+          <b>{group.name}</b>
+          <em>{total}</em>
+        </span>
+        <span className="ev-group-progress">
+          <span>Đã nộp <b>{submitted}/{total}</b></span>
+          <span>Tổ chấm <b>{scored}/{total}</b></span>
+          {late > 0 && <span className="late">{late} trễ hạn</span>}
+          <span className="ev-progress" aria-hidden="true">
+            <i className="scored" style={{ width: `${(scored / total) * 100}%` }} />
+            <i className="submitted" style={{ width: `${((submitted - scored) / total) * 100}%` }} />
+          </span>
+        </span>
+      </td>
+    </tr>
+  );
+}
+
+function BoardTable({ groups, period, collapsed, onToggle, onToggleAll, onOpen }) {
+  if (!groups) return <div className="empty-state"><Award className="loading-icon" size={30} /><b>Đang tải...</b></div>;
+  if (!groups.length) return <div className="empty-state"><Search size={30} /><b>Không có phiếu phù hợp</b></div>;
+  return (
+    <div className="ev-table-wrap ev-board-wrap">
+      <table className="ev-table ev-board-table">
         <thead>
           <tr>
-            <th>Giáo viên</th>
+            <th>
+              Giáo viên
+              {groups.length > 1 && (
+                <button className="ev-link-btn" onClick={onToggleAll}>{collapsed.size ? "Mở tất cả" : "Thu gọn tất cả"}</button>
+              )}
+            </th>
             <th>Trạng thái</th>
             <th className="num">Tự chấm</th>
             <th className="num">Tổ chấm</th>
-            <th className="num">Chốt</th>
+            <th className="num" title="Điểm sau khi Hiệu trưởng duyệt">Chốt</th>
             <th>Xếp loại</th>
             <th aria-label="Giải trình" />
+            <th aria-label="Mở" />
           </tr>
         </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.id} className="clickable" onClick={() => onOpen(row.id)}>
-              <td>
-                <span className="ev-person">
-                  {row.teacher.avatar_url ? <img src={row.teacher.avatar_url} alt="" /> : <i>{row.teacher.name?.split(" ").at(-1)?.charAt(0)}</i>}
-                  <span>
-                    <b>{row.teacher.name}</b>
-                    <small>{[row.teacher.units.join(", "), row.is_homeroom ? "GVCN" : null].filter(Boolean).join(" · ")}</small>
-                  </span>
-                </span>
-              </td>
-              <td><span className={`ev-chip ${STATUS_TONES[row.status]}`}>{row.status_label}</span></td>
-              <td className="num">{formatScore(row.self_total)}</td>
-              <td className="num">{formatScore(row.unit_total)}</td>
-              <td className="num"><b>{formatScore(row.final_total)}</b></td>
-              <td>
-                {row.no_grade_reason ? <span className="ev-chip red">Không xếp loại</span> : row.grade ? <b>{row.grade}</b> : row.suggested_grade ? <span className="ev-muted">Gợi ý: {row.suggested_grade}</span> : <span className="ev-muted">—</span>}
-                {row.has_violation && <small className="ev-late">Có vi phạm</small>}
-              </td>
-              <td className="ev-comments">{row.comments_count > 0 && <span title="Trao đổi / giải trình"><MessageSquare size={14} /> {row.comments_count}</span>}</td>
-            </tr>
-          ))}
-        </tbody>
+        {groups.map((group) => {
+          const open = !collapsed.has(group.key);
+          return (
+            <tbody key={group.key}>
+              <GroupRow group={group} period={period} open={open} onToggle={() => onToggle(group.key)} />
+              {open && group.rows.map((row) => {
+                const note = deadlineNote(row, period);
+                const otherUnits = row.teacher.units.filter((name) => name !== group.name);
+                return (
+                  <tr key={row.id} className="clickable" onClick={() => onOpen(row.id)}>
+                    <td>
+                      <span className="ev-person">
+                        {row.teacher.avatar_url ? <img src={row.teacher.avatar_url} alt="" /> : <i>{row.teacher.name?.split(" ").at(-1)?.charAt(0)}</i>}
+                        <span>
+                          <b>{row.teacher.name}</b>
+                          <small>{[...otherUnits, row.is_homeroom ? "GVCN" : null].filter(Boolean).join(" · ") || row.teacher.code}</small>
+                        </span>
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`ev-chip ${STATUS_TONES[row.status]}`}>{row.status_label}</span>
+                      {note && <small className={note.tone === "late" ? "ev-late" : "ev-warn"}>{note.text}</small>}
+                    </td>
+                    <td className="num">{formatScore(row.self_total)}</td>
+                    <td className="num">
+                      {formatScore(row.unit_total)}
+                      <ScoreDiff self={row.self_total} unit={row.unit_total} />
+                    </td>
+                    <td className="num">{row.final_total != null ? <b>{formatScore(row.final_total)}</b> : <span className="ev-muted">—</span>}</td>
+                    <td>
+                      {row.no_grade_reason ? <span className="ev-chip red">Không xếp loại</span> : row.grade ? <b>{row.grade}</b> : row.suggested_grade ? <span className="ev-muted">Gợi ý: {row.suggested_grade}</span> : <span className="ev-muted">—</span>}
+                      {row.has_violation && <small className="ev-late">Có vi phạm</small>}
+                    </td>
+                    <td className="ev-comments">{row.comments_count > 0 && <span title="Trao đổi / giải trình"><MessageSquare size={14} /> {row.comments_count}</span>}</td>
+                    <td className="ev-row-arrow"><ChevronRight size={18} /></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          );
+        })}
       </table>
     </div>
   );
