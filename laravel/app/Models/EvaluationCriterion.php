@@ -9,11 +9,11 @@ class EvaluationCriterion extends Model
     public const SCORE = 'score';
     public const BONUS = 'bonus';
 
-    protected $fillable = ['template_id', 'parent_id', 'code', 'title', 'guidance', 'max_score', 'kind', 'homeroom_only', 'position'];
+    protected $fillable = ['template_id', 'parent_id', 'code', 'title', 'guidance', 'max_score', 'kind', 'homeroom_only', 'requires_evidence', 'position'];
 
     protected function casts(): array
     {
-        return ['max_score' => 'decimal:2', 'homeroom_only' => 'boolean'];
+        return ['max_score' => 'decimal:2', 'homeroom_only' => 'boolean', 'requires_evidence' => 'boolean'];
     }
 
     public function template() { return $this->belongsTo(EvaluationTemplate::class, 'template_id'); }

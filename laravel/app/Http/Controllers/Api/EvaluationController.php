@@ -338,7 +338,7 @@ class EvaluationController extends Controller
         $access = $this->access($request);
         $criteria = $this->criteria($evaluation->period);
         $data = $request->validate([
-            'criterion_id' => ['required', Rule::in($criteria->whereNotNull('parent_id')->pluck('id')->all())],
+            'criterion_id' => ['required', Rule::in($criteria->whereNotNull('parent_id')->where('requires_evidence', true)->pluck('id')->all())],
             'files' => ['required', 'array', 'max:10'],
             'files.*' => ['file', 'max:20480', 'mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,txt,jpg,jpeg,png'],
         ], ['files.*.mimes' => 'Định dạng file không được hỗ trợ.', 'files.*.max' => 'Mỗi file tối đa 20MB.']);
@@ -549,6 +549,7 @@ class EvaluationController extends Controller
 
                     return [
                         'id' => $criterion->id, 'code' => $criterion->code, 'title' => $criterion->title, 'guidance' => $criterion->guidance, 'max_score' => (float) $criterion->max_score,
+                        'requires_evidence' => $criterion->requires_evidence,
                         'self_score' => $this->number($score?->self_score), 'self_note' => $score?->self_note,
                         'unit_score' => $showResult ? $this->number($score?->unit_score) : null, 'unit_note' => $showResult ? $score?->unit_note : null,
                         'final_score' => $showResult ? $this->number($score?->final_score) : null,

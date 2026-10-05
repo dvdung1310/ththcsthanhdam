@@ -8,7 +8,7 @@ use Illuminate\Database\Seeder;
 
 class EvaluationTemplateSeeder extends Seeder
 {
-    public const SCHOOL_YEAR = '2026-2027';
+    public const NAME = 'Đánh giá thi đua tháng 2026-2027';
 
     private const GRADES = [
         ['code' => 'xuat_sac', 'name' => 'Xuất sắc', 'homeroom_min' => 100, 'regular_min' => 80, 'clean_required' => true, 'condition' => 'Không vi phạm QCCM, Đạo đức nhà giáo. Hoàn thành xuất sắc công việc.'],
@@ -58,13 +58,13 @@ class EvaluationTemplateSeeder extends Seeder
 
     public function run(): void
     {
-        $template = EvaluationTemplate::firstOrCreate(
-            ['school_year' => self::SCHOOL_YEAR],
-            ['name' => 'Đánh giá thi đua tháng '.self::SCHOOL_YEAR, 'is_active' => true, 'grades' => self::GRADES],
-        );
-        if ($template->criteria()->exists()) {
+        if (EvaluationTemplate::exists()) {
             return;
         }
+        $template = EvaluationTemplate::create([
+            'name' => self::NAME, 'is_active' => true, 'grades' => self::GRADES,
+            'description' => 'Theo dự thảo bảng tiêu chí chấm điểm thi đua hằng tháng của Hội đồng thi đua khen thưởng.',
+        ]);
 
         $position = 0;
         foreach (self::SECTIONS as [$code, $title, $max, $homeroomOnly, $items]) {
@@ -78,15 +78,15 @@ class EvaluationTemplateSeeder extends Seeder
         $bonus = $this->make($template, null, 'VI', 'Điểm cộng', self::BONUS_MAX, EvaluationCriterion::BONUS, false, $position);
         $child = 0;
         foreach (self::BONUS as [$code, $title, $guidance]) {
-            $this->make($template, $bonus, $code, $title, self::BONUS_MAX, EvaluationCriterion::BONUS, false, $child++, $guidance);
+            $this->make($template, $bonus, $code, $title, self::BONUS_MAX, EvaluationCriterion::BONUS, false, $child++, $guidance, true);
         }
     }
 
-    private function make(EvaluationTemplate $template, ?EvaluationCriterion $parent, string $code, string $title, float $max, string $kind, bool $homeroomOnly, int $position, ?string $guidance = null): EvaluationCriterion
+    private function make(EvaluationTemplate $template, ?EvaluationCriterion $parent, string $code, string $title, float $max, string $kind, bool $homeroomOnly, int $position, ?string $guidance = null, bool $requiresEvidence = false): EvaluationCriterion
     {
         return EvaluationCriterion::create([
-            'template_id' => $template->id, 'parent_id' => $parent?->id, 'code' => $code, 'title' => $title,
-            'guidance' => $guidance, 'max_score' => $max, 'kind' => $kind, 'homeroom_only' => $homeroomOnly, 'position' => $position,
+            'template_id' => $template->id, 'parent_id' => $parent?->id, 'code' => $code, 'title' => $title, 'guidance' => $guidance,
+            'max_score' => $max, 'kind' => $kind, 'homeroom_only' => $homeroomOnly, 'requires_evidence' => $requiresEvidence, 'position' => $position,
         ]);
     }
 }
