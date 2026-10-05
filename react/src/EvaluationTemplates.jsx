@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
-import { ArrowDown, ArrowLeft, ArrowUp, ChevronLeft, ChevronRight, Paperclip, Pencil, Search, CheckCircle2, ChevronDown, Copy, FilePlus2, ListChecks, Lock, Plus, Save, ShieldCheck, Trash2, TriangleAlert, X } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, ChevronRight, Paperclip, Pencil, Search, CheckCircle2, ChevronDown, Copy, FilePlus2, ListChecks, Lock, Plus, Save, ShieldCheck, Trash2, TriangleAlert, X } from "lucide-react";
 import { apiJson } from "./api";
 import { useConfirm } from "./ConfirmDialog";
 import { formatMoment, formatScore, parseScore } from "./evaluationUtils";
+import TablePagination, { usePagination } from "./TablePagination";
 import "./Evaluation.css";
 
 let keySeed = 0;
@@ -154,8 +155,6 @@ function TemplateList() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
   const [createDialog, setCreateDialog] = useState(null);
 
   useEffect(() => {
@@ -166,9 +165,8 @@ function TemplateList() {
   const filtered = (templates ?? []).filter(
     (item) => (!status || templateStatus(item) === status) && (!keyword || `${item.name} ${item.description ?? ""}`.toLowerCase().includes(keyword)),
   );
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const safePage = Math.min(page, totalPages);
-  const rows = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const pager = usePagination(filtered);
+  const rows = pager.rows;
 
   return (
     <div className="ev-page">
@@ -182,9 +180,9 @@ function TemplateList() {
         <div className="ev-filters ev-tpl-filters">
           <label className="ev-search">
             <Search size={15} />
-            <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Tìm theo tên hoặc mô tả..." />
+            <input value={search} onChange={(e) => { setSearch(e.target.value); pager.reset(); }} placeholder="Tìm theo tên hoặc mô tả..." />
           </label>
-          <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
+          <select value={status} onChange={(e) => { setStatus(e.target.value); pager.reset(); }}>
             {STATUS_FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </div>
@@ -237,28 +235,7 @@ function TemplateList() {
             </table>
           </div>
         )}
-        {filtered.length > 0 && (
-          <div className="pagination">
-            <span>
-              Hiển thị <b>{(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, filtered.length)}</b> trong {filtered.length} bộ tiêu chí
-            </span>
-            <div>
-              <label>
-                Số dòng{" "}
-                <select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}>
-                  <option>10</option>
-                  <option>20</option>
-                  <option>50</option>
-                </select>
-              </label>
-              <button disabled={safePage === 1} onClick={() => setPage(safePage - 1)} aria-label="Trang trước"><ChevronLeft size={16} /></button>
-              {Array.from({ length: totalPages }, (_, index) => (
-                <button key={index} className={safePage === index + 1 ? "active" : ""} onClick={() => setPage(index + 1)}>{index + 1}</button>
-              ))}
-              <button disabled={safePage === totalPages} onClick={() => setPage(safePage + 1)} aria-label="Trang sau"><ChevronRight size={16} /></button>
-            </div>
-          </div>
-        )}
+        <TablePagination pager={pager} noun="bộ tiêu chí" />
       </section>
       {createDialog && (
         <CreateDialog
