@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Database, FolderInput, Search, X } from "lucide-react";
 import { apiJson } from "./api";
 import LibraryFolderTree from "./LibraryFolderTree";
+import { useNameConflicts } from "./NameConflictDialog";
 import "./ShareFileDialog.css";
 
 export default function ShareFileDialog({ file, onClose, onDone }) {
@@ -11,6 +12,7 @@ export default function ShareFileDialog({ file, onClose, onDone }) {
   const [search, setSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [askConflicts, conflictDialog] = useNameConflicts();
 
   useEffect(() => {
     apiJson("/api/library/targets")
@@ -34,11 +36,17 @@ export default function ShareFileDialog({ file, onClose, onDone }) {
     event.preventDefault();
     setSaving(true);
     setError("");
+    const body = { file_id: file.id, folder_id: selected === "root" ? null : selected, name: name.trim() || null };
     try {
-      const payload = await apiJson("/api/library/share-file", {
-        method: "POST",
-        body: { file_id: file.id, folder_id: selected === "root" ? null : selected, name: name.trim() || null },
-      });
+      let payload;
+      try {
+        payload = await apiJson("/api/library/share-file", { method: "POST", body });
+      } catch (e) {
+        if (e.status !== 409 || !e.payload.conflict) throw e;
+        const answers = await askConflicts([e.payload.conflict]);
+        if (!answers || answers[0].resolution === "skip") return;
+        payload = await apiJson("/api/library/share-file", { method: "POST", body: { ...body, resolution: answers[0].resolution } });
+      }
       onDone?.(payload.message);
     } catch (e) {
       setError(e.message);
@@ -112,6 +120,7 @@ export default function ShareFileDialog({ file, onClose, onDone }) {
           </button>
         </footer>
       </form>
+      {conflictDialog}
     </div>
   );
 }

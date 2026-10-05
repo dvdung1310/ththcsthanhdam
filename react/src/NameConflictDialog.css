@@ -1,0 +1,103 @@
+.name-conflict-backdrop {
+  z-index: 140;
+}
+
+.name-conflict-dialog {
+  width: min(480px, 100%);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 25px 70px rgba(13, 20, 45, 0.25);
+}
+
+.name-conflict-dialog header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.name-conflict-dialog header > span {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: #b45309;
+  background: #fff3e0;
+}
+
+.name-conflict-dialog h3 {
+  margin: 0;
+  color: #1f2a48;
+  font-size: 16px;
+}
+
+.name-conflict-dialog header p {
+  margin: 4px 0 0;
+  color: #6d7690;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.ncd-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ncd-options button {
+  padding: 12px 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid #e3e6ee;
+  border-radius: 11px;
+  color: #5a3fd6;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ncd-options button:hover {
+  border-color: #c6bdf5;
+  background: #faf9ff;
+}
+
+.ncd-options button svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.ncd-options b {
+  display: block;
+  color: #273250;
+  font-size: 14px;
+}
+
+.ncd-options small {
+  display: block;
+  margin-top: 2px;
+  color: #8a92a8;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.name-conflict-dialog footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.name-conflict-dialog footer label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #46516a;
+  font-size: 12px;
+  cursor: pointer;
+}
