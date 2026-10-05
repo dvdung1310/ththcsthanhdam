@@ -383,7 +383,15 @@ export default function DataLibrary() {
       <div className="dl-splitter" onMouseDown={startResize} onDoubleClick={() => setSidebarWidth(260)} role="separator" aria-orientation="vertical" aria-label="Kéo để đổi độ rộng" />
 
       {view === "mine" ? (
-        <MyFiles onError={setError} onSuccess={setSuccess} error={error} />
+        <MyFiles
+          onError={setError}
+          onSuccess={setSuccess}
+          error={error}
+          onOpenLocation={(location) => {
+            openFolder(location.folder_id);
+            setSelected(location.node_id);
+          }}
+        />
       ) : (
         <main className="dl-main">
           <section className="dl-toolbar">
@@ -462,8 +470,8 @@ export default function DataLibrary() {
                   <th>Tên</th>
                   <th>Kích thước</th>
                   <th>Chia sẻ với</th>
-                  <th>Chủ sở hữu</th>
-                  <th>Cập nhật</th>
+                  <th className="dl-col-optional">Chủ sở hữu</th>
+                  <th className="dl-col-optional">Cập nhật</th>
                   <th aria-label="Thao tác" />
                 </tr>
               </thead>
@@ -497,8 +505,8 @@ export default function DataLibrary() {
                           items={node.shares.map((share, index) => ({ key: `${index}`, label: `${share.name} · ${ACCESS_LABELS[share.access]}`, kind: share.kind === "unit" ? "unit" : "" }))}
                         />
                       </td>
-                      <td className="dl-muted">{node.owner?.name ?? "—"}</td>
-                      <td className="dl-muted">{formatDate(node.updated_at)}</td>
+                      <td className="dl-col-optional dl-muted">{node.owner?.name ?? "—"}</td>
+                      <td className="dl-col-optional dl-muted">{formatDate(node.updated_at)}</td>
                       <td className="dl-row-menu" onClick={(e) => e.stopPropagation()}>
                         <ActionMenu items={nodeMenu(node)} />
                       </td>
@@ -650,107 +658,190 @@ function NodeDetail({ node, onClose, onOpen, onShare, onSaved }) {
   );
 }
 
-function MyFiles({ onError, onSuccess, error }) {
+const SOURCE_LABELS = { attachment: "Tài liệu giao việc", submission: "Bài nộp" };
+
+function MyFiles({ onError, onSuccess, error, onOpenLocation }) {
   const [data, setData] = useState(null);
   const [search, setSearch] = useState("");
+  const [source, setSource] = useState("");
+  const [status, setStatus] = useState("");
+  const [fileType, setFileType] = useState("");
+  const [sort, setSort] = useState("newest");
   const [page, setPage] = useState(1);
+  const [selected, setSelected] = useState(null);
+  const [menu, setMenu] = useState(null);
   const [sharing, setSharing] = useState(null);
 
   const load = useCallback(async () => {
+    onError("");
     try {
-      const params = new URLSearchParams({ page });
+      const params = new URLSearchParams({ page, sort });
       if (search.trim()) params.set("search", search.trim());
+      if (source) params.set("source", source);
+      if (status) params.set("status", status);
+      if (fileType) params.set("file_type", fileType);
       setData(await apiJson(`/api/my-files?${params}`));
     } catch (e) {
       onError(e.message);
     }
-  }, [page, search, onError]);
+  }, [page, sort, search, source, status, fileType, onError]);
 
   useEffect(() => {
     const timer = setTimeout(load, search ? 250 : 0);
     return () => clearTimeout(timer);
   }, [load, search]);
 
+  const filter = (setter) => (event) => {
+    setter(event.target.value);
+    setPage(1);
+  };
+  const rowKey = (file) => `${file.id}-${file.source}`;
+  const url = (file) => `/api/my-files/${file.id}/download`;
+  const openFile = (file) => openFileInTab(url(file), file.mime_type).catch((e) => onError(e.message));
+
+  const fileMenu = (file) => [
+    { key: "open", label: "Mở", icon: Eye, onClick: () => openFile(file) },
+    { key: "download", label: "Tải về", icon: Download, onClick: () => downloadFile(url(file), file.name).catch((e) => onError(e.message)) },
+    { key: "d1", divider: true },
+    { key: "share", label: file.can_share ? "Chia sẻ vào kho" : "Chia sẻ vào kho (chờ việc hoàn thành)", icon: FolderInput, disabled: !file.can_share, onClick: () => setSharing({ id: file.id, name: file.name }) },
+    ...file.locations
+      .filter((location) => location.can_open)
+      .slice(0, 3)
+      .map((location) => ({ key: `loc-${location.node_id}`, label: `Xem trong “${location.folder_name}”`, icon: FolderOpen, onClick: () => onOpenLocation(location) })),
+  ];
+
+  const openContextMenu = (event, file) => {
+    event.preventDefault();
+    setSelected(rowKey(file));
+    setMenu({ position: menuPosition(event.clientX, event.clientY), items: fileMenu(file) });
+  };
+
   return (
     <main className="dl-main">
       <section className="dl-toolbar">
-        <div className="dl-mine-head">
-          <h2>Tệp của tôi</h2>
-          <p>Các file bạn đã đính kèm hoặc nộp trong công việc. Chia sẻ vào kho để người khác dùng lại.</p>
-        </div>
+        <nav className="dl-breadcrumbs" aria-label="Đường dẫn">
+          <button type="button" title="File bạn đã đính kèm khi giao việc hoặc nộp khi hoàn thành việc">
+            <UserRound size={15} /> Tệp của tôi
+          </button>
+        </nav>
         <div className="dl-filters">
           <label className="dl-search">
             <Search size={16} />
-            <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Tìm theo tên file..." />
+            <input value={search} onChange={filter(setSearch)} placeholder="Tìm theo tên file..." />
           </label>
+          <select value={source} onChange={filter(setSource)}>
+            <option value="">Mọi nguồn</option>
+            <option value="attachment">Tài liệu giao việc</option>
+            <option value="submission">Bài nộp</option>
+          </select>
+          <select value={status} onChange={filter(setStatus)}>
+            <option value="">Mọi trạng thái</option>
+            <option value="shared">Đã ở trong kho</option>
+            <option value="unshared">Chưa chia sẻ</option>
+            <option value="pending">Chờ việc hoàn thành</option>
+          </select>
+          <select value={fileType} onChange={filter(setFileType)}>
+            <option value="">Mọi loại file</option>
+            <option value="pdf">PDF</option>
+            <option value="word">Word</option>
+            <option value="excel">Excel</option>
+            <option value="slide">Trình chiếu</option>
+            <option value="image">Hình ảnh</option>
+          </select>
+          <select value={sort} onChange={filter(setSort)}>
+            <option value="newest">Mới nhất</option>
+            <option value="oldest">Cũ nhất</option>
+            <option value="name_asc">Tên A → Z</option>
+            <option value="name_desc">Tên Z → A</option>
+            <option value="size_desc">Dung lượng lớn nhất</option>
+          </select>
         </div>
       </section>
-      <section className="dl-content">
-        {error && <div className="api-error"><TriangleAlert size={16} />{error}</div>}
-        <div className="dl-table-wrap">
-          <table className="dl-table">
-            <thead>
-              <tr>
-                <th>Tên</th>
-                <th>Nguồn</th>
-                <th>Dung lượng</th>
-                <th>Ngày tải</th>
-                <th>Trong kho</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {data?.data.map((file) => {
-                const Icon = fileIcon(file.mime_type);
-                return (
-                  <tr key={`${file.id}-${file.source}`}>
-                    <td className="dl-name">
-                      <Icon size={18} />
-                      <span><b title={file.name}>{file.name}</b></span>
-                    </td>
-                    <td>
-                      <span className={`dl-source ${file.source}`}>{file.source === "submission" ? "Bài nộp" : "Đính kèm việc"}</span>
-                      {file.task && <small className="dl-task-ref">{file.task.code} · {file.task.title}</small>}
-                    </td>
-                    <td>{formatBytes(file.size)}</td>
-                    <td>{formatDate(file.created_at)}</td>
-                    <td>{file.shared_count ? <span className="dl-in-library">{file.shared_count} nơi</span> : <span className="name-stack-empty">Chưa</span>}</td>
-                    <td>
-                      <div className="row-actions">
-                        <button title="Mở" onClick={() => openFileInTab(`/api/my-files/${file.id}/download`, file.mime_type).catch((e) => onError(e.message))}>
-                          <Eye size={15} />
-                        </button>
-                        <button
-                          title={file.can_share ? "Chia sẻ vào kho dữ liệu" : "Chỉ chia sẻ được bài nộp khi công việc đã hoàn thành"}
-                          disabled={!file.can_share}
-                          onClick={() => setSharing({ id: file.id, name: file.name })}
-                        >
-                          <FolderInput size={15} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          {data && !data.data.length && (
+      <section className="dl-content" onClick={() => setSelected(null)}>
+        {error && <div className="api-error"><TriangleAlert size={16} />{error}<button onClick={load}>Thử lại</button></div>}
+        <table className="dl-table dl-mine-table">
+          <thead>
+            <tr>
+              <th>Tên</th>
+              <th className="dl-col-optional">Công việc</th>
+              <th className="dl-col-optional">Kích thước</th>
+              <th>Trong kho</th>
+              <th className="dl-col-optional">Ngày tải</th>
+              <th aria-label="Thao tác" />
+            </tr>
+          </thead>
+          <tbody>
+            {data?.data.map((file) => {
+              const Icon = fileIcon(file.mime_type);
+              const [first, ...others] = file.locations;
+              return (
+                <tr
+                  key={rowKey(file)}
+                  className={selected === rowKey(file) ? "selected" : ""}
+                  onClick={(e) => { e.stopPropagation(); setSelected(rowKey(file)); }}
+                  onDoubleClick={() => openFile(file)}
+                  onContextMenu={(e) => openContextMenu(e, file)}
+                >
+                  <td className="dl-name">
+                    <span className="dl-node-icon file"><Icon size={17} /></span>
+                    <span className="dl-name-text">
+                      <b title={file.name}>{file.name}</b>
+                      <small><span className={`dl-source ${file.source}`}>{SOURCE_LABELS[file.source]}</span></small>
+                    </span>
+                  </td>
+                  <td className="dl-col-optional dl-task-cell" title={file.task ? `${file.task.code} · ${file.task.title}` : undefined}>
+                    {file.task ? <><b>{file.task.code}</b> · {file.task.title}</> : <span className="dl-muted">Công việc đã bị xóa</span>}
+                  </td>
+                  <td className="dl-col-optional dl-muted">{formatBytes(file.size)}</td>
+                  <td onClick={(e) => e.stopPropagation()}>
+                    {first ? (
+                      <span className="dl-locations">
+                        {first.can_open ? (
+                          <button type="button" className="dl-location" onClick={() => onOpenLocation(first)} title={`Mở thư mục “${first.folder_name}”`}>
+                            <Folder size={13} /> {first.folder_name}
+                          </button>
+                        ) : (
+                          <span className="dl-location locked" title="Bạn không còn quyền xem thư mục này"><Lock size={12} /> {first.folder_name}</span>
+                        )}
+                        {others.length > 0 && <span className="dl-location-more" title={others.map((o) => o.folder_name).join(", ")}>+{others.length}</span>}
+                      </span>
+                    ) : file.can_share ? (
+                      <span className="name-stack-empty">Chưa chia sẻ</span>
+                    ) : (
+                      <span className="dl-pending" title="Bài nộp chỉ chia sẻ được khi công việc đã hoàn thành">Chờ việc hoàn thành</span>
+                    )}
+                  </td>
+                  <td className="dl-col-optional dl-muted">{formatDate(file.created_at)}</td>
+                  <td className="dl-row-menu" onClick={(e) => e.stopPropagation()}>
+                    <ActionMenu items={fileMenu(file)} />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {!data ? (
+          !error && <div className="empty-state"><UserRound className="loading-icon" size={34} /><b>Đang tải...</b></div>
+        ) : (
+          !data.data.length && (
             <div className="empty-state">
               <UserRound size={34} />
-              <b>{search ? "Không tìm thấy file" : "Bạn chưa đính kèm hoặc nộp file nào"}</b>
+              <b>{search || source || status || fileType ? "Không có file phù hợp" : "Bạn chưa đính kèm hoặc nộp file nào"}</b>
+              {!(search || source || status || fileType) && <span>File bạn đính kèm khi giao việc hoặc nộp khi hoàn thành việc sẽ hiện ở đây.</span>}
             </div>
-          )}
-        </div>
-        {data && data.meta.last_page > 1 && (
-          <div className="pagination">
-            <span>{data.meta.total} file · trang {data.meta.current_page}/{data.meta.last_page}</span>
-            <div>
-              <button disabled={page === 1} onClick={() => setPage(page - 1)}><ChevronLeft size={16} /></button>
-              <button disabled={page === data.meta.last_page} onClick={() => setPage(page + 1)}><ChevronRight size={16} /></button>
-            </div>
-          </div>
+          )
         )}
       </section>
+      {data && data.meta.last_page > 1 && (
+        <footer className="dl-pagination">
+          <span>{data.meta.total} file · trang {data.meta.current_page}/{data.meta.last_page}</span>
+          <div>
+            <button disabled={page === 1} onClick={() => setPage(page - 1)}><ChevronLeft size={16} /></button>
+            <button disabled={page === data.meta.last_page} onClick={() => setPage(page + 1)}><ChevronRight size={16} /></button>
+          </div>
+        </footer>
+      )}
+      {menu && <MenuList items={menu.items} position={menu.position} onClose={() => setMenu(null)} />}
       {sharing && (
         <ShareFileDialog
           file={sharing}

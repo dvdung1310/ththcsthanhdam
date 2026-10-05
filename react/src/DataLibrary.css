@@ -64,6 +64,7 @@ body.dl-resizing {
 }
 
 .dl-main {
+  container-type: inline-size;
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -411,33 +412,6 @@ body.dl-resizing {
   background: #e7f6ef;
 }
 
-.dl-task-ref {
-  display: block;
-  max-width: 260px;
-  margin-top: 3px;
-  overflow: hidden;
-  color: #8a92a8;
-  font-size: 11px;
-  text-overflow: ellipsis;
-}
-
-.dl-in-library {
-  color: #0f8a5f;
-  font-weight: 700;
-}
-
-.dl-mine-head h2 {
-  margin: 0;
-  color: #1f2a48;
-  font-size: 17px;
-}
-
-.dl-mine-head p {
-  margin: 4px 0 0;
-  color: #8a92a8;
-  font-size: 12px;
-}
-
 .row-actions button:disabled {
   opacity: 0.35;
   cursor: not-allowed;
@@ -630,4 +604,103 @@ body.dl-resizing {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.dl-mine-table td.dl-name {
+  width: 36%;
+}
+
+.dl-task-cell {
+  width: 28%;
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dl-task-cell b {
+  color: #3f4a66;
+}
+
+.dl-name-text small .dl-source {
+  margin-top: 3px;
+  display: inline-block;
+  padding: 1px 7px;
+  font-size: 10.5px;
+}
+
+.dl-locations {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 220px;
+}
+
+.dl-location {
+  min-width: 0;
+  padding: 3px 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 99px;
+  color: #0f8a5f;
+  background: #e7f6ef;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.dl-location:hover {
+  background: #d3efe2;
+}
+
+.dl-location svg {
+  flex: none;
+}
+
+.dl-location.locked {
+  color: #8a92a8;
+  background: #f1f2f6;
+  cursor: default;
+}
+
+.dl-location-more {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 99px;
+  color: #5a3fd6;
+  background: #efebff;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.dl-pending {
+  color: #b45309;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+@container (max-width: 760px) {
+  .dl-col-optional {
+    display: none;
+  }
+
+  .dl-table td.dl-name,
+  .dl-mine-table td.dl-name {
+    width: 62%;
+    min-width: 0;
+  }
+
+  .dl-search {
+    min-width: 100%;
+  }
+
+  .dl-filters select {
+    min-width: 0;
+    flex: 1 1 120px;
+  }
 }
