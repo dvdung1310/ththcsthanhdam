@@ -118,11 +118,11 @@ class EvaluationSummaryController extends Controller
         $from = $filters['from'] ?? null;
         $to = $filters['to'] ?? null;
 
-        $periods = EvaluationPeriod::with('template')->get()
+        $yearPeriods = EvaluationPeriod::with('template')->get()
             ->filter(fn (EvaluationPeriod $p) => self::schoolYear($p->year, $p->month) === $year)
-            ->filter(fn (EvaluationPeriod $p) => (! $from || $this->key($p) >= $from) && (! $to || $this->key($p) <= $to))
             ->sortBy(fn (EvaluationPeriod $p) => $this->key($p))
             ->values();
+        $periods = $yearPeriods->filter(fn (EvaluationPeriod $p) => (! $from || $this->key($p) >= $from) && (! $to || $this->key($p) <= $to))->values();
 
         [$grades, $gradeKeys, $mixed] = $this->mergeGrades($periods);
         $maxBase = $this->maxBases($periods);
@@ -156,6 +156,7 @@ class EvaluationSummaryController extends Controller
                 'id' => $p->id, 'key' => $this->key($p), 'label' => 'T'.$p->month.'/'.$p->year, 'full_label' => $p->label(),
                 'status' => $p->status, 'official' => $p->status === EvaluationPeriod::PUBLISHED,
             ])->values(),
+            'year_periods' => $yearPeriods->map(fn (EvaluationPeriod $p) => ['key' => $this->key($p), 'label' => 'T'.$p->month.'/'.$p->year])->values(),
             'grades' => $grades,
             'mixed_grades' => $mixed,
             'teachers' => $teachers->all(),
