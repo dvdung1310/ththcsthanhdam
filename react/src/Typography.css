@@ -1,5 +1,5 @@
 /* Chuẩn chữ tối thiểu khoảng 12px cho toàn bộ dashboard */
-.brand strong{font-size:14px}.brand small{font-size:12px}.nav-list button{font-size:13px}.ai-promo strong{font-size:14px}.ai-promo span,.ai-promo button{font-size:12px}
+.brand strong{font-size:14px}.brand small{font-size:12px}.nav-list .nav-link{font-size:13px}.ai-promo strong{font-size:14px}.ai-promo span,.ai-promo button{font-size:12px}
 .search-box input{font-size:12px}.profile strong{font-size:12px}.profile small{font-size:11px}
 .stat-card span{font-size:12px;display: flex;justify-content: center;}.stat-card small{font-size:11px}.module-content h2{font-size:14px}.module-content ul{font-size:12px;line-height:1.75}
 .panel h3{font-size:14px}.panel-title button,.alert-row,.team-row,.team-row b{font-size:11px}.teacher-row strong,.teacher-row em{font-size:11px}.teacher-row small{font-size:10px}

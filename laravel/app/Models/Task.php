@@ -33,4 +33,13 @@ class Task extends Model
     public function libraryFiles() { return $this->belongsToMany(LibraryNode::class, 'task_library_files', 'task_id', 'node_id'); }
     public function updates() { return $this->hasMany(TaskUpdate::class); }
     public function submissions() { return $this->hasMany(TaskSubmission::class); }
+
+    public function resolveRouteBinding($value, $field = null)
+    {
+        if ($field || ctype_digit((string) $value)) {
+            return parent::resolveRouteBinding($value, $field);
+        }
+
+        return $this->where('code', $value)->firstOrFail();
+    }
 }

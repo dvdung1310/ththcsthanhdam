@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link, NavLink, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
 import {
   Activity,
   Award,
@@ -52,15 +53,75 @@ import "./GlobalLoading.css";
 import "./NotificationTaskStates.css";
 
 const navItems = [
-  ["Tổng quan", LayoutDashboard],
-  ["Thống kê", ChartNoAxesColumnIncreasing],
-  ["Giao việc", ClipboardCheck],
-  ["Kho dữ liệu", Database],
-  ["Quản lý nhân sự", Users],
-  ["Cấu hình giao việc", Settings],
-  ["Vai trò & quyền", ShieldCheck],
-  ["Thông tin cá nhân", UserRoundCog],
+  ["Tổng quan", LayoutDashboard, "/"],
+  ["Thống kê", ChartNoAxesColumnIncreasing, "/stats"],
+  ["Giao việc", ClipboardCheck, "/tasks"],
+  ["Kho dữ liệu", Database, "/library"],
+  ["Quản lý nhân sự", Users, "/personnel"],
+  ["Cấu hình giao việc", Settings, "/task-settings"],
+  ["Vai trò & quyền", ShieldCheck, "/roles"],
+  ["Thông tin cá nhân", UserRoundCog, "/profile"],
 ];
+
+const APP_NAME = "TH-THCS Thanh Đàm";
+
+const matchNav = (pathname) =>
+  navItems.find(([, , path]) => (path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(`${path}/`)));
+
+function TaskRoute(props) {
+  const { taskCode } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
+  if (taskCode && !/^[A-Za-z0-9-]+$/.test(taskCode)) return <RouteNotice kind="missing" />;
+  const onRouteTaskChange = (code, { replace = false } = {}) => {
+    if (code) navigate(`/tasks/${code}`, { replace, state: replace ? location.state : { fromList: true } });
+    else if (!replace && location.state?.fromList) navigate(-1);
+    else navigate("/tasks", { replace: true });
+  };
+  return <TaskManagement {...props} routeTaskCode={taskCode ?? null} onRouteTaskChange={onRouteTaskChange} />;
+}
+
+const slugify = (name = "") =>
+  name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[đĐ]/g, "d")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .slice(0, 60)
+    .replace(/^-+|-+$/g, "");
+
+const folderPath = (id, name) => {
+  const slug = slugify(name);
+  return `/library/folders/${id}${slug ? `-${slug}` : ""}`;
+};
+
+function LibraryRoute() {
+  const rest = useParams()["*"] ?? "";
+  const navigate = useNavigate();
+  const location = useLocation();
+  const folder = rest.match(/^folders\/(\d+)(?:-[^/]*)?$/);
+  if (rest && rest !== "mine" && !folder) return <RouteNotice kind="missing" />;
+  const onNavigate = (view, folderId = null, { replace = false, select = null } = {}) =>
+    navigate(view === "mine" ? "/library/mine" : folderId ? `/library/folders/${folderId}` : "/library", { replace, state: select ? { select } : null });
+  const onFolderLoaded = (id, name) => {
+    const path = folderPath(id, name);
+    if (location.pathname !== path) navigate(path, { replace: true, state: location.state });
+  };
+  return <DataLibrary view={rest === "mine" ? "mine" : "library"} folderId={folder ? Number(folder[1]) : null} selectId={location.state?.select ?? null} onNavigate={onNavigate} onFolderLoaded={onFolderLoaded} />;
+}
+
+function RouteNotice({ kind }) {
+  const forbidden = kind === "forbidden";
+  return (
+    <section className="route-notice">
+      <span>{forbidden ? <ShieldCheck size={30} /> : <Search size={30} />}</span>
+      <h2>{forbidden ? "Bạn không có quyền xem trang này" : "Không tìm thấy trang"}</h2>
+      <p>{forbidden ? "Tài khoản của bạn chưa được cấp quyền cho chức năng này. Liên hệ quản trị viên nếu bạn cần truy cập." : "Đường dẫn không tồn tại hoặc đã bị thay đổi."}</p>
+      <Link className="primary-btn" to="/">Về trang Tổng quan</Link>
+    </section>
+  );
+}
 
 const _legacyStats = [
   {
@@ -260,21 +321,31 @@ const _legacyTeachers = [
 function App() {
   const [apiLoadingCount, setApiLoadingCount] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [active, setActive] = useState("Tổng quan");
   const [query, setQuery] = useState("");
   const [authUser, setAuthUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [selectedTask, setSelectedTask] = useState(null);
   const [pendingTaskCount, setPendingTaskCount] = useState(0);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const location = useLocation();
+  const navigate = useNavigate();
+  const current = matchNav(location.pathname);
+  const pageLabel = authLoading ? null : !authUser ? "Đăng nhập" : current?.[0] ?? "Không tìm thấy trang";
+
+  useEffect(() => {
+    const title = pageLabel ? `${pageLabel} · ${APP_NAME}` : APP_NAME;
+    document.title = authUser && unreadCount ? `(${unreadCount}) ${title}` : title;
+  }, [pageLabel, unreadCount, authUser]);
 
   useEffect(() => {
     const openFilteredTasks = (event) => {
       setSelectedTask({ filter: event.detail, token: Date.now() });
-      setActive("Giao việc");
+      navigate("/tasks");
     };
     window.addEventListener("dashboard:task-filter", openFilteredTasks);
     return () => window.removeEventListener("dashboard:task-filter", openFilteredTasks);
-  }, []);
+  }, [navigate]);
 
   useEffect(() => {
     const updateLoading = (event) =>
@@ -336,6 +407,7 @@ function App() {
     });
     setToken(null);
     setAuthUser(null);
+    navigate("/", { replace: true });
   };
   if (authLoading)
     return (
@@ -368,9 +440,10 @@ function App() {
     "Cấu hình giao việc": "tasks.assign",
     "Vai trò & quyền": "roles.manage",
   };
-  const visibleNavItems = navItems.filter(
-    ([label]) => label === "Cấu hình giao việc" ? canConfigureTasks : (!navPermissions[label] || can(navPermissions[label])),
-  );
+  const allowed = (label) => (label === "Cấu hình giao việc" ? canConfigureTasks : !navPermissions[label] || can(navPermissions[label]));
+  const visibleNavItems = navItems.filter(([label]) => allowed(label));
+  const guard = (label, element) => (allowed(label) ? element : <RouteNotice kind="forbidden" />);
+  const openTask = (code) => navigate(`/tasks/${code}`);
 
   return (
     <div className="app-shell">
@@ -403,19 +476,13 @@ function App() {
           </button>
         </div>
         <nav className="nav-list">
-          {visibleNavItems.map(([label, Icon]) => (
+          {visibleNavItems.map(([label, Icon, path]) => (
             <div className="nav-entry" key={label}>
-              <button
-                className={active === label ? "active" : ""}
-                onClick={() => {
-                  setActive(label);
-                  setSidebarOpen(false);
-                }}
-              >
+              <NavLink to={path} end={path === "/"} className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`} onClick={() => setSidebarOpen(false)}>
                 <Icon size={18} />
                 <span>{label}</span>
                 {label === "Giao việc" && <em>{pendingTaskCount}</em>}
-              </button>
+              </NavLink>
             </div>
           ))}
         </nav>
@@ -430,7 +497,7 @@ function App() {
             >
               <Menu size={24} />
             </button>
-            <h1>{active}</h1>
+            <h1>{current?.[0] ?? "Không tìm thấy trang"}</h1>
           </div>
           <div className="top-actions">
             <label className="search-box">
@@ -443,10 +510,8 @@ function App() {
             </label>
             <NotificationCenter
               user={authUser}
-              onOpenTask={(taskId) => {
-                setSelectedTask({ id: taskId, token: Date.now() });
-                setActive("Giao việc");
-              }}
+              onOpenTask={openTask}
+              onUnreadChange={setUnreadCount}
             />
             <div className="profile">
               {authUser.avatar_url ? <img className="avatar avatar-image" style={{ objectFit: "cover" }} src={authUser.avatar_url} alt="Ảnh đại diện" /> : <span className="avatar">{authUser.name.charAt(0)}</span>}
@@ -461,27 +526,17 @@ function App() {
           </div>
         </header>
 
-        {active === "Thống kê" ? (
-          <TaskStats onTask={(id) => { setSelectedTask({ id, token: Date.now() }); setActive("Giao việc"); }} />
-        ) : active === "Quản lý nhân sự" ? (
-          <PersonnelManagement />
-        ) : active === "Cấu hình giao việc" ? (
-          <TaskConfiguration />
-        ) : active === "Giao việc" ? (
-          <TaskManagement
-            canAssign={can("tasks.assign")}
-            canUpdate={can("tasks.update")}
-            selectedTask={selectedTask}
-          />
-        ) : active === "Kho dữ liệu" ? (
-          <DataLibrary />
-        ) : active === "Vai trò & quyền" ? (
-          <RolePermissionMatrix />
-        ) : active === "Thông tin cá nhân" ? (
-          <PersonalProfile user={authUser} onUserChanged={setAuthUser} />
-        ) : (
-          <ManagementDashboard onTask={(id) => { setSelectedTask({ id, token: Date.now() }); setActive("Giao việc"); }} onKpi={() => setActive("Thống kê")} />
-        )}
+        <Routes>
+          <Route path="/" element={<ManagementDashboard onTask={openTask} onKpi={() => navigate("/stats")} />} />
+          <Route path="/stats" element={guard("Thống kê", <TaskStats onTask={openTask} />)} />
+          <Route path="/tasks/:taskCode?" element={guard("Giao việc", <TaskRoute canAssign={can("tasks.assign")} canUpdate={can("tasks.update")} selectedTask={selectedTask} />)} />
+          <Route path="/library/*" element={guard("Kho dữ liệu", <LibraryRoute />)} />
+          <Route path="/personnel" element={guard("Quản lý nhân sự", <PersonnelManagement />)} />
+          <Route path="/task-settings" element={guard("Cấu hình giao việc", <TaskConfiguration />)} />
+          <Route path="/roles" element={guard("Vai trò & quyền", <RolePermissionMatrix />)} />
+          <Route path="/profile" element={<PersonalProfile user={authUser} onUserChanged={setAuthUser} />} />
+          <Route path="*" element={<RouteNotice kind="missing" />} />
+        </Routes>
       </main>
       {authUser.has_ai_assistant && <AiAssistant />}
     </div>
