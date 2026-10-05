@@ -385,13 +385,14 @@ class EvaluationController extends Controller
             'scores.*.score' => ['nullable', 'numeric', 'min:0'],
         ]);
         $this->assertWithinMax($data['scores'] ?? [], $criteria);
+        $approve = $request->boolean('approve', true);
 
-        DB::transaction(function () use ($evaluation, $data, $request) {
+        DB::transaction(function () use ($evaluation, $data, $request, $approve) {
             $evaluation->update([
                 'has_violation' => $data['has_violation'] ?? $evaluation->has_violation,
                 'no_grade_reason' => array_key_exists('no_grade_reason', $data) ? (trim((string) $data['no_grade_reason']) ?: null) : $evaluation->no_grade_reason,
                 'grade' => array_key_exists('grade', $data) ? $data['grade'] : $evaluation->grade,
-                'reviewed_by' => $request->user()->id, 'reviewed_at' => now(),
+                ...($approve ? ['reviewed_by' => $request->user()->id, 'reviewed_at' => now()] : []),
             ]);
             foreach ($data['scores'] ?? [] as $row) {
                 EvaluationScore::updateOrCreate(['evaluation_id' => $evaluation->id, 'criterion_id' => $row['criterion_id']], ['final_score' => $row['score']]);
@@ -399,7 +400,7 @@ class EvaluationController extends Controller
             $this->refreshResult($evaluation->fresh(['scores', 'period']));
         });
 
-        return response()->json(['message' => 'Đã lưu kết quả duyệt.', 'data' => $this->detail($evaluation->fresh(), $access)]);
+        return response()->json(['message' => $approve ? 'Đã duyệt phiếu.' : 'Đã lưu nháp duyệt.', 'data' => $this->detail($evaluation->fresh(), $access)]);
     }
 
     public function comment(Request $request, Evaluation $evaluation): JsonResponse
@@ -647,7 +648,7 @@ class EvaluationController extends Controller
 
     private function isReviewed(Evaluation $evaluation): bool
     {
-        return $evaluation->reviewed_at !== null || $evaluation->scores->contains(fn (EvaluationScore $score) => $score->final_score !== null);
+        return $evaluation->reviewed_at !== null;
     }
 
     private function placement(Teacher $teacher): array
