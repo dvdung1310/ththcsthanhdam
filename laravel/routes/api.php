@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\TaskTypeController;
 use App\Http\Controllers\Api\PersonnelController;
 use App\Http\Controllers\Api\UnitController;
 use App\Http\Controllers\Api\EvaluationController;
+use App\Http\Controllers\Api\EvaluationTemplateController;
 use App\Http\Controllers\Api\TaskStatsController;
 use App\Http\Controllers\Api\AiAssistantController;
 use Illuminate\Support\Facades\Route;
@@ -36,6 +37,8 @@ Route::middleware('api.token')->group(function(){
   Route::post('evaluation-periods',[EvaluationController::class,'openPeriod']);Route::put('evaluation-periods/{period}',[EvaluationController::class,'updatePeriod']);
   Route::post('evaluation-periods/{period}/disclose',[EvaluationController::class,'disclose']);Route::post('evaluation-periods/{period}/publish',[EvaluationController::class,'publish']);Route::post('evaluation-periods/{period}/reopen',[EvaluationController::class,'reopen']);
   Route::put('evaluations/{evaluation}/review',[EvaluationController::class,'review']);
+  Route::get('evaluation-templates',[EvaluationTemplateController::class,'index']);Route::post('evaluation-templates',[EvaluationTemplateController::class,'store']);Route::get('evaluation-templates/{template}',[EvaluationTemplateController::class,'show']);
+  Route::put('evaluation-templates/{template}',[EvaluationTemplateController::class,'update']);Route::post('evaluation-templates/{template}/activate',[EvaluationTemplateController::class,'activate']);Route::delete('evaluation-templates/{template}',[EvaluationTemplateController::class,'destroy']);
  });
  Route::get('personnel',[PersonnelController::class,'index'])->middleware('permission:teachers.view');Route::post('personnel',[PersonnelController::class,'store'])->middleware('permission:teachers.manage');Route::put('personnel/{user}',[PersonnelController::class,'update'])->middleware('permission:teachers.manage');Route::delete('personnel/{user}',[PersonnelController::class,'destroy'])->middleware('permission:teachers.manage');
  Route::get('units',[UnitController::class,'index'])->middleware('permission:teachers.view');Route::get('units/{unit}',[UnitController::class,'show'])->middleware('permission:teachers.view');Route::post('units',[UnitController::class,'store'])->middleware('permission:teachers.manage');Route::put('units/{unit}',[UnitController::class,'update'])->middleware('permission:teachers.manage');Route::delete('units/{unit}',[UnitController::class,'destroy'])->middleware('permission:teachers.manage');
