@@ -810,8 +810,9 @@ function AccessList({ owner, ownerLabel, shares }) {
 const LEVEL_LABELS = ["—", "Xem", "Tải lên", "Chỉnh sửa", "Quản trị kho"];
 
 function NodeDetail({ node: initial, reloadToken, onClose, onOpen, onDownload, onOpenFolder, onShare, onSaved }) {
-  const [node, setNode] = useState(initial);
+  const [node, setNode] = useState(() => ({ shares: [], ...initial }));
   const [description, setDescription] = useState(initial.description || "");
+  const savedDescription = useRef(initial.description || "");
   const [saving, setSaving] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
   const [error, setError] = useState("");
@@ -822,7 +823,13 @@ function NodeDetail({ node: initial, reloadToken, onClose, onOpen, onDownload, o
   useEffect(() => {
     let active = true;
     apiJson(`/api/library/nodes/${initial.id}`)
-      .then((payload) => active && setNode(payload.data))
+      .then((payload) => {
+        if (!active) return;
+        const fresh = payload.data.description || "";
+        setDescription((current) => (current === savedDescription.current ? fresh : current));
+        savedDescription.current = fresh;
+        setNode(payload.data);
+      })
       .catch((e) => active && setError(e.message));
     return () => {
       active = false;
@@ -834,6 +841,7 @@ function NodeDetail({ node: initial, reloadToken, onClose, onOpen, onDownload, o
     setError("");
     try {
       const result = await apiJson(`/api/library/nodes/${node.id}`, { method: "PUT", body: { description } });
+      savedDescription.current = result.data.description || "";
       setNode((current) => ({ ...current, ...result.data, stats: current.stats, uploader: current.uploader }));
       await onSaved(result.message);
     } catch (e) {
@@ -881,7 +889,7 @@ function NodeDetail({ node: initial, reloadToken, onClose, onOpen, onDownload, o
         <InfoRows
           rows={[
             isFolder
-              ? ["Nội dung", stats ? `${stats.folders} thư mục · ${stats.files} file` : `${node.children_count ?? 0} mục`]
+              ? ["Nội dung", stats ? `${stats.folders} thư mục · ${stats.files} file` : node.children_count != null ? `${node.children_count} mục` : "—"]
               : ["Loại", fileKind(node.name, node.mime_type)],
             isFolder ? ["Tổng dung lượng", stats ? formatBytes(stats.size) : "—"] : ["Dung lượng", formatBytes(node.size)],
             ["Vị trí", <span className="dl-location-text" title={location}>{location}</span>],
