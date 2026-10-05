@@ -178,13 +178,13 @@ export default function EvaluationSheet() {
         .filter((s) => s.kind !== "bonus" && (!s.homeroom_only || isHomeroom))
         .flatMap((s) => s.criteria)
         .filter((c) => parseScore(rows[c.id]?.self_score) === null);
-      const bonusNoEvidence = data.sections
-        .filter((s) => s.kind === "bonus")
+      const noEvidence = data.sections
+        .filter((s) => !s.homeroom_only || isHomeroom)
         .flatMap((s) => s.criteria)
-        .filter((c) => (parseScore(rows[c.id]?.self_score) ?? 0) > 0 && !c.evidence.length);
+        .filter((c) => c.requires_evidence && (parseScore(rows[c.id]?.self_score) ?? 0) > 0 && !c.evidence.length);
       const warnings = [
         empty.length ? `${empty.length} tiêu chí chưa chấm (tính là 0 điểm).` : null,
-        bonusNoEvidence.length ? `${bonusNoEvidence.length} nội dung điểm cộng chưa có minh chứng.` : null,
+        noEvidence.length ? `${noEvidence.length} tiêu chí cần minh chứng nhưng chưa có minh chứng.` : null,
       ].filter(Boolean);
       const ok = await confirm({
         tone: warnings.length ? "danger" : undefined,
@@ -469,7 +469,10 @@ function SectionCard({ section, rows, totals, isHomeroom, canToggleHomeroom, onT
         <h3>
           <span>{section.code}.</span> {section.title}
         </h3>
-        <small>{bonus ? `Tối đa +${formatScore(section.max_score)} điểm/tháng, cần minh chứng` : `Tối đa ${formatScore(section.max_score)} điểm`}</small>
+        <small>
+          {bonus ? `Tối đa +${formatScore(section.max_score)} điểm/tháng` : `Tối đa ${formatScore(section.max_score)} điểm`}
+          {section.criteria.length > 0 && section.criteria.every((c) => c.requires_evidence) ? ", cần minh chứng" : ""}
+        </small>
         {section.homeroom_only && (
           <label className="ev-switch">
             <input type="checkbox" checked={isHomeroom} disabled={!canToggleHomeroom} onChange={(e) => onToggleHomeroom(e.target.checked)} />
@@ -522,7 +525,7 @@ function SectionCard({ section, rows, totals, isHomeroom, canToggleHomeroom, onT
   );
 }
 
-function ScoreCell({ value, note, max, editable, onScore, onNote, placeholder, highlight, withNote = true }) {
+function ScoreCell({ value, note, max, editable, onScore, onNote, placeholder, notePlaceholder = "Ghi chú điểm trừ", highlight, withNote = true }) {
   const parsed = parseScore(value);
   const invalid = parsed !== null && (Number.isNaN(parsed) || parsed < 0 || parsed > max);
   if (!editable) {
@@ -544,7 +547,7 @@ function ScoreCell({ value, note, max, editable, onScore, onNote, placeholder, h
         title={invalid ? `Điểm từ 0 đến ${formatScore(max)}` : undefined}
         aria-invalid={invalid}
       />
-      {withNote && <input className="ev-note" value={note} onChange={(e) => onNote(e.target.value)} placeholder="Ghi chú điểm trừ" />}
+      {withNote && <input className="ev-note" value={note} onChange={(e) => onNote(e.target.value)} placeholder={notePlaceholder} />}
     </div>
   );
 }
@@ -566,31 +569,34 @@ function CriterionRow({ criterion, row, bonus, selfMode, unitMode, reviewMode, s
           </button>
         )}
         {open && <ul className="ev-guidance">{lines.map((line, index) => <li key={index}>{line}</li>)}</ul>}
-        <div className="ev-evidence">
-          {criterion.evidence.map((file, index) => (
-            <span key={file.id} className="ev-evidence-chip">
-              <button type="button" onClick={() => onOpenEvidence(criterion, index)} title={`${file.name} · ${formatBytes(file.size)}`}>
-                <FileText size={12} /> {file.name}
-              </button>
-              {canAddEvidence && <button type="button" className="remove" onClick={() => onRemoveEvidence(file)} aria-label={`Xóa ${file.name}`}><X size={11} /></button>}
-            </span>
-          ))}
-          {canAddEvidence && (
-            <>
-              <button type="button" className="ev-add-evidence" onClick={() => fileInput.current?.click()}>
-                <Paperclip size={12} /> Minh chứng
-              </button>
-              <input ref={fileInput} type="file" multiple hidden accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.jpg,.jpeg,.png" onChange={(e) => { onUpload(criterion.id, e.target.files); e.target.value = ""; }} />
-            </>
-          )}
-          {bonus && selfValue > 0 && !criterion.evidence.length && <small className="ev-late">Chưa có minh chứng</small>}
-        </div>
+        {criterion.requires_evidence && (
+          <div className="ev-evidence">
+            {criterion.evidence.map((file, index) => (
+              <span key={file.id} className="ev-evidence-chip">
+                <button type="button" onClick={() => onOpenEvidence(criterion, index)} title={`${file.name} · ${formatBytes(file.size)}`}>
+                  <FileText size={12} /> {file.name}
+                </button>
+                {canAddEvidence && <button type="button" className="remove" onClick={() => onRemoveEvidence(file)} aria-label={`Xóa ${file.name}`}><X size={11} /></button>}
+              </span>
+            ))}
+            {canAddEvidence && (
+              <>
+                <button type="button" className="ev-add-evidence" onClick={() => fileInput.current?.click()}>
+                  <Paperclip size={12} /> Minh chứng
+                </button>
+                <input ref={fileInput} type="file" multiple hidden accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.jpg,.jpeg,.png" onChange={(e) => { onUpload(criterion.id, e.target.files); e.target.value = ""; }} />
+              </>
+            )}
+            {selfValue > 0 && !criterion.evidence.length && <small className="ev-late">Chưa có minh chứng</small>}
+          </div>
+        )}
       </div>
       <ScoreCell
         value={row.self_score ?? ""}
         note={row.self_note ?? ""}
         max={criterion.max_score}
         editable={selfMode}
+        notePlaceholder={bonus ? "Ghi chú (nội dung, số lần...)" : undefined}
         onScore={(value) => onCell(criterion.id, "self_score", value, "self")}
         onNote={(value) => onCell(criterion.id, "self_note", value, "self")}
       />
@@ -600,6 +606,7 @@ function CriterionRow({ criterion, row, bonus, selfMode, unitMode, reviewMode, s
           note={row.unit_note ?? ""}
           max={criterion.max_score}
           editable={unitMode}
+          notePlaceholder={bonus ? "Ghi chú (nội dung, số lần...)" : undefined}
           onScore={(value) => onCell(criterion.id, "unit_score", value, "unit")}
           onNote={(value) => onCell(criterion.id, "unit_note", value, "unit")}
         />
@@ -761,6 +768,12 @@ function ReturnDialog({ onClose, onSubmit }) {
   );
 }
 
+function noteHeader(section) {
+  const flagged = section.criteria.filter((criterion) => criterion.requires_evidence).length;
+  if (!flagged) return "Ghi chú điểm trừ";
+  return flagged === section.criteria.length ? "Minh chứng" : "Ghi chú / minh chứng";
+}
+
 function PrintSheet({ data, rows, form, totals, suggested, showUnit }) {
   const isHomeroom = form.is_homeroom;
   const sections = data.sections.filter((section) => !section.homeroom_only || isHomeroom);
@@ -804,7 +817,7 @@ function PrintSheet({ data, rows, form, totals, suggested, showUnit }) {
               <th>Nội dung và cách tính điểm</th>
               <th>Cá nhân tự chấm</th>
               <th>Tổ chấm</th>
-              <th>Ghi chú điểm trừ</th>
+              <th>{noteHeader(section)}</th>
             </tr>
           </thead>
           <tbody>
@@ -815,7 +828,10 @@ function PrintSheet({ data, rows, form, totals, suggested, showUnit }) {
                 <td className="guide">{(criterion.guidance ?? "").split("\n").filter(Boolean).map((line, index) => <div key={index}>• {line}</div>)}</td>
                 <td className="center">{value(criterion.id, "self")}</td>
                 <td className="center">{showUnit ? value(criterion.id, "unit") : ""}</td>
-                <td>{[rows[criterion.id]?.self_note, showUnit ? rows[criterion.id]?.unit_note : ""].filter(Boolean).join("; ")}</td>
+                <td>
+                  {[rows[criterion.id]?.self_note, showUnit ? rows[criterion.id]?.unit_note : ""].filter(Boolean).join("; ")}
+                  {criterion.evidence.length > 0 && <div className="files">{criterion.evidence.map((file) => file.name).join("; ")}</div>}
+                </td>
               </tr>
             ))}
             <tr className="total">

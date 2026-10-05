@@ -1166,6 +1166,11 @@
     font-size: 9.5pt;
   }
 
+  .ev-print td .files {
+    margin-top: 2pt;
+    font-style: italic;
+  }
+
   .ev-print tr.total td {
     font-weight: 700;
   }
