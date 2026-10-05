@@ -17,6 +17,6 @@ export async function apiFetch(url,options={}){
 export async function apiJson(url,{method='GET',body}={}){
  const response=await apiFetch(url,{method,headers:{Accept:'application/json',...(body!==undefined?{'Content-Type':'application/json'}:{})},body:body!==undefined?JSON.stringify(body):undefined})
  const payload=await response.json().catch(()=>({}))
- if(!response.ok)throw new Error(Object.values(payload.errors??{}).flat()[0]??payload.message??'Không thể kết nối máy chủ.')
+ if(!response.ok)throw Object.assign(new Error(Object.values(payload.errors??{}).flat()[0]??payload.message??'Không thể kết nối máy chủ.'),{status:response.status,payload})
  return payload
 }
