@@ -25,13 +25,36 @@ function toDraft(template) {
   };
 }
 
+const gradeSlug = (name) =>
+  name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/gi, "d")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 16) || "muc";
+
+function gradeCodes(grades) {
+  const used = new Set(grades.map((grade) => grade.code).filter(Boolean));
+  return grades.map((grade) => {
+    if (grade.code) return grade.code;
+    const base = gradeSlug(grade.name);
+    let code = base;
+    for (let suffix = 2; used.has(code); suffix += 1) code = `${base.slice(0, 16)}_${suffix}`;
+    used.add(code);
+    return code;
+  });
+}
+
 function toPayload(draft) {
   const number = (value) => parseScore(value) ?? 0;
+  const codes = gradeCodes(draft.grades);
   return {
     name: draft.name.trim(),
     description: draft.description.trim() || null,
     grades: draft.grades.map((grade, index) => ({
-      code: grade.code || `muc_${index + 1}`,
+      code: codes[index],
       name: grade.name.trim(),
       homeroom_min: number(grade.homeroom_min),
       regular_min: number(grade.regular_min),
