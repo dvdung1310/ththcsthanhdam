@@ -48,6 +48,7 @@ import PersonalProfile from "./PersonalProfile";
 import DataLibrary from "./DataLibrary";
 import EvaluationHome from "./EvaluationHome";
 import EvaluationSheet from "./EvaluationSheet";
+import EvaluationTemplates from "./EvaluationTemplates";
 import { apiFetch, getToken, setToken } from "./api";
 import "./PermissionStates.css";
 import "./SystemTypography.css";
@@ -538,6 +539,7 @@ function App() {
           <Route path="/library/*" element={guard("Kho dữ liệu", <LibraryRoute />)} />
           <Route path="/evaluations" element={guard("Đánh giá thi đua", <EvaluationHome />)} />
           <Route path="/evaluations/:evaluationId" element={guard("Đánh giá thi đua", <EvaluationSheet />)} />
+          <Route path="/evaluations/templates/:templateId?" element={can("evaluation.manage") ? <EvaluationTemplates /> : <RouteNotice kind="forbidden" />} />
           <Route path="/personnel" element={guard("Quản lý nhân sự", <PersonnelManagement />)} />
           <Route path="/task-settings" element={guard("Cấu hình giao việc", <TaskConfiguration />)} />
           <Route path="/roles" element={guard("Vai trò & quyền", <RolePermissionMatrix />)} />

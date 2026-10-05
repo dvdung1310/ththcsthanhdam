@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { Award, CalendarPlus, CheckCircle2, ClipboardList, Megaphone, MessageSquare, RotateCcw, Search, Send, Settings2, TriangleAlert, X } from "lucide-react";
+import { Award, CalendarPlus, CheckCircle2, ClipboardList, ListChecks, Megaphone, MessageSquare, RotateCcw, Search, Send, Settings2, TriangleAlert, X } from "lucide-react";
 import { apiJson } from "./api";
 import { useConfirm } from "./ConfirmDialog";
 import { PERIOD_TONES, STATUS_TONES, formatDay, formatScore } from "./evaluationUtils";
@@ -126,9 +126,12 @@ export default function EvaluationHome() {
           Bộ tiêu chí: <b>{overview.template?.name ?? "Chưa có bộ tiêu chí đang áp dụng"}</b>
         </p>
         {abilities.can_manage && (
-          <button className="primary-btn" onClick={() => setPeriodDialog({ mode: "open" })}>
-            <CalendarPlus size={16} /> Mở kỳ đánh giá
-          </button>
+          <div className="ev-hero-actions">
+            <Link className="secondary-btn" to="/evaluations/templates"><ListChecks size={16} /> Bộ tiêu chí</Link>
+            <button className="primary-btn" onClick={() => setPeriodDialog({ mode: "open" })}>
+              <CalendarPlus size={16} /> Mở kỳ đánh giá
+            </button>
+          </div>
         )}
       </section>
 
