@@ -4,7 +4,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
-  ExternalLink,
   File as FileIcon,
   FileImage,
   FileText,
@@ -19,7 +18,7 @@ import {
   ZoomOut,
 } from "lucide-react";
 import { apiFetch } from "./api";
-import { downloadFile, formatBytes, openFileInTab } from "./fileUtils";
+import { downloadFile, formatBytes } from "./fileUtils";
 import "./FilePreview.css";
 
 const TEXT_LIMIT = 2 * 1024 * 1024;
@@ -96,7 +95,6 @@ export default function FilePreview({ files, startIndex = 0, onClose, onDetail }
 
   const go = useCallback((step) => setIndex((current) => Math.min(files.length - 1, Math.max(0, current + step))), [files.length]);
   const download = () => downloadFile(file.url, file.name).catch((error) => setState({ status: "error", message: error.message }));
-  const openTab = () => openFileInTab(file.url, file.mime_type).catch((error) => setState({ status: "error", message: error.message }));
 
   useEffect(() => {
     const onKey = (event) => {
@@ -135,7 +133,6 @@ export default function FilePreview({ files, startIndex = 0, onClose, onDetail }
         </div>
         <div className="fp-actions">
           <button type="button" onClick={download} title="Tải về"><Download size={17} /><span>Tải về</span></button>
-          {kind && <button type="button" onClick={openTab} title="Mở trong tab mới"><ExternalLink size={17} /><span>Tab mới</span></button>}
           {onDetail && <button type="button" onClick={() => onDetail(file)} title="Chi tiết"><Info size={17} /><span>Chi tiết</span></button>}
           <button type="button" className="fp-close" onClick={onClose} aria-label="Đóng" title="Đóng (Esc)"><X size={19} /></button>
         </div>
