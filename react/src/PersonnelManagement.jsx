@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  FolderTree,
   Mail,
   Pencil,
   Phone,
@@ -35,8 +34,8 @@ const statusOf = (person) => {
 const STATUS_LABELS = { ...EMPLOYMENT_LABELS, locked: "Đã khóa" };
 const STATUS_TONE = { working: "working", on_leave: "leave", suspended: "paused", locked: "paused", terminated: "paused" };
 
-export default function PersonnelManagement() {
-  const [tab, setTab] = useState("people");
+export default function PersonnelManagement({ view = "people" }) {
+  const tab = view;
   const [data, setData] = useState({ data: [], roles: [], units: [], can_manage: false, can_assign_roles: false, management_scope: "school" });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -166,14 +165,6 @@ export default function PersonnelManagement() {
         </div>
       )}
 
-      <nav className="personnel-tabs">
-        <button className={tab === "people" ? "active" : ""} onClick={() => setTab("people")}>
-          <Users size={16} /> Nhân sự
-        </button>
-        <button className={tab === "structure" ? "active" : ""} onClick={() => setTab("structure")}>
-          <FolderTree size={16} /> Cơ cấu tổ chức
-        </button>
-      </nav>
 
       {tab === "structure" ? (
         <OrgStructure
