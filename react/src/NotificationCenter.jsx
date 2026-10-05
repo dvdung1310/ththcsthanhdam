@@ -4,8 +4,6 @@ import { apiFetch } from './api'
 import { createRealtimeConnection } from './realtime'
 import './NotificationCenter.css'
 
-const baseTitle = 'THCS Thanh Đạm - Quản lý nội bộ'
-
 function relativeTime(value) {
   const seconds = Math.round((new Date(value).getTime() - Date.now()) / 1000)
   const formatter = new Intl.RelativeTimeFormat('vi', { numeric: 'auto' })
@@ -15,7 +13,7 @@ function relativeTime(value) {
   return formatter.format(Math.round(seconds / 86400), 'day')
 }
 
-export default function NotificationCenter({ user, onOpenTask }) {
+export default function NotificationCenter({ user, onOpenTask, onUnreadChange }) {
   const [items, setItems] = useState([])
   const [unread, setUnread] = useState(0)
   const [open, setOpen] = useState(false)
@@ -61,9 +59,9 @@ export default function NotificationCenter({ user, onOpenTask }) {
     return () => clearInterval(poll)
   }, [loadNotifications])
   useEffect(() => {
-    document.title = unread ? `(${unread}) ${baseTitle}` : baseTitle
-    return () => { document.title = baseTitle }
-  }, [unread])
+    onUnreadChange?.(unread)
+    return () => onUnreadChange?.(0)
+  }, [unread, onUnreadChange])
 
   useEffect(() => {
     if (!user?.id) return undefined
