@@ -707,6 +707,81 @@ function SharedMark({ shares }) {
   );
 }
 
+const accessEntries = (owner, shares) => [...(owner ? [{ ...owner, kind: "user" }] : []), ...shares];
+const entryKey = (entry) => `${entry.kind}:${entry.id ?? entry.name}`;
+
+function AvatarStack({ entries }) {
+  return (
+    <span className="dl-avatar-stack">
+      {entries.slice(0, 4).map((entry) =>
+        entry.kind === "user" ? (
+          <PersonAvatar key={entryKey(entry)} person={entry} size={24} />
+        ) : (
+          <i key={entryKey(entry)} className={`dl-avatar ${entry.kind}`} style={{ width: 24, height: 24 }}>{entry.kind === "unit" ? <Users size={12} /> : <Globe size={12} />}</i>
+        ),
+      )}
+    </span>
+  );
+}
+
+function summarize(entries) {
+  const names = entries.map((entry) => entry.name);
+  if (names.length <= 2) return names.join(" và ");
+  return `${names.slice(0, 2).join(", ")} và ${names.length - 2} khác`;
+}
+
+function AccessSection({ node, onShare, onOpenFolder }) {
+  const [open, setOpen] = useState(true);
+  const [openGroups, setOpenGroups] = useState([]);
+  const direct = accessEntries(node.owner, node.shares);
+  const groups = (node.inherited ?? []).map((group) => ({ ...group, entries: accessEntries(group.owner, group.shares) }));
+  const unique = [...new Map([...direct, ...groups.flatMap((group) => group.entries)].map((entry) => [entryKey(entry), entry])).values()];
+  const toggleGroup = (id) => setOpenGroups((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
+
+  return (
+    <section className="dl-access">
+      <div className="dl-detail-head">
+        <button type="button" className="dl-collapse" onClick={() => setOpen(!open)} aria-expanded={open}>
+          <ChevronRight size={14} className={open ? "open" : ""} />
+          <h4>Quyền truy cập · {unique.length}</h4>
+        </button>
+        {node.abilities.can_share && <button className="dl-link-btn" onClick={() => onShare(node)}>Quản lý</button>}
+      </div>
+      {!open ? (
+        <button type="button" className="dl-access-summary" onClick={() => setOpen(true)}>
+          <AvatarStack entries={unique} />
+          <span>{summarize(unique)}</span>
+        </button>
+      ) : (
+        <>
+          <h5 className="dl-access-group">Chia sẻ trực tiếp</h5>
+          <AccessList owner={node.owner} ownerLabel="Chủ sở hữu" shares={node.shares} />
+          {!node.shares.length && <p className="dl-detail-note">Chưa chia sẻ riêng cho ai.</p>}
+          {groups.map((group) => {
+            const groupOpen = openGroups.includes(group.folder_id);
+            return (
+              <div key={group.folder_id} className="dl-inherited">
+                <div className="dl-inherited-head">
+                  <button type="button" className="dl-collapse" onClick={() => toggleGroup(group.folder_id)} aria-expanded={groupOpen}>
+                    <ChevronRight size={14} className={groupOpen ? "open" : ""} />
+                    <h5 className="dl-access-group">Kế thừa từ “{group.folder_name}” · {group.entries.length}</h5>
+                  </button>
+                  {!groupOpen && <AvatarStack entries={group.entries} />}
+                  {group.can_open && (
+                    <button type="button" className="dl-link-btn" onClick={() => onOpenFolder(group.folder_id)} title={`Mở thư mục “${group.folder_name}”`}>Mở</button>
+                  )}
+                </div>
+                {groupOpen && <AccessList owner={group.owner} ownerLabel="Chủ thư mục · Chỉnh sửa" shares={group.shares} />}
+              </div>
+            );
+          })}
+          <p className="dl-detail-note">Người có quyền quản trị kho luôn xem và sửa được mọi mục.</p>
+        </>
+      )}
+    </section>
+  );
+}
+
 function AccessList({ owner, ownerLabel, shares }) {
   return (
     <ul className="dl-access-list">
@@ -820,29 +895,7 @@ function NodeDetail({ node: initial, reloadToken, onClose, onOpen, onDownload, o
         />
       </section>
 
-      <section>
-        <div className="dl-detail-head">
-          <h4>Người có quyền truy cập</h4>
-          {node.abilities.can_share && <button className="dl-link-btn" onClick={() => onShare(node)}>Quản lý</button>}
-        </div>
-        <h5 className="dl-access-group">Chia sẻ trực tiếp</h5>
-        <AccessList owner={node.owner} ownerLabel="Chủ sở hữu" shares={node.shares} />
-        {!node.shares.length && <p className="dl-detail-note">Chưa chia sẻ riêng cho ai.</p>}
-        {(node.inherited ?? []).map((group) => (
-          <div key={group.folder_id}>
-            <h5 className="dl-access-group">
-              Kế thừa từ{" "}
-              {group.can_open ? (
-                <button className="dl-link-btn" onClick={() => onOpenFolder(group.folder_id)}>“{group.folder_name}”</button>
-              ) : (
-                <>“{group.folder_name}”</>
-              )}
-            </h5>
-            <AccessList owner={group.owner} ownerLabel="Chủ thư mục · Chỉnh sửa" shares={group.shares} />
-          </div>
-        ))}
-        <p className="dl-detail-note">Người có quyền quản trị kho luôn xem và sửa được mọi mục.</p>
-      </section>
+      <AccessSection node={node} onShare={onShare} onOpenFolder={onOpenFolder} />
 
       <section>
         <div className="dl-detail-head">

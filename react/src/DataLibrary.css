@@ -1034,3 +1034,93 @@ body.dl-resizing {
   font-size: 12px;
   font-weight: 700;
 }
+
+.dl-collapse {
+  min-width: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  color: #8a92a8;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dl-collapse svg {
+  flex: none;
+  transition: transform 0.12s ease;
+}
+
+.dl-collapse svg.open {
+  transform: rotate(90deg);
+}
+
+.dl-collapse:hover h4,
+.dl-collapse:hover h5 {
+  color: #5a3fd6;
+}
+
+.dl-access-summary {
+  min-height: 44px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #eceef3;
+  border-radius: 11px;
+  color: #46516a;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dl-access-summary:hover {
+  border-color: #c6bdf5;
+  background: #faf9ff;
+}
+
+.dl-access-summary > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dl-avatar-stack {
+  flex: none;
+  display: inline-flex;
+}
+
+.dl-avatar-stack > * {
+  box-shadow: 0 0 0 2px #fff;
+}
+
+.dl-avatar-stack > * + * {
+  margin-left: -7px;
+}
+
+.dl-inherited {
+  margin-top: 4px;
+}
+
+.dl-inherited-head {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dl-inherited-head .dl-collapse {
+  flex: 1;
+}
+
+.dl-inherited-head .dl-access-group {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
