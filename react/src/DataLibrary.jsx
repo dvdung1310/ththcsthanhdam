@@ -63,11 +63,9 @@ function selectBaseName(input, isFile) {
 
 const formatDate = (value) => (value ? new Date(value).toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" }) : "—");
 
-export default function DataLibrary() {
+export default function DataLibrary({ view = "library", folderId = null, selectId = null, onNavigate }) {
   const confirm = useConfirm();
   const [askConflicts, conflictDialog] = useNameConflicts();
-  const [view, setView] = useState("library");
-  const [folderId, setFolderId] = useState(null);
   const [payload, setPayload] = useState(null);
   const [search, setSearch] = useState("");
   const [fileType, setFileType] = useState("");
@@ -99,7 +97,7 @@ export default function DataLibrary() {
       setPayload(await apiJson(`/api/library?${params}`));
     } catch (e) {
       setError(e.message);
-      if (folderId) setFolderId(null);
+      if (folderId) onNavigate("library", null, { replace: true });
     } finally {
       setLoading(false);
     }
@@ -116,13 +114,18 @@ export default function DataLibrary() {
     return () => clearTimeout(timer);
   }, [success]);
 
-  const openFolder = (id) => {
-    setView("library");
-    setFolderId(id);
+  const resetView = useCallback((select) => {
     setSearch("");
     setPage(1);
-    setSelected(null);
+    setSelected(select);
     setDetail(null);
+    setPreview(null);
+  }, []);
+  useEffect(() => resetView(selectId), [view, folderId, selectId, resetView]);
+
+  const openFolder = (id, select = null) => {
+    if (view === "library" && id === folderId && select === selectId) resetView(select);
+    else onNavigate("library", id, { select });
   };
 
   const canUploadHere = payload ? (payload.folder ? payload.folder.abilities.can_upload : payload.root.can_upload) : false;
@@ -382,7 +385,7 @@ export default function DataLibrary() {
           />
           <div className={`lft-row root dl-mine-root ${view === "mine" ? "selected" : ""}`}>
             <span className="lft-toggle-spacer" />
-            <button type="button" className="lft-label" onClick={() => { setView("mine"); setDetail(null); }}>
+            <button type="button" className="lft-label" onClick={() => onNavigate("mine")}>
               <UserRound size={16} />
               <span>Tệp của tôi</span>
             </button>
@@ -396,10 +399,7 @@ export default function DataLibrary() {
           onError={setError}
           onSuccess={setSuccess}
           error={error}
-          onOpenLocation={(location) => {
-            openFolder(location.folder_id);
-            setSelected(location.node_id);
-          }}
+          onOpenLocation={(location) => openFolder(location.folder_id, location.node_id)}
         />
       ) : (
         <main className="dl-main">
