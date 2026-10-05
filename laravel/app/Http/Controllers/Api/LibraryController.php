@@ -135,11 +135,12 @@ class LibraryController extends Controller
     {
         $access = $this->access($request);
         abort_unless($access->can($node, LibraryAccess::READ), 403, 'Bạn không có quyền xem mục này.');
-        $node->load(['owner:id,name,avatar_path', 'file.uploader:id,name,avatar_path', 'shares.user:id,name,avatar_path', 'shares.department:id,name'])->loadCount('children');
+        $node->load(['owner:id,name,avatar_path', 'editor:id,name,avatar_path', 'file.uploader:id,name,avatar_path', 'shares.user:id,name,avatar_path', 'shares.department:id,name'])->loadCount('children');
 
         return response()->json(['data' => [
             ...$this->serialize($node, $access, true),
             'uploader' => $this->person($node->file?->uploader),
+            'updated_by' => $this->person($node->editor),
             'stats' => $node->isFolder() ? $this->folderStats($node) : null,
         ]]);
     }
