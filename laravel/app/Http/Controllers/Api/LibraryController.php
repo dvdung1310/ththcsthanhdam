@@ -142,6 +142,7 @@ class LibraryController extends Controller
             'uploader' => $this->person($node->file?->uploader),
             'updated_by' => $this->person($node->editor),
             'stats' => $node->isFolder() ? $this->folderStats($node) : null,
+            'inherited' => $this->inheritedAccess($node, $access),
         ]]);
     }
 
@@ -548,6 +549,23 @@ class LibraryController extends Controller
         })->values();
     }
 
+    private function shareRow(LibraryShare $share): array
+    {
+        return ['kind' => $share->user_id ? 'user' : ($share->department_id ? 'unit' : 'everyone'), 'name' => $share->user?->name ?? $share->department?->name ?? 'Mọi người', 'avatar_url' => $this->person($share->user)['avatar_url'] ?? null, 'access' => $share->access];
+    }
+
+    private function inheritedAccess(LibraryNode $node, LibraryAccess $access): array
+    {
+        $ids = array_slice($access->chain($node->id), 1);
+        $ancestors = LibraryNode::with(['owner:id,name,avatar_path', 'shares.user:id,name,avatar_path', 'shares.department:id,name'])->whereIn('id', $ids)->get()->keyBy('id');
+
+        return collect($ids)->map(fn ($id) => $ancestors->get($id))->filter()->map(fn (LibraryNode $folder) => [
+            'folder_id' => $folder->id, 'folder_name' => $folder->name, 'can_open' => $access->can($folder, LibraryAccess::READ),
+            'owner' => $folder->owner_id !== $node->owner_id ? $this->person($folder->owner) : null,
+            'shares' => $folder->shares->map(fn ($s) => $this->shareRow($s))->values(),
+        ])->filter(fn ($group) => $group['owner'] || $group['shares']->isNotEmpty())->values()->all();
+    }
+
     private function person(?User $user): ?array
     {
         return $user ? ['id' => $user->id, 'name' => $user->name, 'avatar_url' => $user->avatar_path ? route('avatars.show', ['filename' => basename($user->avatar_path)]) : null] : null;
@@ -586,7 +604,7 @@ class LibraryController extends Controller
             'children_count' => $node->children_count ?? null,
             'created_at' => $node->created_at?->toIso8601String(), 'updated_at' => $node->updated_at?->toIso8601String(),
             'path' => $withPath && $node->parent_id ? $this->breadcrumbs(LibraryNode::find($node->parent_id), $access) : null,
-            'shares' => $shares->map(fn ($s) => ['kind' => $s->user_id ? 'user' : ($s->department_id ? 'unit' : 'everyone'), 'name' => $s->user?->name ?? $s->department?->name ?? 'Mọi người', 'avatar_url' => $this->person($s->user)['avatar_url'] ?? null, 'access' => $s->access])->values(),
+            'shares' => $shares->map(fn ($s) => $this->shareRow($s))->values(),
             'abilities' => [
                 'level' => $level,
                 'can_upload' => $node->isFolder() && $level >= LibraryAccess::UPLOAD,
