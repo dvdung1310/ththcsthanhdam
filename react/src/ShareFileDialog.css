@@ -1,0 +1,93 @@
+.share-file-dialog {
+  width: min(460px, 100%);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 25px 70px rgba(13, 20, 45, 0.25);
+}
+
+.share-file-dialog header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.share-file-dialog header > span {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: #5a3fd6;
+  background: #efebff;
+}
+
+.share-file-dialog header > div {
+  flex: 1;
+}
+
+.share-file-dialog h3 {
+  margin: 0;
+  color: #1f2a48;
+  font-size: 16px;
+}
+
+.share-file-dialog header p {
+  margin: 3px 0 0;
+  color: #8a92a8;
+  font-size: 12px;
+}
+
+.share-file-dialog header > button {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  color: #6d7690;
+  background: #f3f4f8;
+  cursor: pointer;
+}
+
+.share-file-dialog label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #46516a;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.share-file-dialog input,
+.share-file-dialog select {
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid #dfe3ec;
+  border-radius: 8px;
+  outline: 0;
+  color: #34405e;
+  background: #fff;
+  font-size: 13px;
+}
+
+.share-file-error {
+  margin: 0;
+  color: #c2273a;
+  font-size: 12px;
+}
+
+.share-file-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.share-file-dialog footer .primary-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
