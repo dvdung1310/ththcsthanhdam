@@ -94,7 +94,7 @@ const emptyTask = {
   assignment_mode: "assign",
 };
 
-export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
+export default function TaskManagement({ canAssign, canUpdate, selectedTask, routeTaskId = null, onRouteTaskChange }) {
   const confirm = useConfirm();
   const columnState = useTaskColumns();
   const [tasks, setTasks] = useState([]),
@@ -144,6 +144,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
     [editingComment, setEditingComment] = useState(null),
     [deleting, setDeleting] = useState(null),
     [highlightedTaskId, setHighlightedTaskId] = useState(null),
+    [routeError, setRouteError] = useState(""),
     [reminding, setReminding] = useState(""),
     [saving, setSaving] = useState(false);
   const loadTasks = useCallback(
@@ -282,17 +283,22 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
       setSaving(false);
     }
   };
-  const show = async (task) => {
+  const show = async (task, { fromRoute = false } = {}) => {
     try {
       const r = await apiFetch(`/api/tasks/${task.id}`, {
           headers: { Accept: "application/json" },
         }),
         d = await r.json();
-      if (!r.ok) throw new Error(d.message);
+      if (!r.ok) throw new Error(r.status === 404 ? "Không tìm thấy công việc này. Có thể công việc đã bị xóa." : r.status === 403 ? "Bạn không có quyền xem công việc này." : d.message || "Không mở được công việc này.");
       setViewing(d.data);
       setWorkflowError("");
+      setRouteError("");
+      if (!fromRoute && routeTaskId !== d.data.id) onRouteTaskChange?.(d.data.id);
     } catch (e) {
-      setError(e.message);
+      if (fromRoute) {
+        setRouteError(e.message);
+        onRouteTaskChange?.(null, { replace: true });
+      } else setError(e.message);
     }
   };
   const remove = async () => {
@@ -464,6 +470,19 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
     setViewing(null);
     return true;
   };
+  const closeView = async () => {
+    const closed = await requestCloseView();
+    if (closed) onRouteTaskChange?.(null);
+    return closed;
+  };
+  useEffect(() => {
+    if (routeTaskId) {
+      setHighlightedTaskId(routeTaskId);
+      if (viewing?.id !== routeTaskId) show({ id: routeTaskId }, { fromRoute: true });
+    } else if (viewing) {
+      requestCloseView().then((closed) => !closed && onRouteTaskChange?.(viewing.id, { replace: true }));
+    }
+  }, [routeTaskId]);
   const toggle = (field, id) =>
     setEditing((c) => {
       const adding = !c[field].includes(id);
@@ -536,6 +555,13 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
         />
       </section>
       <section className="task-table-card">
+        {routeError && (
+          <div className="api-error">
+            <TriangleAlert size={16} />
+            {routeError}
+            <button onClick={() => setRouteError("")}>Đóng</button>
+          </div>
+        )}
         {error && (
           <div className="api-error">
             <TriangleAlert size={16} />
@@ -1000,7 +1026,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
         </div>
       )}
       {viewing && (
-        <div className="drawer-backdrop" onMouseDown={(event) => event.target === event.currentTarget && requestCloseView()}>
+        <div className="drawer-backdrop" onMouseDown={(event) => event.target === event.currentTarget && closeView()}>
           <aside className="task-drawer" role="dialog" aria-modal="true" aria-label={`Chi tiết ${viewing.code}`}>
             <header className="task-drawer-head">
               <div>
@@ -1017,11 +1043,11 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask }) {
               </div>
               <div className="task-drawer-head-actions">
                 {(viewing.can_manage || viewing.can_edit_personal) && !["completed", "cancelled"].includes(viewing.status) && (
-                  <button type="button" title="Sửa" onClick={async () => { const task = viewing; if (await requestCloseView()) openEdit(task); }}>
+                  <button type="button" title="Sửa" onClick={async () => { const task = viewing; if (await closeView()) openEdit(task); }}>
                     <Pencil size={17} />
                   </button>
                 )}
-                <button type="button" title="Đóng" onClick={requestCloseView}>
+                <button type="button" title="Đóng" onClick={closeView}>
                   <X size={19} />
                 </button>
               </div>
