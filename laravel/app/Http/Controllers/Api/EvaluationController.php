@@ -18,6 +18,7 @@ use App\Models\User;
 use App\Notifications\EvaluationNotification;
 use App\Notifications\EvaluationPeriodNotification;
 use App\Services\EvaluationAccess;
+use App\Services\EvaluationDirectory;
 use App\Services\EvaluationScoring;
 use App\Services\FileStore;
 use Illuminate\Http\JsonResponse;
@@ -27,7 +28,6 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class EvaluationController extends Controller
@@ -41,7 +41,7 @@ class EvaluationController extends Controller
 
     private array $criteriaCache = [];
 
-    public function __construct(private EvaluationScoring $scoring, private FileStore $store) {}
+    public function __construct(private EvaluationScoring $scoring, private FileStore $store, private EvaluationDirectory $directory) {}
 
     public function periods(Request $request): JsonResponse
     {
@@ -59,6 +59,9 @@ class EvaluationController extends Controller
                     'self_total' => $evaluation->status === Evaluation::DRAFT ? null : $this->scoring->totals($evaluation, $this->criteria($period), 'self')['total'],
                     'submitted_at' => $evaluation->submitted_at?->toIso8601String(),
                     'total_score' => $this->visibleResult($evaluation, $period) ? $this->number($evaluation->total_score) : null,
+                    'max_base' => (float) $this->criteria($period)->whereNull('parent_id')->where('kind', '!=', EvaluationCriterion::BONUS)
+                        ->filter(fn ($section) => ! $section->homeroom_only || $evaluation->is_homeroom)->sum('max_score'),
+                    'is_homeroom' => (bool) $evaluation->is_homeroom,
                     'grade' => $this->visibleResult($evaluation, $period) ? $this->gradeName($period, $evaluation->grade) : null,
                 ] : null,
             ])->values(),
@@ -77,7 +80,7 @@ class EvaluationController extends Controller
         $teachers = Teacher::with(['user.roles', 'departments' => fn ($q) => $q->wherePivotNull('ends_on')->orderByDesc('teacher_department.is_primary')])
             ->where(fn ($q) => $q->where('employment_status', '!=', 'terminated')->orWhereIn('id', $evaluations->keys()))
             ->get()
-            ->sort(fn (Teacher $a, Teacher $b) => $this->compareNames($a->user?->name, $b->user?->name))
+            ->sort(fn (Teacher $a, Teacher $b) => $this->directory->compareNames($a->user?->name, $b->user?->name))
             ->values();
 
         return response()->json([
@@ -260,7 +263,7 @@ class EvaluationController extends Controller
             ->when(trim($data['search'] ?? ''), fn ($q, $search) => $q->whereHas('teacher', fn ($t) => $t->where('employee_code', 'like', "%{$search}%")->orWhereHas('user', fn ($u) => $u->where('name', 'like', "%{$search}%"))))
             ->get()
             ->filter(fn (Evaluation $evaluation) => $access->canScore($evaluation))
-            ->sort(fn (Evaluation $a, Evaluation $b) => $this->compareNames($a->teacher->user?->name, $b->teacher->user?->name))
+            ->sort(fn (Evaluation $a, Evaluation $b) => $this->directory->compareNames($a->teacher->user?->name, $b->teacher->user?->name))
             ->values();
         $criteria = $this->criteria($period);
 
@@ -293,7 +296,7 @@ class EvaluationController extends Controller
                     'has_violation' => $evaluation->has_violation,
                     'submitted_at' => $evaluation->submitted_at?->toIso8601String(),
                     'unit_scored_at' => $evaluation->unit_scored_at?->toIso8601String(),
-                    ...$this->placement($evaluation->teacher),
+                    ...$this->directory->placement($evaluation->teacher),
                     'comments_count' => $evaluation->comments()->count(),
                     'can_score' => $access->canScore($evaluation),
                 ];
@@ -639,34 +642,6 @@ class EvaluationController extends Controller
     {
         return in_array($evaluation->status, [Evaluation::UNIT_SCORED, Evaluation::PUBLISHED], true)
             || $evaluation->scores->contains(fn (EvaluationScore $score) => $score->unit_score !== null);
-    }
-
-    private function placement(Teacher $teacher): array
-    {
-        $current = $teacher->departments->filter(fn ($d) => $d->pivot->ends_on === null)->sortByDesc(fn ($d) => (int) $d->pivot->is_primary)->values();
-        $primary = $current->first();
-        $tree = Department::tree();
-        $team = $primary ? $tree->get($primary->id) : null;
-        while ($team?->parent_id && $tree->has($team->parent_id)) {
-            $team = $tree->get($team->parent_id);
-        }
-
-        return [
-            'team' => $team ? ['id' => $team->id, 'name' => $team->name] : null,
-            'group' => $primary && $primary->id !== $team?->id ? ['id' => $primary->id, 'name' => $primary->name] : null,
-            'unit_ids' => Department::withAncestors($current->pluck('id')),
-        ];
-    }
-
-    private function compareNames(?string $a, ?string $b): int
-    {
-        static $collator = null;
-        $collator ??= new \Collator('vi_VN');
-        $key = fn (?string $name) => [Str::afterLast(trim($name ?? ''), ' '), $name ?? ''];
-        [$givenA, $fullA] = $key($a);
-        [$givenB, $fullB] = $key($b);
-
-        return $collator->compare($givenA, $givenB) ?: $collator->compare($fullA, $fullB);
     }
 
     private function visibleResult(Evaluation $evaluation, EvaluationPeriod $period): bool

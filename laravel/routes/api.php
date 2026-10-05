@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\TaskTypeController;
 use App\Http\Controllers\Api\PersonnelController;
 use App\Http\Controllers\Api\UnitController;
 use App\Http\Controllers\Api\EvaluationController;
+use App\Http\Controllers\Api\EvaluationSummaryController;
 use App\Http\Controllers\Api\EvaluationTemplateController;
 use App\Http\Controllers\Api\TaskStatsController;
 use App\Http\Controllers\Api\AiAssistantController;
@@ -37,6 +38,7 @@ Route::middleware('api.token')->group(function(){
   Route::get('evaluation-periods/roster',[EvaluationController::class,'roster']);Route::post('evaluation-periods',[EvaluationController::class,'openPeriod']);Route::put('evaluation-periods/{period}',[EvaluationController::class,'updatePeriod']);Route::delete('evaluation-periods/{period}',[EvaluationController::class,'destroyPeriod']);
   Route::post('evaluation-periods/{period}/disclose',[EvaluationController::class,'disclose']);Route::post('evaluation-periods/{period}/publish',[EvaluationController::class,'publish']);Route::post('evaluation-periods/{period}/reopen',[EvaluationController::class,'reopen']);
   Route::put('evaluations/{evaluation}/review',[EvaluationController::class,'review']);
+  Route::get('evaluation-summary',[EvaluationSummaryController::class,'index']);Route::get('evaluation-summary/export',[EvaluationSummaryController::class,'export']);Route::get('evaluation-summary/teachers/{teacher}',[EvaluationSummaryController::class,'teacher']);
   Route::get('evaluation-templates',[EvaluationTemplateController::class,'index']);Route::post('evaluation-templates',[EvaluationTemplateController::class,'store']);Route::get('evaluation-templates/{template}',[EvaluationTemplateController::class,'show']);
   Route::put('evaluation-templates/{template}',[EvaluationTemplateController::class,'update']);Route::post('evaluation-templates/{template}/activate',[EvaluationTemplateController::class,'activate']);Route::delete('evaluation-templates/{template}',[EvaluationTemplateController::class,'destroy']);
  });
