@@ -1071,7 +1071,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
                 <h2>{viewing.title}</h2>
               </div>
               <div className="task-drawer-head-actions">
-                {(viewing.can_manage || viewing.can_edit_personal) && !["completed", "cancelled"].includes(viewing.status) && (
+                {(viewing.can_manage || viewing.can_edit_personal) && (
                   <button type="button" title="Sửa" onClick={async () => { const task = viewing; if (await closeView()) openEdit(task); }}>
                     <Pencil size={17} />
                   </button>

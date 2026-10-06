@@ -167,7 +167,6 @@ class TaskController extends Controller
     public function update(Request $request, Task $task): JsonResponse
     {
         abort_unless($this->canManageTask($request, $task), 403, 'Bạn không được sửa công việc này.');
-        abort_if(in_array($task->status, Task::CLOSED, true), 422, 'Công việc đã kết thúc, không thể sửa.');
         $data = $this->validateTask($request);
         $this->ensureAssignmentScope($request, $data);
         $added = DB::transaction(function () use ($request, $data, $task) {
@@ -187,7 +186,6 @@ class TaskController extends Controller
     public function updatePersonal(Request $request, Task $task): JsonResponse
     {
         abort_unless($this->isPersonalTaskFor($request, $task), 403, 'Bạn chỉ được sửa công việc cá nhân do chính mình tạo.');
-        abort_if(in_array($task->status, Task::CLOSED, true), 422, 'Công việc đã kết thúc, không thể sửa.');
         $request->merge(['teacher_ids' => [$request->user()->teacher->id], 'department_ids' => []]);
         $data = $this->validateTask($request);
         $added = DB::transaction(function () use ($request, $data, $task) {
