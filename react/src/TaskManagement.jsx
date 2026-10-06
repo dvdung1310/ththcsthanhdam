@@ -1339,7 +1339,7 @@ function CompactAssignees({ editing, refs, toggle }) {
   return (
     <div className="compact-assignees" ref={ref}>
       <div className="assignee-chip-list">
-        <button type="button" className="add-assignee" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <button type="button" className="add-assignee" data-picker-trigger aria-expanded={open} onClick={() => setOpen(!open)}>
           <Plus size={16} /> Chọn tổ / nhóm / cá nhân
         </button>
         {departments.map((item) => (
@@ -1361,6 +1361,7 @@ function CompactAssignees({ editing, refs, toggle }) {
         <PeoplePicker
           title="Chọn người thực hiện"
           anchorRef={ref}
+          onClose={close}
           people={refs.teachers}
           units={refs.departments}
           selectedPeople={editing.teacher_ids}
@@ -1449,7 +1450,7 @@ function ReviewerPicker({ reviewers, units, value, onChange }) {
         <input key={item.id} type="hidden" name="reviewer_ids[]" value={item.id} />
       ))}
       <div className="assignee-chip-list">
-        <button type="button" className="add-assignee" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <button type="button" className="add-assignee" data-picker-trigger aria-expanded={open} onClick={() => setOpen(!open)}>
           <Plus size={16} /> {selected.length ? "Thêm / bớt người duyệt" : "Chọn người duyệt"}
         </button>
         {selected.map((item) => (
@@ -1464,7 +1465,7 @@ function ReviewerPicker({ reviewers, units, value, onChange }) {
         ))}
       </div>
       {open && (
-        <PeoplePicker title="Chọn người duyệt" anchorRef={ref} people={reviewers} units={units} selectedPeople={value} onTogglePerson={toggle} />
+        <PeoplePicker title="Chọn người duyệt" anchorRef={ref} onClose={close} people={reviewers} units={units} selectedPeople={value} onTogglePerson={toggle} />
       )}
     </div>
   );

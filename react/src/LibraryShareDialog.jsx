@@ -127,7 +127,7 @@ export default function LibraryShareDialog({ node, onClose, onSaved }) {
         ) : (
           <>
             <div className="lsd-add" ref={pickerRef}>
-              <button type="button" ref={anchorRef} className="lsd-add-btn" onClick={() => setPicking(!picking)} aria-expanded={picking}>
+              <button type="button" ref={anchorRef} className="lsd-add-btn" data-picker-trigger onClick={() => setPicking(!picking)} aria-expanded={picking}>
                 <Plus size={16} /> Thêm tổ / nhóm / cá nhân
               </button>
               {canEveryone && (
@@ -140,6 +140,7 @@ export default function LibraryShareDialog({ node, onClose, onSaved }) {
                 <PeoplePicker
                   title="Chọn người được chia sẻ"
                   anchorRef={anchorRef}
+                  onClose={close}
                   people={options.people}
                   units={options.units}
                   selectedPeople={rows.filter((r) => r.user_id).map((r) => r.user_id)}

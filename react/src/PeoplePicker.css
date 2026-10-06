@@ -15,14 +15,41 @@
   overflow: hidden;
 }
 
+.pp-top {
+  flex: none;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #eef0f5;
+}
+
 .pp-search {
   height: 42px;
+  min-width: 0;
+  flex: 1;
   padding: 0 12px;
   display: flex;
   align-items: center;
   gap: 8px;
-  border-bottom: 1px solid #eef0f5;
   color: var(--c-muted);
+}
+
+.pp-close {
+  width: 30px;
+  height: 30px;
+  margin-right: 6px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  color: var(--c-muted);
+  background: none;
+  cursor: pointer;
+}
+
+.pp-close:hover {
+  color: #273250;
+  background: #f1f3f7;
 }
 
 .pp-search input {
