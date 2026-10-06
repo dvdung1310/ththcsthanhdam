@@ -714,3 +714,35 @@
     grid-template-columns: 1fr;
   }
 }
+
+.task-form-error {
+  margin: 0 24px 10px;
+  padding: 9px 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border: 1px solid #f1c9cd;
+  border-radius: 6px;
+  color: var(--c-danger);
+  background: #fdf1f2;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.task-form-error svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.task-form-error span {
+  flex: 1;
+}
+
+.task-form-error button {
+  display: grid;
+  place-items: center;
+  border: 0;
+  color: inherit;
+  background: none;
+  cursor: pointer;
+}

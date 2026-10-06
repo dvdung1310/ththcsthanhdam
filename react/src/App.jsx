@@ -447,7 +447,7 @@ function App() {
     await apiFetch("/api/auth/logout", {
       method: "POST",
       headers: { Accept: "application/json" },
-    });
+    }).catch(() => null);
     setToken(null);
     setAuthUser(null);
     navigate("/", { replace: true });

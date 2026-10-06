@@ -147,7 +147,8 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
     [highlightedTaskId, setHighlightedTaskId] = useState(null),
     [routeError, setRouteError] = useState(""),
     [reminding, setReminding] = useState(""),
-    [saving, setSaving] = useState(false);
+    [saving, setSaving] = useState(false),
+    [formError, setFormError] = useState("");
   const loadTasks = useCallback(
     async (silent = false) => {
       if (!silent) setLoading(true);
@@ -245,27 +246,26 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
     e.preventDefault();
     const formElement = e.currentTarget;
     setSaving(true);
-    setError("");
-    const problem = await uploadProblem(editing.pending_files || []);
-    if (problem) {
-      setError(problem);
-      setSaving(false);
-      return;
-    }
-    const f = new FormData(formElement);
-    f.delete("teacher_ids");
-    f.delete("department_ids");
-    f.delete("library_file_ids");
-    f.delete("attachments");
-    editing.teacher_ids.forEach((id) => f.append("teacher_ids[]", id));
-    editing.department_ids.forEach((id) => f.append("department_ids[]", id));
-    editing.library_file_ids.forEach((id) => f.append("library_file_ids[]", id));
-    editing.pending_files?.forEach((file) => f.append("attachments[]", file));
-    editing.removed_attachment_ids?.forEach((id) =>
-      f.append("remove_attachment_ids[]", id),
-    );
-    if (editing.id) f.append("_method", "PUT");
+    setFormError("");
     try {
+      const problem = await uploadProblem(editing.pending_files || []);
+      if (problem) {
+        setFormError(problem);
+        return;
+      }
+      const f = new FormData(formElement);
+      f.delete("teacher_ids");
+      f.delete("department_ids");
+      f.delete("library_file_ids");
+      f.delete("attachments");
+      editing.teacher_ids.forEach((id) => f.append("teacher_ids[]", id));
+      editing.department_ids.forEach((id) => f.append("department_ids[]", id));
+      editing.library_file_ids.forEach((id) => f.append("library_file_ids[]", id));
+      editing.pending_files?.forEach((file) => f.append("attachments[]", file));
+      editing.removed_attachment_ids?.forEach((id) =>
+        f.append("remove_attachment_ids[]", id),
+      );
+      if (editing.id) f.append("_method", "PUT");
       const endpoint =
         editing.assignment_mode === "self"
           ? editing.id
@@ -279,14 +279,14 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
           headers: { Accept: "application/json" },
           body: f,
         }),
-        d = await r.json();
+        d = await r.json().catch(() => ({}));
       if (!r.ok)
-        throw new Error(Object.values(d.errors ?? {}).flat()[0] ?? d.message);
+        throw new Error(Object.values(d.errors ?? {}).flat()[0] ?? d.message ?? "Không thể lưu công việc. Vui lòng thử lại.");
       setEditing(null);
       setSuccess(d.message);
       await loadTasks();
     } catch (x) {
-      setError(x.message);
+      setFormError(x.message);
     } finally {
       setSaving(false);
     }
@@ -348,25 +348,29 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
   const saveComment = async (event) => {
     event.preventDefault();
     const content = new FormData(event.currentTarget).get("content");
-    const response = await apiFetch(
-      `/api/tasks/${viewing.id}/comments/${editingComment.id}`,
-      {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
+    try {
+      const response = await apiFetch(
+        `/api/tasks/${viewing.id}/comments/${editingComment.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({ content }),
         },
-        body: JSON.stringify({ content }),
-      },
-    );
-    const payload = await response.json();
-    if (!response.ok)
-      return setError(
-        Object.values(payload.errors || {}).flat()[0] || payload.message,
       );
-    setEditingComment(null);
-    setSuccess(payload.message);
-    await show(viewing);
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok)
+        return setError(
+          Object.values(payload.errors || {}).flat()[0] || payload.message || "Không thể lưu trao đổi.",
+        );
+      setEditingComment(null);
+      setSuccess(payload.message);
+      await show(viewing);
+    } catch (e) {
+      setError(e.message || "Không thể lưu trao đổi.");
+    }
   };
   const runWorkflow = async (path, options, fallbackError) => {
     setWorkflowSaving(true);
@@ -440,6 +444,9 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
     if (await runWorkflow("comments", { json: { content } }, "Không thể gửi trao đổi."))
       formElement.reset();
   };
+  useEffect(() => {
+    if (!editing) setFormError("");
+  }, [editing]);
   useEffect(() => {
     if (editing && formBaseline === null && formRef.current) setFormBaseline(taskFormSnapshot(formRef.current, editing));
     if (!editing && formBaseline !== null) setFormBaseline(null);
@@ -1015,6 +1022,15 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
                   </section>
                 </div>
               </div>
+              {formError && (
+                <div className="task-form-error" role="alert">
+                  <TriangleAlert size={15} />
+                  <span>{formError}</span>
+                  <button type="button" onClick={() => setFormError("")} aria-label="Đóng">
+                    <X size={15} />
+                  </button>
+                </div>
+              )}
               <div className="modal-actions">
                 <button
                   type="button"
