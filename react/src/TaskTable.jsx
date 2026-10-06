@@ -82,7 +82,7 @@ export function ColumnPicker({ state }) {
   );
 }
 
-const chipTones = ["#1f4e79", "#3b6e96", "#2f7a5b", "#946a2e", "#8a4b5c", "#44737e"];
+const chipTones = ["#0b3d91", "#3d64a8", "#2f7a5b", "#946a2e", "#8a4b5c", "#44737e"];
 
 export function NameStack({ items, max = 2, empty = "—", details, title }) {
   const [anchor, setAnchor] = useState(null);
