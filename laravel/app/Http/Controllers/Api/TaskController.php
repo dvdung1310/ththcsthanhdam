@@ -23,6 +23,7 @@ use App\Notifications\TaskWorkflowNotification;
 use App\Services\TaskActionFilters;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -32,7 +33,9 @@ use Illuminate\Validation\Rule;
 
 class TaskController extends Controller
 {
-    private const ACTIVITY_PREFIXES = ['Đã gửi bài nộp.', 'Đã chỉnh sửa bài nộp', 'Hủy công việc: '];
+    private const SUBMISSION_ACTIVITY = ['Đã gửi bài nộp.', 'Đã chỉnh sửa bài nộp', 'Đã yêu cầu chỉnh sửa bài nộp.'];
+
+    private const ACTIVITY_PREFIXES = ['Đã gửi bài nộp.', 'Đã chỉnh sửa bài nộp', 'Đã xác nhận hoàn thành.', 'Đã yêu cầu chỉnh sửa bài nộp.', 'Đã bật chia sẻ bài nộp', 'Đã tắt chia sẻ bài nộp', 'Hủy công việc: '];
 
     public function index(Request $request): JsonResponse
     {
@@ -149,7 +152,14 @@ class TaskController extends Controller
         });
         $attachments = DB::table('file_attachments')->join('files', 'files.id', '=', 'file_attachments.file_id')->where('attachable_type', Task::class)->where('attachable_id', $task->id)->select('files.id', 'files.original_name', 'files.mime_type', 'files.size')->get();
         $canShareSubmissions = $task->status === Task::COMPLETED && $request->user()->hasPermission('library.view');
-        $submissions = TaskSubmission::with(['teacher.user', 'reviewer:id,name'])->where('task_id', $task->id)->latest('submitted_at')->latest('id')->get()->map(fn (TaskSubmission $submission) => [
+        $allSubmissions = TaskSubmission::with(['teacher.user', 'reviewer:id,name'])->where('task_id', $task->id)->latest('submitted_at')->latest('id')->get();
+        [$visible, $hidden] = $allSubmissions->partition(fn (TaskSubmission $submission) => $this->canViewSubmission($request, $task, $submission));
+        $hiddenTeachers = $hidden->pluck('teacher_id')->filter()->diff([$request->user()->teacher?->id])->map(fn ($id) => (int) $id);
+        $updates = $updates->reject(fn ($update) => $update->kind === 'comment'
+            ? $hidden->contains(fn (TaskSubmission $submission) => $this->isSubmissionCopy($update, $submission))
+            : $hiddenTeachers->contains((int) $update->teacher_id) && Str::startsWith($update->content, self::SUBMISSION_ACTIVITY))->values();
+        $latestSubmission = $allSubmissions->first();
+        $submissions = $visible->values()->map(fn (TaskSubmission $submission) => [
             'can_edit' => $this->canEditSubmission($request, $task, $submission),
             'edited_at' => $submission->edited_at?->toIso8601String(),
             'id' => $submission->id,
@@ -168,7 +178,7 @@ class TaskController extends Controller
             'reviewer' => $submission->reviewer?->name,
         ]);
 
-        return response()->json(['data' => [...$this->serialize($task), ...$this->abilities($request, $task), 'creator_card' => $task->creator ? $this->personCard($task->creator) : null, 'reviewer_cards' => $task->reviewers->map(fn (User $u) => $this->personCard($u))->values(), 'description' => $task->description, 'submissions' => $submissions, 'latest_submission' => $submissions->first(), 'updates' => $updates, 'attachments' => $attachments]]);
+        return response()->json(['data' => [...$this->serialize($task), ...$this->abilities($request, $task), 'creator_card' => $task->creator ? $this->personCard($task->creator) : null, 'reviewer_cards' => $task->reviewers->map(fn (User $u) => $this->personCard($u))->values(), 'description' => $task->description, 'submissions' => $submissions, 'latest_submission' => $latestSubmission && $visible->contains('id', $latestSubmission->id) ? $submissions->first() : null, 'updates' => $updates, 'attachments' => $attachments]]);
     }
 
     public function update(Request $request, Task $task): JsonResponse
@@ -268,7 +278,7 @@ class TaskController extends Controller
                 DB::table('file_attachments')->insert(['file_id' => $file->id, 'attachable_type' => TaskSubmission::class, 'attachable_id' => $submission->id, 'purpose' => 'submission', 'created_at' => now(), 'updated_at' => now()]);
             }
             $task->update(['status' => Task::WAITING_APPROVAL]);
-            $task->updates()->create(['teacher_id' => $teacher->id, 'created_by' => $request->user()->id, 'status' => Task::WAITING_APPROVAL, 'content' => $data['comment'] ?? 'Đã gửi bài nộp.']);
+            $task->updates()->create(['teacher_id' => $teacher->id, 'created_by' => $request->user()->id, 'status' => Task::WAITING_APPROVAL, 'content' => 'Đã gửi bài nộp.']);
             $this->recordStatus($task, $old, Task::WAITING_APPROVAL, 'Gửi đề nghị hoàn thành', $request->user());
         });
         $this->notify(collect([$task->creator])->concat($task->reviewers), $task, $request->user()->name.' đã gửi đề nghị xác nhận hoàn thành: '.$task->title, 'completion_submitted', $request->user());
@@ -315,6 +325,18 @@ class TaskController extends Controller
         return response()->json(['message' => 'Đã cập nhật bài nộp và thông báo cho người duyệt.']);
     }
 
+    public function updateSubmissionSharing(Request $request, Task $task): JsonResponse
+    {
+        abort_unless($this->canManageTask($request, $task), 403, 'Bạn không được đổi cài đặt bài nộp của công việc này.');
+        $share = $request->validate(['share_submissions' => ['required', 'boolean']])['share_submissions'];
+        if ((bool) $task->share_submissions !== (bool) $share) {
+            $task->update(['share_submissions' => $share]);
+            $task->updates()->create(['created_by' => $request->user()->id, 'status' => $task->status, 'content' => $share ? 'Đã bật chia sẻ bài nộp giữa người thực hiện.' : 'Đã tắt chia sẻ bài nộp giữa người thực hiện.']);
+        }
+
+        return response()->json(['message' => $share ? 'Người thực hiện đã xem được bài nộp của nhau.' : 'Bài nộp giờ chỉ người duyệt và người giao xem được.']);
+    }
+
     public function reviewCompletion(Request $request, Task $task): JsonResponse
     {
         abort_unless($this->canReviewTask($request, $task), 403, 'Bạn không có quyền duyệt công việc này.');
@@ -329,11 +351,16 @@ class TaskController extends Controller
         DB::transaction(function () use ($task, $submission, $request, $data, $status, $comment, $approved) {
             $submission?->update(['status' => $data['decision'], 'reviewed_by' => $request->user()->id, 'reviewed_at' => now(), 'review_comment' => $comment]);
             $task->update(['status' => $status, 'completed_at' => $approved ? now() : null]);
-            $task->updates()->create(['teacher_id' => $submission?->teacher_id, 'created_by' => $request->user()->id, 'status' => $status, 'content' => $comment]);
+            $task->updates()->create(['teacher_id' => $submission?->teacher_id, 'created_by' => $request->user()->id, 'status' => $status, 'content' => $approved ? 'Đã xác nhận hoàn thành.' : 'Đã yêu cầu chỉnh sửa bài nộp.']);
             $this->recordStatus($task, Task::WAITING_APPROVAL, $status, $comment ?? ($approved ? 'Xác nhận hoàn thành' : 'Yêu cầu chỉnh sửa'), $request->user());
         });
         $message = $approved ? 'Công việc đã được xác nhận hoàn thành' : 'Công việc được yêu cầu chỉnh sửa';
-        $this->notify($this->assigneeUsers($task), $task, $message.': '.$task->title.($comment ? '. Nhận xét: '.$comment : ''), $data['decision'], $request->user());
+        $submitter = $submission?->teacher?->user;
+        $withComment = $task->share_submissions ? $this->assigneeUsers($task) : collect([$submitter]);
+        $this->notify($withComment, $task, $message.': '.$task->title.($comment ? '. Nhận xét: '.$comment : ''), $data['decision'], $request->user());
+        if (! $task->share_submissions) {
+            $this->notify($this->assigneeUsers($task)->reject(fn (User $user) => $user->id === $submitter?->id), $task, $message.': '.$task->title, $data['decision'], $request->user());
+        }
 
         return response()->json(['message' => $message.'.']);
     }
@@ -407,6 +434,7 @@ class TaskController extends Controller
     {
         $this->ensureTaskAccess($request, $task);
         abort_unless($submission->task_id === $task->id, 404);
+        abort_unless($this->canViewSubmission($request, $task, $submission), 403, 'Bài nộp này chỉ người duyệt và người giao xem được.');
         $attached = DB::table('file_attachments')->where('attachable_type', TaskSubmission::class)->where('attachable_id', $submission->id)->where('file_id', $file->id)->exists();
         abort_unless($attached && Storage::disk($file->disk)->exists($file->path), 404, 'Không tìm thấy file bài nộp.');
 
@@ -452,6 +480,7 @@ class TaskController extends Controller
             'reviewer_ids' => ['nullable', 'array', 'max:10'],
             'reviewer_ids.*' => ['integer', 'distinct', Rule::exists('users', 'id')->where('status', 'active')],
             'priority' => ['required', Rule::in(['low', 'normal', 'high', 'urgent'])],
+            'share_submissions' => ['sometimes', 'boolean'],
             'starts_at' => ['nullable', 'date'],
             'due_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
             'teacher_ids' => ['required_without:department_ids', 'array'],
@@ -474,7 +503,7 @@ class TaskController extends Controller
 
     private function taskAttributes(array $data): array
     {
-        return collect($data)->only(['title', 'description', 'category_id', 'priority', 'starts_at', 'due_at'])->all();
+        return collect($data)->only(['title', 'description', 'category_id', 'priority', 'share_submissions', 'starts_at', 'due_at'])->all();
     }
 
     private function ensureTaskAccess(Request $request, Task $task): void
@@ -519,6 +548,7 @@ class TaskController extends Controller
             'is_reviewer' => $this->isReviewer($task, $request->user()->id),
             'is_personal' => $this->isPersonal($task),
             'can_manage' => $this->canManageTask($request, $task),
+            'can_view_all_submissions' => $this->canViewAllSubmissions($request, $task),
             'can_edit_personal' => $this->isPersonalTaskFor($request, $task),
             'can_update_progress' => $this->canUpdateProgress($request, $task),
             'can_submit_completion' => $this->canSubmit($request, $task),
@@ -526,6 +556,29 @@ class TaskController extends Controller
             'can_self_complete' => $this->canSelfComplete($request, $task),
             'can_cancel' => $this->canCancel($request, $task),
         ];
+    }
+
+    private function canViewAllSubmissions(Request $request, Task $task): bool
+    {
+        return $task->share_submissions
+            || $task->created_by === $request->user()->id
+            || $this->isReviewer($task, $request->user()->id)
+            || $this->hasSchoolWideTaskAuthority($request);
+    }
+
+    private function canViewSubmission(Request $request, Task $task, TaskSubmission $submission): bool
+    {
+        return $this->canViewAllSubmissions($request, $task) || ($submission->teacher_id !== null && $submission->teacher_id === $request->user()->teacher?->id);
+    }
+
+    private function isSubmissionCopy(object $update, TaskSubmission $submission): bool
+    {
+        if ((int) $update->teacher_id !== (int) $submission->teacher_id) {
+            return false;
+        }
+        $at = Carbon::parse($update->created_at);
+
+        return collect([$submission->submitted_at, $submission->reviewed_at])->filter()->contains(fn ($moment) => abs($moment->diffInSeconds($at)) <= 5);
     }
 
     private function canManageTask(Request $request, Task $task): bool
@@ -828,7 +881,7 @@ class TaskController extends Controller
         return [
             'id' => $task->id, 'code' => $task->code, 'title' => $task->title,
             'category_id' => $task->category_id, 'category' => $task->category?->name,
-            'priority' => $task->priority, 'status' => $task->status,
+            'priority' => $task->priority, 'status' => $task->status, 'share_submissions' => (bool) $task->share_submissions,
             'needs_revision' => $task->status === Task::IN_PROGRESS && $latest?->status === 'revision_required',
             'starts_at' => $task->starts_at?->format('Y-m-d\TH:i'), 'due_at' => $task->due_at?->format('Y-m-d\TH:i'),
             'completed_at' => $task->completed_at?->toIso8601String(),
