@@ -40,16 +40,16 @@
 }
 
 .action-menu button.danger {
-  color: #d33e50;
+  color: var(--c-danger);
 }
 
 .action-menu button.danger:hover:not(:disabled) {
-  color: #c2273a;
+  color: var(--c-danger);
   background: #fff1f2;
 }
 
 .action-menu kbd {
-  color: #9aa1b1;
+  color: var(--c-muted);
   background: transparent;
   font-family: inherit;
   font-size: 11px;
@@ -69,7 +69,7 @@
   place-items: center;
   border: 1px solid transparent;
   border-radius: 8px;
-  color: #6d7690;
+  color: var(--c-text-2);
   background: transparent;
   cursor: pointer;
 }

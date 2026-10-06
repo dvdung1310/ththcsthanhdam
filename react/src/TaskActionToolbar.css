@@ -39,15 +39,15 @@
 }
 .task-action-cards .blue i {
   background: #e8f2ff;
-  color: #3182ea;
+  color: var(--c-primary);
 }
 .task-action-cards .orange i {
   background: #fff2df;
-  color: #e48d14;
+  color: var(--c-warning);
 }
 .task-action-cards .red i {
   background: #fff0f2;
-  color: #de4159;
+  color: var(--c-danger);
 }
 .task-action-cards .pink i {
   background: #ffedf4;
@@ -67,7 +67,7 @@
 }
 .task-action-cards small {
   font-size: 9px;
-  color: #929aab;
+  color: var(--c-muted);
   margin-top: 6px;
 }
 .task-action-main-filters {
@@ -84,7 +84,7 @@
   border: 1px solid #dfe3ee;
   border-radius: 9px;
   background: #fff;
-  color: #56627d;
+  color: var(--c-text-2);
   padding: 0 10px;
   font-size: 11px;
 }
@@ -130,7 +130,7 @@
 .task-action-advanced > label {
   display: grid;
   gap: 6px;
-  color: #65718b;
+  color: var(--c-text-2);
   font-size: 10px;
 }
 .task-action-advanced select,
@@ -148,7 +148,7 @@
 .task-action-advanced > p {
   grid-column: 1/-1;
   margin: 0;
-  color: #8c95a9;
+  color: var(--c-muted);
   font-size: 10px;
 }
 .task-action-active {

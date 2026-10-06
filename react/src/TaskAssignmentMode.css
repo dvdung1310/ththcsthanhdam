@@ -17,7 +17,7 @@
   gap: 6px;
   border: 1px solid transparent;
   border-radius: 8px;
-  color: #727b91;
+  color: var(--c-muted);
   background: transparent;
   font-size: 10px;
   font-weight: 700;

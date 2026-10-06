@@ -44,7 +44,7 @@
 
 .library-share-dialog > header p {
   margin: 3px 0 0;
-  color: #8a92a8;
+  color: var(--c-muted);
   font-size: 12px;
 }
 
@@ -55,14 +55,14 @@
   place-items: center;
   border: 0;
   border-radius: 8px;
-  color: #6d7690;
+  color: var(--c-text-2);
   background: #f3f4f8;
   cursor: pointer;
 }
 
 .lsd-loading {
   padding: 30px 20px;
-  color: #8a92a8;
+  color: var(--c-muted);
   text-align: center;
 }
 
@@ -130,7 +130,7 @@
 
 .lsd-row > b small {
   margin-left: 6px;
-  color: #9aa1b4;
+  color: var(--c-muted);
   font-size: 11px;
   font-weight: 500;
 }
@@ -152,18 +152,18 @@
   place-items: center;
   border: 0;
   border-radius: 8px;
-  color: #8a92a8;
+  color: var(--c-muted);
   background: transparent;
   cursor: pointer;
 }
 
 .lsd-row > button:hover:not(:disabled) {
-  color: #c2273a;
+  color: var(--c-danger);
   background: #fff1f2;
 }
 
 .lsd-row.muted > em {
-  color: #8a92a8;
+  color: var(--c-muted);
   font-size: 12px;
   font-style: normal;
 }
@@ -185,25 +185,25 @@
 
 .lsd-icon.unit {
   border-radius: 9px;
-  color: #0f8a5f;
+  color: var(--c-success);
   background: #e7f6ef;
 }
 
 .lsd-icon.everyone {
   border-radius: 9px;
-  color: #2f7fe0;
+  color: var(--c-primary);
   background: #e8f1fd;
 }
 
 .lsd-empty {
   margin: 12px 0;
-  color: #9aa1b4;
+  color: var(--c-muted);
   font-size: 13px;
 }
 
 .lsd-inherited h4 {
   margin: 10px 0 2px;
-  color: #8a92a8;
+  color: var(--c-muted);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.6px;
@@ -212,14 +212,14 @@
 
 .lsd-legend {
   margin: 8px 20px 0;
-  color: #8a92a8;
+  color: var(--c-muted);
   font-size: 11px;
   line-height: 1.5;
 }
 
 .lsd-error {
   margin: 8px 20px 0;
-  color: #c2273a;
+  color: var(--c-danger);
   font-size: 12px;
 }
 

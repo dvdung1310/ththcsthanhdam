@@ -40,7 +40,7 @@
   place-items: center;
   border: 0;
   border-radius: 5px;
-  color: #8a92a8;
+  color: var(--c-muted);
   background: transparent;
   cursor: pointer;
 }
@@ -80,7 +80,7 @@
 }
 
 .lft-row.disabled .lft-label {
-  color: #a6acbd;
+  color: var(--c-muted);
   cursor: default;
 }
 
@@ -94,11 +94,11 @@
 
 .lft-label svg {
   flex: none;
-  color: #e0a43a;
+  color: var(--c-warning);
 }
 
 .lft-label svg.system {
-  color: #2f7fe0;
+  color: var(--c-primary);
 }
 
 .lft-row.root .lft-label svg {

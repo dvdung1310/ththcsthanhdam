@@ -34,15 +34,15 @@
   background: var(--c-primary-soft);
 }
 .task-stats i.blue {
-  color: #1974ed;
+  color: var(--c-primary);
   background: #e7f2ff;
 }
 .task-stats i.green {
-  color: #12a968;
+  color: var(--c-success);
   background: #e6f7ef;
 }
 .task-stats i.orange {
-  color: #fa8b17;
+  color: var(--c-warning);
   background: #fff0df;
 }
 .task-stats i.pink {
@@ -64,7 +64,7 @@
 }
 .task-stats small {
   margin-top: 5px;
-  color: #9299ad;
+  color: var(--c-muted);
   font-size: 10px;
 }
 .task-toolbar,
@@ -89,7 +89,7 @@
 }
 .task-heading p {
   margin: 5px 0 0;
-  color: #8a92a7;
+  color: var(--c-muted);
 }
 .task-filters {
   margin-top: 16px;
@@ -105,7 +105,7 @@
   gap: 7px;
   border: 1px solid #e1e5ee;
   border-radius: 8px;
-  color: #7c859e;
+  color: var(--c-muted);
 }
 .task-filters input,
 .task-filters select {
@@ -122,7 +122,7 @@
   align-items: center;
   gap: 6px;
   border: 0;
-  color: #6d7690;
+  color: var(--c-text-2);
   background: transparent;
   cursor: pointer;
 }
@@ -157,7 +157,7 @@
 }
 .task-name small {
   margin-top: 5px;
-  color: #75809a;
+  color: var(--c-muted);
   font-size: 10px;
 }
 .assignee-count,
@@ -167,7 +167,7 @@
   gap: 6px;
 }
 .due.overdue {
-  color: #e04855;
+  color: var(--c-danger);
 }
 .priority,
 .task-status {
@@ -186,27 +186,27 @@
   background: currentColor;
 }
 .priority.low {
-  color: #68758e;
+  color: var(--c-text-2);
   background: #edf0f5;
 }
 .priority.normal {
-  color: #2672cd;
+  color: var(--c-primary);
   background: #e8f2ff;
 }
 .priority.high {
-  color: #d1790a;
+  color: var(--c-warning);
   background: #fff0dc;
 }
 .priority.urgent {
-  color: #de4351;
+  color: var(--c-danger);
   background: #ffe8eb;
 }
 .task-status.not_started {
-  color: #68758e;
+  color: var(--c-text-2);
   background: #edf0f5;
 }
 .task-status.in_progress {
-  color: #2772ce;
+  color: var(--c-primary);
   background: #e8f2ff;
 }
 .task-status.waiting_approval {
@@ -214,11 +214,11 @@
   background: var(--c-primary-soft);
 }
 .task-status.completed {
-  color: #0a9960;
+  color: var(--c-success);
   background: #e4f7ed;
 }
 .task-status.cancelled {
-  color: #db4350;
+  color: var(--c-danger);
   background: #ffe8eb;
 }
 .progress-cell {
@@ -337,7 +337,7 @@
 }
 .check-list small {
   margin-top: 2px;
-  color: #9aa1b2;
+  color: var(--c-muted);
   font-size: 9px;
 }
 .approval-check {
@@ -362,7 +362,7 @@
 }
 .file-box span small {
   display: block;
-  color: #949bad;
+  color: var(--c-muted);
   font-size: 10px;
   font-weight: 400;
 }
@@ -395,7 +395,7 @@
 }
 .range-label {
   text-align: right;
-  color: #8e96aa;
+  color: var(--c-muted);
   font-size: 10px;
 }
 .detail-badges {
@@ -417,16 +417,16 @@
 .detail-progress i {
   height: 100%;
   display: block;
-  background: #e54858;
+  background: var(--c-danger);
   transition: width .28s ease, background .28s ease, box-shadow .28s ease;
 }
-.detail-progress.low i { background:#b03a48; }
+.detail-progress.low i { background:var(--c-danger); }
 .detail-progress.medium i { background:var(--c-primary); }
 .detail-progress.high i { background:#2f7a5b; }
 .detail-progress.complete i { background:#2f7a5b;box-shadow:0 0 8px rgba(7,148,85,.35); }
-.detail-progress.low>b { color:#c93648; }
+.detail-progress.low>b { color:var(--c-danger); }
 .detail-progress.medium>b { color:var(--c-primary); }
-.detail-progress.high>b,.detail-progress.complete>b { color:#087e4c; }
+.detail-progress.high>b,.detail-progress.complete>b { color:var(--c-success); }
 .people-chips {
   display: flex;
   flex-wrap: wrap;
@@ -441,7 +441,7 @@
 }
 .people-chips small {
   margin-left: 6px;
-  color: #888fa4;
+  color: var(--c-muted);
 }
 .document-link-section h4 em {
   margin-left: auto;
@@ -454,7 +454,7 @@
 }
 .document-link-section > p {
   margin: -5px 0 11px;
-  color: #7c859c;
+  color: var(--c-muted);
 }
 .document-search {
   height: 40px;
@@ -464,7 +464,7 @@
   gap: 8px;
   border: 1px solid #dfe3ec;
   border-radius: 8px;
-  color: #81899e;
+  color: var(--c-muted);
 }
 .document-search input {
   width: 100%;
@@ -521,7 +521,7 @@
 }
 .document-picker small {
   margin-top: 4px;
-  color: #8c94a7;
+  color: var(--c-muted);
   font-size: 9px;
 }
 .document-picker > label > svg {
@@ -530,7 +530,7 @@
 .no-documents {
   padding: 18px;
   text-align: center;
-  color: #9098aa;
+  color: var(--c-muted);
 }
 .linked-documents {
   margin-top: 9px;
@@ -574,7 +574,7 @@
 }
 .linked-documents article small {
   margin-top: 3px;
-  color: #8b93a6;
+  color: var(--c-muted);
   font-size: 9px;
 }
 .linked-documents article button {
@@ -590,7 +590,7 @@
   cursor: pointer;
 }
 .linked-documents article em {
-  color: #9aa1b1;
+  color: var(--c-muted);
   font-size: 9px;
   font-style: normal;
 }
@@ -636,7 +636,7 @@
   gap: 7px;
   border: 1px solid #dfe3ec !important;
   border-radius: 8px !important;
-  color: #858da2;
+  color: var(--c-muted);
   background: #fff !important;
 }
 .assignee-search input {

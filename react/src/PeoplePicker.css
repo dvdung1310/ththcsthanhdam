@@ -22,7 +22,7 @@
   align-items: center;
   gap: 8px;
   border-bottom: 1px solid #eef0f5;
-  color: #8a92a8;
+  color: var(--c-muted);
 }
 
 .pp-search input {
@@ -96,7 +96,7 @@
   min-width: 22px;
   padding: 1px 6px;
   border-radius: 99px;
-  color: #6d7690;
+  color: var(--c-text-2);
   background: #eceef4;
   font-size: 11px;
   text-align: center;
@@ -150,7 +150,7 @@
 
 .pp-people > header small {
   flex: none;
-  color: #8a92a8;
+  color: var(--c-muted);
   font-size: 12px;
 }
 
@@ -162,7 +162,7 @@
   gap: 9px;
   border: 1px dashed #b9e3cf;
   border-radius: 9px;
-  color: #0f8a5f;
+  color: var(--c-success);
   background: #f3fbf7;
   font-size: 13px;
   font-weight: 600;
@@ -260,7 +260,7 @@
 }
 
 .pp-roles small {
-  color: #8a92a8;
+  color: var(--c-muted);
   font-size: 11px;
 }
 
@@ -283,13 +283,13 @@
 }
 
 .pp-roles em.plain {
-  color: #6b748c;
+  color: var(--c-text-2);
   background: #f0f1f6;
 }
 
 .pp-empty {
   padding: 16px;
-  color: #9aa1b4;
+  color: var(--c-muted);
   font-size: 12px;
   text-align: center;
 }
@@ -339,7 +339,7 @@
 
 .required-mark {
   margin-left: 2px;
-  color: #e14452;
+  color: var(--c-danger);
   font-weight: 700;
 }
 
@@ -368,7 +368,7 @@
 .people-picker .pp-expand {
   border: 0;
   border-radius: 6px;
-  color: #8a92a8;
+  color: var(--c-muted);
   background: transparent;
   cursor: pointer;
 }

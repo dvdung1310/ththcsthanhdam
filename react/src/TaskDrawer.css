@@ -73,7 +73,7 @@
   place-items: center;
   border: 1px solid #e5e7ee;
   border-radius: 9px;
-  color: #59647e;
+  color: var(--c-text-2);
   background: #fff;
   cursor: pointer;
 }
@@ -182,7 +182,7 @@
   display: flex;
   align-items: center;
   gap: 7px;
-  color: #8a92a8;
+  color: var(--c-muted);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.6px;
@@ -297,16 +297,16 @@
 .drawer-action-row > .approve-completion {
   border: 1px solid #18a768;
   color: #fff;
-  background: #18a768;
+  background: var(--c-success);
 }
 
 .drawer-action-row > .approve-completion:hover:not(:disabled) {
-  background: #12935b;
+  background: var(--c-success);
 }
 
 .drawer-action-row > .revision-completion {
   border: 1px solid #f3c6cb;
-  color: #b33b46;
+  color: var(--c-danger);
   background: #fff;
 }
 
@@ -368,7 +368,7 @@
 
 .task-timeline-top span {
   display: block;
-  color: #8a92a8;
+  color: var(--c-muted);
   font-size: 11px;
   font-weight: 600;
 }
@@ -411,12 +411,12 @@
 }
 
 .task-timeline.neutral em {
-  color: #59647e;
+  color: var(--c-text-2);
   background: #eef0f5;
 }
 
 .task-timeline.good em {
-  color: #0f8a5f;
+  color: var(--c-success);
   background: #e3f6ec;
 }
 
@@ -439,12 +439,12 @@
 }
 
 .task-timeline.alert em {
-  color: #c2273a;
+  color: var(--c-danger);
   background: #fde3e6;
 }
 
 .task-timeline.alert .task-timeline-track i {
-  background: #b03a48;
+  background: var(--c-danger);
 }
 
 .task-drawer-people {
@@ -468,7 +468,7 @@
 }
 
 .person-row > span {
-  color: #8a92a8;
+  color: var(--c-muted);
   font-size: 12px;
   font-weight: 600;
 }
@@ -500,7 +500,7 @@
 .person-card small {
   display: block;
   margin-top: 1px;
-  color: #8a92a8;
+  color: var(--c-muted);
   font-size: 11px;
 }
 
@@ -517,7 +517,7 @@
 }
 
 .person-empty {
-  color: #8a92a8;
+  color: var(--c-muted);
   font-size: 13px;
 }
 
@@ -549,11 +549,11 @@
 
 .task-timeline-done svg {
   flex: none;
-  color: #17a871;
+  color: var(--c-success);
 }
 
 .task-timeline.warn .task-timeline-done svg {
-  color: #d58a1a;
+  color: var(--c-warning);
 }
 
 .submission-review {
@@ -580,12 +580,12 @@
 }
 
 .submission-review.approved {
-  color: #0f7a54;
+  color: var(--c-success);
   background: #e8f7ef;
 }
 
 .submission-review.revision_required {
-  color: #b33b46;
+  color: var(--c-danger);
   background: #fdeef0;
 }
 
@@ -653,7 +653,7 @@
 }
 
 .drawer-file-main small {
-  color: #8a92a8;
+  color: var(--c-muted);
   font-size: 11px;
 }
 

@@ -33,12 +33,12 @@
 }
 
 .tone-danger .confirm-icon {
-  color: #e44856;
+  color: var(--c-danger);
   background: #ffecef;
 }
 
 .tone-warning .confirm-icon {
-  color: #c27803;
+  color: var(--c-warning);
   background: #fff4e0;
 }
 
@@ -50,7 +50,7 @@
 
 .confirm-message {
   margin-top: 6px;
-  color: #68728c;
+  color: var(--c-text-2);
   font-size: 13px;
   line-height: 1.55;
 }
@@ -79,14 +79,14 @@
   border: 0;
   border-radius: 9px;
   color: #fff;
-  background: #e44856;
+  background: var(--c-danger);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
 }
 
 .confirm-danger-btn:hover {
-  background: #d13a48;
+  background: var(--c-danger);
 }
 
 @keyframes confirm-fade {

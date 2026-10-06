@@ -23,7 +23,7 @@
 }
 .management-heading p {
   margin: 0;
-  color: #8690a5;
+  color: var(--c-muted);
 }
 .management-heading button,
 .management-panel header button {
@@ -62,14 +62,14 @@
 }
 .management-cards small {
   margin-top: 9px;
-  color: #8790a6;
+  color: var(--c-muted);
   font-size: 11px;
 }
 .management-cards small.up {
-  color: #17865b;
+  color: var(--c-success);
 }
 .management-cards small.down {
-  color: #c6495b;
+  color: var(--c-danger);
 }
 .management-icon {
   position: absolute;
@@ -85,15 +85,15 @@
 }
 .management-icon.blue {
   background: #eaf3ff;
-  color: #377dde;
+  color: var(--c-primary);
 }
 .management-icon.green {
   background: #e7f8ef;
-  color: #14976a;
+  color: var(--c-success);
 }
 .management-icon.orange {
   background: #fff3df;
-  color: #d28b18;
+  color: var(--c-warning);
 }
 .management-icon.pink {
   background: #fff0f5;
@@ -128,7 +128,7 @@
   font-size: 16px;
 }
 .management-panel header > span {
-  color: #c08922;
+  color: var(--c-warning);
   font-size: 10px;
   background: #fff6e6;
   padding: 5px 8px;
@@ -152,10 +152,10 @@
 }
 .attention-summary span {
   font-size: 10px;
-  color: #7c879d;
+  color: var(--c-muted);
 }
 .attention-summary .danger b {
-  color: #d14758;
+  color: var(--c-danger);
 }
 .management-attention-list {
   max-height: 230px;
@@ -180,13 +180,13 @@
 }
 .management-attention-list small {
   display: block;
-  color: #959daf;
+  color: var(--c-muted);
   font-size: 9px;
   margin-top: 4px;
 }
 .management-attention-list em {
   font-size: 9px;
-  color: #ad7b22;
+  color: var(--c-warning);
   background: #fff5e5;
   padding: 5px 6px;
   border-radius: 5px;
@@ -194,13 +194,13 @@
   font-style: normal;
 }
 .management-attention-list em.danger {
-  color: #bd3448;
+  color: var(--c-danger);
   background: #fff0f2;
 }
 .management-muted,
 .workload-note {
   font-size: 10px;
-  color: #8792a5;
+  color: var(--c-muted);
   line-height: 1.6;
 }
 .month-progress {
@@ -225,7 +225,7 @@
 }
 .month-progress small {
   font-weight: 400;
-  color: #929bad;
+  color: var(--c-muted);
 }
 .month-track {
   display: block;
@@ -249,7 +249,7 @@
   background: var(--c-primary);
 }
 .month-track .red {
-  background: #b03a48;
+  background: var(--c-danger);
 }
 .department-kpi-item > button {
   width: 100%;
@@ -289,13 +289,13 @@
 }
 .management-empty {
   padding: 15px 0;
-  color: #929caf;
+  color: var(--c-muted);
   font-size: 11px;
   text-align: center;
 }
 .dashboard-methodology {
   font-size: 10px;
-  color: #939daf;
+  color: var(--c-muted);
   line-height: 1.7;
   margin: 16px 0;
 }
@@ -306,7 +306,7 @@
   margin: 20px 0;
 }
 .management-error {
-  color: #bf3549;
+  color: var(--c-danger);
 }
 @media (min-width: 1500px) {
   .management-cards {

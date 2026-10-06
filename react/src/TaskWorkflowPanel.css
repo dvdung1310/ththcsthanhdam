@@ -14,7 +14,7 @@
 }
 
 .task-flag.revision {
-  color: #bd3946;
+  color: var(--c-danger);
   background: #fdecee;
 }
 
@@ -41,7 +41,7 @@
 }
 
 .workflow-note.revision {
-  color: #bd3946;
+  color: var(--c-danger);
   background: #fdecee;
 }
 
@@ -57,7 +57,7 @@
   align-items: center;
   gap: 6px;
   border: 0;
-  color: #e44856;
+  color: var(--c-danger);
   background: none;
   font-size: 12px;
   font-weight: 600;
