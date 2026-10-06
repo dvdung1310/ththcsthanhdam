@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronsRight,
   ClipboardCheck,
   Clock3,
   Eye,
@@ -33,6 +34,7 @@ import {
   ListOrdered,
   List,
   Link2,
+  MessageSquare,
   X,
 } from "lucide-react";
 import "./TaskManagement.css";
@@ -81,6 +83,8 @@ const labels = {
   },
 };
 const COMPOSE_MODE_KEY = "thanhdam_task_compose_mode";
+const CHAT_COLLAPSED_KEY = "thanhdam_task_chat_collapsed";
+const CHAT_SEEN_KEY = "thanhdam_task_chat_seen";
 
 const emptyTask = {
   title: "",
@@ -138,6 +142,12 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
   const [viewDraft, setViewDraft] = useState(false);
   const [editingSubmission, setEditingSubmission] = useState(null);
   const [drawerTab, setDrawerTab] = useState("overview");
+  const [chatCollapsed, setChatCollapsed] = useState(() => localStorage.getItem(CHAT_COLLAPSED_KEY) !== "0");
+  const toggleChat = () =>
+    setChatCollapsed((current) => {
+      localStorage.setItem(CHAT_COLLAPSED_KEY, current ? "0" : "1");
+      return !current;
+    });
   const [commentDraft, setCommentDraft] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
   const [loading, setLoading] = useState(true),
@@ -1109,7 +1119,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
       )}
       {viewing && (
         <div className="drawer-backdrop" onMouseDown={(event) => event.target === event.currentTarget && closeView()}>
-          <aside className={`task-drawer split ${inlineEdit ? "editing" : ""}`} data-tab={drawerTab} role="dialog" aria-modal="true" aria-label={`Chi tiết ${viewing.code}`}>
+          <aside className={`task-drawer split ${chatCollapsed ? "chat-collapsed" : ""} ${inlineEdit ? "editing" : ""}`} data-tab={drawerTab} role="dialog" aria-modal="true" aria-label={`Chi tiết ${viewing.code}`}>
             <header className="task-drawer-head">
               <div>
                 <div className="task-drawer-tags">
@@ -1266,6 +1276,8 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
                 onComment={postComment}
                 onDraftChange={setCommentDraft}
                 tab={drawerTab}
+                collapsed={chatCollapsed}
+                onToggle={toggleChat}
               />
             </div>
             {viewing.can_cancel && !inlineEdit && (
@@ -2071,11 +2083,43 @@ const CHAT_FILTERS = [
 ];
 const AUTHOR_ROLE = { reviewer: "Người duyệt", assigner: "Người giao việc" };
 
-function TaskChat({ task, saving, editingComment, onEditComment, onSaveComment, onComment, onDraftChange, tab }) {
+function baselineSeen(taskId, lastId) {
+  const all = readSeen();
+  if (all[taskId] !== undefined) return all[taskId];
+  localStorage.setItem(CHAT_SEEN_KEY, JSON.stringify({ ...all, [taskId]: lastId }));
+  return lastId;
+}
+
+function readSeen() {
+  try {
+    return JSON.parse(localStorage.getItem(CHAT_SEEN_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function useNarrowScreen() {
+  const query = "(max-width: 1023px)";
+  const [narrow, setNarrow] = useState(() => window.matchMedia(query).matches);
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const update = () => setNarrow(media.matches);
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  return narrow;
+}
+
+function TaskChat({ task, saving, editingComment, onEditComment, onSaveComment, onComment, onDraftChange, tab, collapsed, onToggle }) {
   const [filter, setFilter] = useState("all");
   const [limit, setLimit] = useState(CHAT_PAGE);
-  const listRef = useRef(null);
   const updates = [...(task.updates || [])].reverse();
+  const lastId = updates.reduce((max, item) => Math.max(max, item.id), 0);
+  const [seen, setSeen] = useState(() => baselineSeen(task.id, lastId));
+  const listRef = useRef(null);
+  const narrow = useNarrowScreen();
+  const unread = updates.filter((item) => item.id > seen).length;
+  const visible = narrow ? tab === "chat" : !collapsed;
   const counts = {
     all: updates.length,
     comment: updates.filter((item) => item.kind !== "activity").length,
@@ -2088,16 +2132,39 @@ function TaskChat({ task, saving, editingComment, onEditComment, onSaveComment, 
   useEffect(() => {
     setFilter("all");
     setLimit(CHAT_PAGE);
-  }, [task.id]);
+    setSeen(baselineSeen(task.id, lastId));
+  }, [task.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!visible || !lastId) return;
+    const all = readSeen();
+    if ((all[task.id] ?? 0) >= lastId) return;
+    localStorage.setItem(CHAT_SEEN_KEY, JSON.stringify({ ...all, [task.id]: lastId }));
+    const timer = setTimeout(() => setSeen(lastId), 1500);
+    return () => clearTimeout(timer);
+  }, [visible, lastId, task.id]);
   useEffect(() => {
     const list = listRef.current;
     if (list) list.scrollTop = list.scrollHeight;
-  }, [task.id, updates.length, filter, tab]);
+  }, [task.id, updates.length, filter, tab, collapsed]);
 
   return (
-    <section className="task-drawer-chat comment-timeline">
+    <section className={`task-drawer-chat comment-timeline ${collapsed ? "collapsed" : ""}`}>
+      <button type="button" className="task-chat-rail" onClick={onToggle} title="Mở trao đổi" aria-expanded="false">
+        <MessageSquare size={18} />
+        <b>{updates.length}</b>
+        {unread > 0 && <em>{unread} mới</em>}
+        <span>Trao đổi</span>
+      </button>
       <div className="task-chat-head">
-        <h4>Trao đổi {!!updates.length && <em>{updates.length}</em>}</h4>
+        <div className="task-chat-title">
+          <h4>
+            Trao đổi {!!updates.length && <em>{updates.length}</em>}
+            {unread > 0 && <span className="task-chat-new">{unread} mới</span>}
+          </h4>
+          <button type="button" className="task-chat-collapse" onClick={onToggle} title="Thu gọn trao đổi" aria-expanded="true">
+            <ChevronsRight size={16} />
+          </button>
+        </div>
         {counts.activity > 0 && counts.comment > 0 && (
           <div className="task-chat-filters">
             {CHAT_FILTERS.map(([key, label]) => (
@@ -2117,14 +2184,14 @@ function TaskChat({ task, saving, editingComment, onEditComment, onSaveComment, 
         {!shown.length && <p className="task-chat-empty">Chưa có trao đổi nào. Hãy là người mở đầu.</p>}
         {shown.map((comment) =>
           comment.kind === "activity" ? (
-            <div className="comment-activity" key={comment.id}>
+            <div className={`comment-activity ${comment.id > seen ? "new" : ""}`} key={comment.id}>
               <Activity size={13} />
               <span>
                 <b>{comment.creator_name || "Hệ thống"}</b> {comment.content} <small>· {formatMoment(comment.created_at)}</small>
               </span>
             </div>
           ) : (
-            <article className={`comment-item ${comment.author_role}`} key={comment.id}>
+            <article className={`comment-item ${comment.author_role} ${comment.id > seen ? "new" : ""}`} key={comment.id}>
               {comment.creator_avatar_url ? (
                 <img className="comment-avatar" src={comment.creator_avatar_url} alt={`Ảnh của ${comment.creator_name}`} />
               ) : (

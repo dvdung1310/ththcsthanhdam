@@ -400,6 +400,10 @@
   width: min(760px, 100%);
 }
 
+.task-drawer.split.chat-collapsed {
+  width: min(900px, 100%);
+}
+
 .task-drawer.compose .task-drawer-head h2 {
   margin: 0;
 }
@@ -490,6 +494,104 @@
   margin: 10px 12px 12px;
 }
 
+.task-chat-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.task-chat-new {
+  padding: 1px 7px;
+  border-radius: 99px;
+  color: #fff;
+  background: var(--c-danger);
+  font-size: 10.5px;
+  letter-spacing: 0;
+}
+
+.task-chat-collapse {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--c-muted);
+  background: none;
+  cursor: pointer;
+}
+
+.task-chat-collapse:hover {
+  border-color: #e3e6ee;
+  color: var(--c-primary);
+  background: #fff;
+}
+
+.task-chat-rail {
+  display: none;
+}
+
+.task-drawer-chat.collapsed {
+  width: 56px;
+}
+
+.task-drawer-chat.collapsed > :not(.task-chat-rail) {
+  display: none;
+}
+
+.task-drawer-chat.collapsed > .task-chat-rail {
+  height: 100%;
+  padding: 16px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  color: var(--c-primary);
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.task-drawer-chat.collapsed > .task-chat-rail:hover {
+  background: var(--c-primary-tint);
+}
+
+.task-chat-rail b {
+  color: #1f2a48;
+  font-size: 12px;
+}
+
+.task-chat-rail em {
+  padding: 2px 5px;
+  border-radius: 99px;
+  color: #fff;
+  background: var(--c-danger);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.task-chat-rail span {
+  margin-top: 4px;
+  color: var(--c-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  writing-mode: vertical-rl;
+}
+
+.task-chat-list .comment-item.new {
+  border-color: var(--c-primary-line);
+  box-shadow: inset 3px 0 0 var(--c-primary);
+}
+
+.comment-activity.new b {
+  color: var(--c-primary);
+}
+
 @media (max-width: 1023px) {
   .task-drawer.split {
     width: min(720px, 100%);
@@ -520,6 +622,19 @@
 
   .task-chat-head h4 {
     display: none;
+  }
+
+  .task-drawer-chat.collapsed {
+    width: 100%;
+  }
+
+  .task-drawer-chat.collapsed > :not(.task-chat-rail) {
+    display: flex;
+  }
+
+  .task-drawer-chat.collapsed > .task-chat-rail,
+  .task-chat-collapse {
+    display: none !important;
   }
 
   .task-drawer.editing .task-drawer-tabs,
