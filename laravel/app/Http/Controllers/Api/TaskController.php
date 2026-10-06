@@ -27,10 +27,13 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class TaskController extends Controller
 {
+    private const ACTIVITY_PREFIXES = ['Đã gửi bài nộp.', 'Đã chỉnh sửa bài nộp', 'Hủy công việc: '];
+
     public function index(Request $request): JsonResponse
     {
         $query = Task::with(['category', 'creator', 'reviewers', 'teachers.user', 'departments', 'libraryFiles.file'])
@@ -135,8 +138,9 @@ class TaskController extends Controller
     {
         $this->ensureTaskAccess($request, $task);
         $task = $this->loadTask($task);
-        $updates = DB::table('task_updates')->leftJoin('users', 'users.id', '=', 'task_updates.created_by')->where('task_id', $task->id)->whereNotNull('task_updates.content')->latest('task_updates.created_at')->select('task_updates.*', 'users.name as creator_name', 'users.avatar_path as creator_avatar_path')->get()->map(function ($update) use ($task, $request) {
+        $updates = DB::table('task_updates')->leftJoin('users', 'users.id', '=', 'task_updates.created_by')->where('task_id', $task->id)->whereNotNull('task_updates.content')->latest('task_updates.created_at')->latest('task_updates.id')->select('task_updates.*', 'users.name as creator_name', 'users.avatar_path as creator_avatar_path')->get()->map(function ($update) use ($task, $request) {
             $update->author_role = $this->authorRole($task, (int) $update->created_by);
+            $update->kind = Str::startsWith($update->content, self::ACTIVITY_PREFIXES) ? 'activity' : 'comment';
             $update->can_edit = $update->created_by === $request->user()->id && in_array($update->author_role, ['reviewer', 'assigner']);
             $update->creator_avatar_url = $update->creator_avatar_path ? route('avatars.show', ['filename' => basename($update->creator_avatar_path)]) : null;
             unset($update->creator_avatar_path);
@@ -150,6 +154,7 @@ class TaskController extends Controller
             'edited_at' => $submission->edited_at?->toIso8601String(),
             'id' => $submission->id,
             'version' => $submission->version,
+            'teacher_id' => $submission->teacher_id,
             'submitter' => $submission->teacher?->user?->name,
             'submitter_avatar_url' => $submission->teacher?->user?->avatar_path ? route('avatars.show', ['filename' => basename($submission->teacher->user->avatar_path)]) : null,
             'result_content' => $submission->result_content,
@@ -303,7 +308,7 @@ class TaskController extends Controller
                 DB::table('file_attachments')->where('file_id', $fileId)->where('attachable_type', TaskSubmission::class)->where('attachable_id', $locked->id)->delete();
                 app(FileStore::class)->releaseIfUnused($fileId);
             }
-            $task->updates()->create(['teacher_id' => $locked->teacher_id, 'created_by' => $request->user()->id, 'status' => Task::WAITING_APPROVAL, 'content' => 'Đã chỉnh sửa bài nộp lúc '.now()->format('H:i d/m/Y').'.']);
+            $task->updates()->create(['teacher_id' => $locked->teacher_id, 'created_by' => $request->user()->id, 'status' => Task::WAITING_APPROVAL, 'content' => 'Đã chỉnh sửa bài nộp.']);
         });
         $this->notify(collect([$task->creator])->concat($task->reviewers), $task, $request->user()->name.' đã chỉnh sửa bài nộp: '.$task->title, 'completion_updated', $request->user());
 
