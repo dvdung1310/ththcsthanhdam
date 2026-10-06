@@ -104,7 +104,8 @@
   background: var(--c-primary-tint);
 }
 
-.drawer-actions .workflow-form {
+.drawer-actions .workflow-form,
+.submission-list .workflow-form {
   margin: 0;
   padding: 0;
   display: flex;
@@ -113,7 +114,8 @@
   border: 0;
 }
 
-.drawer-actions .workflow-form label {
+.drawer-actions .workflow-form label,
+.submission-list .workflow-form label {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -124,6 +126,8 @@
 
 .drawer-actions textarea,
 .drawer-actions input[type="file"],
+.submission-list .workflow-form textarea,
+.submission-list .workflow-form input[type="file"],
 .comment-composer textarea {
   width: 100%;
   padding: 9px 10px;
@@ -138,6 +142,7 @@
 }
 
 .drawer-actions textarea:focus,
+.submission-list .workflow-form textarea:focus,
 .comment-composer textarea:focus {
   border-color: var(--c-primary-line);
   box-shadow: 0 0 0 3px rgb(var(--c-primary-rgb) / 0.12);
@@ -314,26 +319,26 @@
   background: #fff0f1;
 }
 
-.task-drawer .submission-list > article > header {
+.task-drawer .submission-group > article > header {
   align-items: center;
   justify-content: flex-start;
 }
 
-.task-drawer .submission-list > article > header > div {
+.task-drawer .submission-group > article > header > div {
   flex: 1;
   min-width: 0;
 }
 
-.task-drawer .submission-list > article > header > img,
-.task-drawer .submission-list > article > header > i {
+.task-drawer .submission-group > article > header > img,
+.task-drawer .submission-group > article > header > i {
   flex: none;
 }
 
-.task-drawer .submission-list > article {
+.task-drawer .submission-group > article {
   background: #fff;
 }
 
-.task-drawer .submission-list > article > p {
+.task-drawer .submission-group > article > p {
   padding: 0;
   color: #3f4a66;
   background: transparent;

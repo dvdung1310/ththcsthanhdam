@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Camera, CheckCircle2, Eye, EyeOff, KeyRound, Mail, ShieldCheck, UserRound } from "lucide-react";
 import { apiFetch } from "./api";
 import "./PersonalProfile.css";
+import Avatar from "./Avatar";
 
 export default function PersonalProfile({ user, onUserChanged }) {
   const fileRef = useRef(null);
@@ -60,7 +61,7 @@ export default function PersonalProfile({ user, onUserChanged }) {
     <div className="personal-grid">
       <section className="personal-card identity-card">
         <div className="personal-avatar-wrap">
-          {preview ? <img src={preview} alt="Ảnh đại diện"/> : <span>{user.name.charAt(0)}</span>}
+          {preview ? <img src={preview} alt="Ảnh đại diện"/> : <Avatar as="span" name={user.name} />}
           <button type="button" onClick={() => fileRef.current?.click()} title="Chọn ảnh đại diện"><Camera size={19}/></button>
         </div>
         <h3>{user.name}</h3><p>{user.current_position || user.roles[0]?.name || "Người dùng"}</p>

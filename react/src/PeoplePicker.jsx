@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, CheckCircle2, ChevronRight, Search, Users } from "lucide-react";
+import { Check, CheckCircle2, ChevronRight, Search, Users, X } from "lucide-react";
 import "./PeoplePicker.css";
+import Avatar from "./Avatar";
 
 const SCHOOL_ROLES = ["admin", "hieu_truong", "thu_ky"];
 const RANK = { admin: 0, hieu_truong: 1, thu_ky: 2, to_truong: 3, to_pho: 4, nhom_truong: 5 };
@@ -31,7 +32,9 @@ export function useOutsideClose(open, onClose) {
   const ref = useRef(null);
   useEffect(() => {
     if (!open) return undefined;
-    const inside = (target) => target instanceof Node && (ref.current?.contains(target) || target.parentElement?.closest(".people-picker") || target.closest?.(".people-picker"));
+    const inPicker = (target) => target.closest?.(".people-picker") || target.parentElement?.closest(".people-picker");
+    const onTrigger = (target) => ref.current?.contains(target) && (target.closest?.("[data-picker-trigger]") || target.parentElement?.closest("[data-picker-trigger]"));
+    const inside = (target) => target instanceof Node && Boolean(inPicker(target) || onTrigger(target));
     const outside = (event) => !inside(event.target) && onClose();
     const escape = (event) => event.key === "Escape" && onClose();
     const scroll = (event) => !inside(event.target) && onClose();
@@ -58,6 +61,7 @@ export default function PeoplePicker({
   onToggleUnit,
   title,
   anchorRef,
+  onClose,
 }) {
   const [focus, setFocus] = useState(null);
   const [position, setPosition] = useState(null);
@@ -142,10 +146,17 @@ export default function PeoplePicker({
       aria-label={title}
       style={position ? { top: position.top, left: position.left, width: position.width, height: position.height } : { visibility: "hidden" }}
     >
-      <label className="pp-search">
-        <Search size={15} />
-        <input autoFocus value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm theo tên hoặc mã giáo viên..." />
-      </label>
+      <div className="pp-top">
+        <label className="pp-search">
+          <Search size={15} />
+          <input autoFocus value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm theo tên hoặc mã giáo viên..." />
+        </label>
+        {onClose && (
+          <button type="button" className="pp-close" onClick={onClose} title="Đóng" aria-label="Đóng">
+            <X size={16} />
+          </button>
+        )}
+      </div>
       <div className="pp-body">
         <nav className="pp-tree">
           <div className={`pp-unit ${!focus ? "focused" : ""}`}>
@@ -181,7 +192,7 @@ export default function PeoplePicker({
               const selected = selectedPeople.includes(person.id);
               return (
                 <button type="button" key={person.id} className={`pp-person ${selected ? "selected" : ""}`} onClick={() => onTogglePerson(person.id)}>
-                  {person.avatar_url ? <img src={person.avatar_url} alt="" /> : <i>{person.name.charAt(0)}</i>}
+                  {person.avatar_url ? <img src={person.avatar_url} alt="" /> : <Avatar name={person.name} />}
                   <span className="pp-person-main">
                     <b>{person.name}</b>
                     <span className="pp-roles">

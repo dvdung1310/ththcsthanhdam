@@ -18,11 +18,11 @@ class Task extends Model
     public const OPEN = [self::NOT_STARTED, self::IN_PROGRESS, self::WAITING_APPROVAL];
     public const CLOSED = [self::COMPLETED, self::CANCELLED];
 
-    protected $fillable = ['category_id', 'created_by', 'code', 'title', 'description', 'requirements', 'priority', 'status', 'starts_at', 'due_at', 'completed_at'];
+    protected $fillable = ['category_id', 'created_by', 'code', 'title', 'description', 'requirements', 'priority', 'share_submissions', 'status', 'starts_at', 'due_at', 'completed_at'];
 
     protected function casts(): array
     {
-        return ['starts_at' => 'datetime', 'due_at' => 'datetime', 'completed_at' => 'datetime'];
+        return ['share_submissions' => 'boolean', 'starts_at' => 'datetime', 'due_at' => 'datetime', 'completed_at' => 'datetime'];
     }
 
     public function category() { return $this->belongsTo(TaskCategory::class, 'category_id'); }

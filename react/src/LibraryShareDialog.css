@@ -135,17 +135,47 @@
   font-weight: 500;
 }
 
-.lsd-row select {
+.lsd-access {
   height: 32px;
-  padding: 0 8px;
+  padding: 0 9px 0 12px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   border: 1px solid #dfe3ec;
   border-radius: 8px;
   color: #34405e;
   background: #fff;
-  font-size: 12px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
 }
 
-.lsd-row > button {
+.lsd-access svg {
+  color: var(--c-muted);
+  transition: transform 0.15s;
+}
+
+.lsd-access:hover,
+.lsd-access.open {
+  border-color: var(--c-primary-line);
+  color: var(--c-primary);
+  background: var(--c-primary-tint);
+}
+
+.lsd-access.open svg {
+  transform: rotate(180deg);
+}
+
+.lsd-access:focus-visible {
+  outline: 3px solid rgb(var(--c-primary-rgb) / 0.2);
+  outline-offset: 1px;
+}
+
+.lsd-row > .lsd-remove {
   width: 30px;
   height: 30px;
   display: grid;
@@ -157,15 +187,19 @@
   cursor: pointer;
 }
 
-.lsd-row > button:hover:not(:disabled) {
+.lsd-row > .lsd-remove:hover:not(:disabled) {
   color: var(--c-danger);
   background: #fff1f2;
 }
 
 .lsd-row.muted > em {
+  padding: 3px 9px;
+  border-radius: 6px;
   color: var(--c-muted);
+  background: #f3f4f7;
   font-size: 12px;
   font-style: normal;
+  font-weight: 600;
 }
 
 .lsd-icon {

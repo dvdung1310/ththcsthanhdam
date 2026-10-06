@@ -25,6 +25,7 @@ import FilePreview from "./FilePreview";
 import { formatBytes } from "./fileUtils";
 import { SCORE_PATTERN, STATUS_TONES, computeTotals, formatDay, formatMoment, formatScore, maxBase, normalizeScore, parseScore, scoreError, suggestGrade } from "./evaluationUtils";
 import "./Evaluation.css";
+import Avatar from "./Avatar";
 
 const TASK_STATUS = { not_started: "Chưa thực hiện", in_progress: "Đang thực hiện", waiting_approval: "Chờ duyệt", completed: "Hoàn thành" };
 const AUTOSAVE_DELAY = 1500;
@@ -448,7 +449,7 @@ export default function EvaluationSheet() {
         <Link className="ev-back" to={backTo}><ArrowLeft size={16} /> Danh sách</Link>
         <div className="ev-sheet-title">
           <span className="ev-person large">
-            {data.teacher.avatar_url ? <img src={data.teacher.avatar_url} alt="" /> : <i>{data.teacher.name?.split(" ").at(-1)?.charAt(0)}</i>}
+            {data.teacher.avatar_url ? <img src={data.teacher.avatar_url} alt="" /> : <Avatar name={data.teacher.name} />}
             <span>
               <b>{data.teacher.name}</b>
               <small>{[data.teacher.position, data.teacher.units.join(", ")].filter(Boolean).join(" · ")}</small>
@@ -756,16 +757,20 @@ function CriterionRow({ criterion, row, bonus, selfMode, unitMode, reviewMode, s
       <div className="ev-criterion-title">
         <b>{criterion.code}. {criterion.title}</b>
         <small>{bonus ? "Điểm cộng" : `Tối đa ${formatScore(criterion.max_score)} điểm`}</small>
-        {lines.length > 0 && (
-          <button type="button" className={`ev-guide-toggle ${open ? "open" : ""}`} onClick={() => setOpen(!open)}>
-            Cách tính điểm <ChevronDown size={13} />
-          </button>
+        {(lines.length > 0 || notes.some((note) => !note.visible)) && (
+          <div className="ev-note-actions">
+            {lines.length > 0 && (
+              <button type="button" className={`ev-guide-toggle ${open ? "open" : ""}`} onClick={() => setOpen(!open)}>
+                Cách tính điểm <ChevronDown size={13} />
+              </button>
+            )}
+            {notes.filter((note) => !note.visible).map((note) => (
+              <button key={note.column} type="button" className="ev-add-note" onClick={() => setOpened((current) => ({ ...current, [note.column]: true }))}>
+                <Plus size={12} /> {labelled ? `Ghi chú ${note.label.toLowerCase()}` : "Ghi chú"}
+              </button>
+            ))}
+          </div>
         )}
-        {notes.filter((note) => !note.visible).map((note) => (
-          <button key={note.column} type="button" className="ev-add-note" onClick={() => setOpened((current) => ({ ...current, [note.column]: true }))}>
-            <Plus size={12} /> {labelled ? `Ghi chú ${note.label.toLowerCase()}` : "Ghi chú"}
-          </button>
-        ))}
         {open && <ul className="ev-guidance">{lines.map((line, index) => <li key={index}>{line}</li>)}</ul>}
         {criterion.requires_evidence && (
           <div className="ev-evidence">
@@ -933,7 +938,7 @@ function Comments({ data, onChanged, onError }) {
       <ul>
         {data.comments.map((comment) => (
           <li key={comment.id}>
-            {comment.user.avatar_url ? <img src={comment.user.avatar_url} alt="" /> : <i>{comment.user.name.split(" ").at(-1).charAt(0)}</i>}
+            {comment.user.avatar_url ? <img src={comment.user.avatar_url} alt="" /> : <Avatar name={comment.user.name} />}
             <div>
               <b>{comment.user.name}</b> <small>{formatMoment(comment.created_at)}</small>
               <p>{comment.content}</p>

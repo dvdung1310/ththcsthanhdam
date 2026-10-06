@@ -34,7 +34,7 @@ class LibrarySeeder extends Seeder
             $folder = $this->folder(null, $unitName, $principal);
             $this->share($folder, null, $unit->id, LibraryShare::READ, $principal);
             $this->share($folder, $this->user($leader)->id, null, LibraryShare::EDIT, $principal);
-            $this->share($folder, $this->user($deputy)->id, null, LibraryShare::UPLOAD, $principal);
+            $this->share($folder, $this->user($deputy)->id, null, LibraryShare::EDIT, $principal);
             $plans = $this->folder($folder, 'Kế hoạch', $this->user($leader));
             $this->file($plans, 'Kế hoạch tổ học kỳ I.txt', $leader, "Kế hoạch hoạt động {$unitName} học kỳ I.\n");
             $this->folder($folder, 'Đề kiểm tra', $this->user($leader));

@@ -242,17 +242,6 @@
 .progress-cell b {
   font-size: 11px;
 }
-.task-modal {
-  width: min(850px, 100%);
-  max-height: 92vh;
-  overflow: auto;
-  border-radius: 8px;
-  background: #fff;
-  box-shadow: 0 25px 70px rgba(13, 20, 45, 0.25);
-}
-.task-modal form {
-  padding: 0 20px 20px;
-}
 
 .task-form-grid {
   display: grid;
@@ -594,38 +583,6 @@
   font-size: 9px;
   font-style: normal;
 }
-.task-modal {
-  width: min(1180px, 96vw);
-  height: min(820px, 94vh);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-.task-modal > .modal-head {
-  flex: none;
-  padding: 14px 20px;
-  background: #f7f8fa;
-}
-.task-modal form {
-  min-height: 0;
-  padding: 0;
-  overflow: auto;
-  display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(340px, 1fr);
-  grid-template-rows: auto auto auto;
-}
-
-.task-modal .modal-actions {
-  position: sticky;
-  bottom: 0;
-  grid-column: 1/-1;
-  grid-row: 3;
-  margin: 0;
-  padding: 12px 20px;
-  border-top: 1px solid #e5e8ef;
-  background: rgba(255, 255, 255, 0.96);
-  z-index: 2;
-}
 
 .assignee-search {
   height: 36px;
@@ -649,9 +606,6 @@
 .assignment-grid > div {
   min-width: 0;
 }
-.task-modal .document-picker {
-  max-height: 265px;
-}
 @media (max-width: 1200px) {
   .task-stats {
     grid-template-columns: repeat(3, 1fr);
@@ -662,22 +616,8 @@
   .task-search {
     grid-column: span 2;
   }
-  .task-modal form {
-    grid-template-columns: minmax(0, 1.4fr) minmax(320px, 1fr);
-  }
 }
 @media (max-width: 900px) {
-  .task-modal {
-    height: auto;
-    max-height: 94vh;
-  }
-  .task-modal form {
-    display: block;
-  }
-  
-  .task-modal .modal-actions {
-    display: flex;
-  }
   .document-picker {
     grid-template-columns: 1fr;
   }

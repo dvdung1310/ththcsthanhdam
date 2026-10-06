@@ -94,8 +94,6 @@
 
 .app-shell .avatar {
   border-radius: 50% !important;
-  background: var(--c-primary-soft) !important;
-  color: var(--c-primary) !important;
   box-shadow: none !important;
 }
 
@@ -183,8 +181,6 @@
 
 .app-shell .ev-page .ev-person i {
   border-radius: 50% !important;
-  color: var(--c-primary) !important;
-  background: var(--c-primary-soft) !important;
 }
 
 .app-shell .ev-page .ev-chip {
@@ -404,4 +400,10 @@
   display: grid;
   place-items: center;
   background: var(--c-bg);
+}
+
+.required-mark {
+  margin-left: 2px;
+  color: var(--c-danger);
+  font-weight: 700;
 }

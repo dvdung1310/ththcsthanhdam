@@ -5,6 +5,7 @@ import { apiFetch, apiJson } from "./api";
 import TablePagination, { usePagination } from "./TablePagination";
 import { GRADE_TONES, formatPercent, formatScore } from "./evaluationUtils";
 import "./Evaluation.css";
+import Avatar from "./Avatar";
 
 const collator = new Intl.Collator("vi");
 const givenName = (name) => (name ?? "").trim().split(/\s+/).at(-1);
@@ -231,7 +232,7 @@ export default function EvaluationSummary() {
                   <tr key={row.id}>
                     <td className="sticky">
                       <span className="ev-person">
-                        {row.avatar_url ? <img src={row.avatar_url} alt="" /> : <i>{givenName(row.name).charAt(0)}</i>}
+                        {row.avatar_url ? <img src={row.avatar_url} alt="" /> : <Avatar name={row.name} />}
                         <span>
                           <b>{row.name}</b>
                           <small>{row.code}</small>

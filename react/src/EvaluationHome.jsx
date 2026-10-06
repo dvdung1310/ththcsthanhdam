@@ -7,6 +7,7 @@ import { useConfirm } from "./ConfirmDialog";
 import TablePagination, { usePagination } from "./TablePagination";
 import { STATUS_TONES, daysPast, formatDay, formatPercent, formatScore, schoolYearLabel, schoolYearOf } from "./evaluationUtils";
 import "./Evaluation.css";
+import Avatar from "./Avatar";
 
 const STATUS_FILTERS = [
   ["", "Tất cả"],
@@ -618,7 +619,7 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
                   <tr key={row.id} className="clickable" onClick={() => onOpen(row.id)}>
                     <td>
                       <span className="ev-person">
-                        {row.teacher.avatar_url ? <img src={row.teacher.avatar_url} alt="" /> : <i>{givenName(row.teacher.name).charAt(0)}</i>}
+                        {row.teacher.avatar_url ? <img src={row.teacher.avatar_url} alt="" /> : <Avatar name={row.teacher.name} />}
                         <span>
                           <b>{row.teacher.name}</b>
                           <small>{[row.teacher.code, row.is_homeroom ? "GVCN" : null].filter(Boolean).join(" · ")}</small>

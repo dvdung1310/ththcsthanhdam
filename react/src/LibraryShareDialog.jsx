@@ -1,11 +1,50 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Globe2, Plus, Share2, Users, X } from "lucide-react";
+import { ChevronDown, Eye, Globe2, Pencil, Plus, Share2, Users, X } from "lucide-react";
 import { apiJson } from "./api";
 import { useConfirm } from "./ConfirmDialog";
 import PeoplePicker, { useOutsideClose } from "./PeoplePicker";
 import "./LibraryShareDialog.css";
+import Avatar from "./Avatar";
+import { MenuList, menuPosition } from "./ActionMenu";
 
-export const ACCESS_LABELS = { read: "Xem", upload: "Tải lên", edit: "Chỉnh sửa" };
+export const ACCESS_LABELS = { read: "Xem", edit: "Chỉnh sửa" };
+
+const ACCESS_OPTIONS = [
+  { value: "read", icon: Eye, hint: "Mở và tải về" },
+  { value: "edit", icon: Pencil, hint: "Thêm file, tạo thư mục, đổi tên, di chuyển và chia sẻ tiếp" },
+];
+
+function AccessSelect({ value, label, onChange }) {
+  const [position, setPosition] = useState(null);
+  const buttonRef = useRef(null);
+  const toggle = () => {
+    if (position) return setPosition(null);
+    const rect = buttonRef.current.getBoundingClientRect();
+    setPosition(menuPosition(rect.right - 220, rect.bottom + 4, 220, 140));
+  };
+  return (
+    <>
+      <button type="button" ref={buttonRef} className={`lsd-access ${position ? "open" : ""}`} aria-haspopup="menu" aria-expanded={!!position} aria-label={label} onClick={toggle}>
+        {ACCESS_LABELS[value]}
+        <ChevronDown size={14} />
+      </button>
+      {position && (
+        <MenuList
+          position={position}
+          onClose={() => setPosition(null)}
+          items={ACCESS_OPTIONS.map((option) => ({
+            key: option.value,
+            label: ACCESS_LABELS[option.value],
+            hint: option.hint,
+            icon: option.icon,
+            active: option.value === value,
+            onClick: () => onChange(option.value),
+          }))}
+        />
+      )}
+    </>
+  );
+}
 
 const keyOf = (row) => (row.user_id ? `u${row.user_id}` : row.department_id ? `d${row.department_id}` : "all");
 
@@ -88,7 +127,7 @@ export default function LibraryShareDialog({ node, onClose, onSaved }) {
         ) : (
           <>
             <div className="lsd-add" ref={pickerRef}>
-              <button type="button" ref={anchorRef} className="lsd-add-btn" onClick={() => setPicking(!picking)} aria-expanded={picking}>
+              <button type="button" ref={anchorRef} className="lsd-add-btn" data-picker-trigger onClick={() => setPicking(!picking)} aria-expanded={picking}>
                 <Plus size={16} /> Thêm tổ / nhóm / cá nhân
               </button>
               {canEveryone && (
@@ -101,6 +140,7 @@ export default function LibraryShareDialog({ node, onClose, onSaved }) {
                 <PeoplePicker
                   title="Chọn người được chia sẻ"
                   anchorRef={anchorRef}
+                  onClose={close}
                   people={options.people}
                   units={options.units}
                   selectedPeople={rows.filter((r) => r.user_id).map((r) => r.user_id)}
@@ -116,14 +156,8 @@ export default function LibraryShareDialog({ node, onClose, onSaved }) {
                 <div className="lsd-row" key={row.key}>
                   <SubjectIcon row={row} />
                   <b>{row.name}</b>
-                  <select value={row.access} onChange={(event) => setAccess(row.key, event.target.value)}>
-                    {Object.entries(ACCESS_LABELS).map(([value, label]) => (
-                      <option key={value} value={value}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                  <button type="button" onClick={() => toggleRow(row)} disabled={row.key === "all" && !canEveryone} aria-label="Bỏ chia sẻ">
+                  <AccessSelect value={row.access} label={`Quyền của ${row.name}`} onChange={(value) => setAccess(row.key, value)} />
+                  <button type="button" className="lsd-remove" onClick={() => toggleRow(row)} disabled={row.key === "all" && !canEveryone} aria-label="Bỏ chia sẻ">
                     <X size={15} />
                   </button>
                 </div>
@@ -148,7 +182,7 @@ export default function LibraryShareDialog({ node, onClose, onSaved }) {
             )}
 
             <p className="lsd-legend">
-              <b>Xem</b>: mở và tải về · <b>Tải lên</b>: thêm file, tạo thư mục con · <b>Chỉnh sửa</b>: đổi tên và chia sẻ tiếp
+              <b>Xem</b>: mở và tải về · <b>Chỉnh sửa</b>: thêm file, tạo thư mục, đổi tên, di chuyển và chia sẻ tiếp
             </p>
             {error && <p className="lsd-error">{error}</p>}
           </>
@@ -170,5 +204,5 @@ export default function LibraryShareDialog({ node, onClose, onSaved }) {
 function SubjectIcon({ row }) {
   if (row.kind === "everyone") return <i className="lsd-icon everyone"><Globe2 size={15} /></i>;
   if (row.kind === "unit") return <i className="lsd-icon unit"><Users size={15} /></i>;
-  return row.avatar_url ? <img className="lsd-icon" src={row.avatar_url} alt="" /> : <i className="lsd-icon user">{row.name?.split(" ").at(-1)?.charAt(0)}</i>;
+  return row.avatar_url ? <img className="lsd-icon" src={row.avatar_url} alt="" /> : <Avatar className="lsd-icon user" name={row.name} />;
 }

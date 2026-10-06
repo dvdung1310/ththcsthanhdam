@@ -51,7 +51,7 @@ class PersonnelController extends Controller
                 'password' => $data['password'], 'status' => $data['is_active'] ? 'active' : 'inactive', 'must_change_password' => true,
             ]);
             if ($data['is_teacher']) {
-                Teacher::create(['user_id' => $user->id, 'employee_code' => $data['employee_code'], 'employment_status' => $data['employment_status']]);
+                Teacher::create(['user_id' => $user->id, 'employee_code' => filled($data['employee_code'] ?? null) ? $data['employee_code'] : $this->nextEmployeeCode(), 'employment_status' => $data['employment_status']]);
             }
             $roles = array_key_exists('roles', $data)
                 ? $data['roles']
@@ -79,7 +79,8 @@ class PersonnelController extends Controller
             }
             if ($data['is_teacher']) {
                 $teacher = Teacher::withTrashed()->firstOrNew(['user_id' => $user->id]);
-                $teacher->fill(['employee_code' => $data['employee_code'], 'employment_status' => $data['employment_status']])->save();
+                $code = filled($data['employee_code'] ?? null) ? $data['employee_code'] : ($teacher->employee_code ?: $this->nextEmployeeCode());
+                $teacher->fill(['employee_code' => $code, 'employment_status' => $data['employment_status']])->save();
                 if ($teacher->trashed()) {
                     $teacher->restore();
                 }
@@ -138,9 +139,23 @@ class PersonnelController extends Controller
         return array_map(fn ($id) => Department::pathLabel((int) $id), $added);
     }
 
+    private function nextEmployeeCode(): string
+    {
+        $highest = Teacher::withTrashed()->where('employee_code', 'like', 'GV%')->lockForUpdate()->pluck('employee_code')
+            ->map(fn (string $code) => preg_match('/^GV(\d+)$/', $code, $match) ? (int) $match[1] : 0)
+            ->max() ?? 0;
+
+        return sprintf('GV%03d', $highest + 1);
+    }
+
     private function validatePerson(Request $request, ?User $user = null): array
     {
         $teacherId = $user ? Teacher::withTrashed()->where('user_id', $user->id)->value('id') : null;
+        $code = trim((string) $request->input('employee_code'));
+        $retired = $code === '' ? null : Teacher::onlyTrashed()->with('user')->where('employee_code', $code)->where('id', '!=', $teacherId ?? 0)->first();
+        if ($retired) {
+            throw ValidationException::withMessages(['employee_code' => 'Mã '.$code.' đang thuộc hồ sơ giáo viên đã xóa'.($retired->user ? ' của '.$retired->user->name : '').'.']);
+        }
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user?->id)],
@@ -164,8 +179,8 @@ class PersonnelController extends Controller
         $data['is_teacher'] = array_key_exists('roles', $data)
             ? collect($data['roles'])->pluck('role_id')->map(fn ($id) => (int) $id)->contains((int) Role::where('code', Role::GIAO_VIEN)->value('id'))
             : ($user ? (bool) $user->teacher : true);
-        if ($data['is_teacher'] && (blank($data['employee_code'] ?? null) || blank($data['employment_status'] ?? null))) {
-            throw ValidationException::withMessages(['employee_code' => 'Vui lòng nhập mã giáo viên và trạng thái công tác.']);
+        if ($data['is_teacher'] && blank($data['employment_status'] ?? null)) {
+            throw ValidationException::withMessages(['employment_status' => 'Vui lòng chọn trạng thái công tác.']);
         }
         abort_if($user?->teacher && ! $data['is_teacher'], 422, 'Không thể bỏ vai trò Giáo viên của nhân sự đã có dữ liệu công việc. Hãy cho nghỉ việc thay vì vậy.');
         abort_if(! $data['is_teacher'] && $data['unit_ids'] !== [], 422, 'Chỉ giáo viên mới thuộc tổ, nhóm.');

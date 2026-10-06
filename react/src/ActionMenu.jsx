@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { MoreHorizontal } from "lucide-react";
+import { Check, MoreHorizontal } from "lucide-react";
 import "./ActionMenu.css";
 
 export function MenuList({ items, position, onClose }) {
@@ -34,7 +34,7 @@ export function MenuList({ items, position, onClose }) {
             type="button"
             role="menuitem"
             key={item.key}
-            className={item.danger ? "danger" : ""}
+            className={[item.danger && "danger", item.active && "active", item.hint && "with-hint"].filter(Boolean).join(" ")}
             disabled={item.disabled}
             onClick={() => {
               onClose();
@@ -42,8 +42,12 @@ export function MenuList({ items, position, onClose }) {
             }}
           >
             {item.icon && <item.icon size={16} />}
-            <span>{item.label}</span>
+            <span>
+              {item.label}
+              {item.hint && <small>{item.hint}</small>}
+            </span>
             {item.shortcut && <kbd>{item.shortcut}</kbd>}
+            {item.active && <Check size={15} className="action-menu-check" />}
           </button>
         ),
       )}
