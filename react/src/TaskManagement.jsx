@@ -243,6 +243,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
   };
   const save = async (e) => {
     e.preventDefault();
+    const formElement = e.currentTarget;
     setSaving(true);
     setError("");
     const problem = await uploadProblem(editing.pending_files || []);
@@ -251,7 +252,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
       setSaving(false);
       return;
     }
-    const f = new FormData(e.currentTarget);
+    const f = new FormData(formElement);
     f.delete("teacher_ids");
     f.delete("department_ids");
     f.delete("library_file_ids");
