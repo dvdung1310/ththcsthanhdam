@@ -401,3 +401,9 @@
   place-items: center;
   background: var(--c-bg);
 }
+
+.required-mark {
+  margin-left: 2px;
+  color: var(--c-danger);
+  font-weight: 700;
+}

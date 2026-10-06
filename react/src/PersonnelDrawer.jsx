@@ -107,7 +107,6 @@ export default function PersonnelDrawer({
     !form.name.trim() && "Họ và tên",
     !form.email.trim() && "Email đăng nhập",
     (isNew ? password.length < 8 : password && password.length < 8) && "Mật khẩu (tối thiểu 8 ký tự)",
-    isTeacher && !(form.employee_code ?? "").trim() && "Mã giáo viên",
   ].filter(Boolean);
   const blockedReason = missing.length ? `Còn thiếu: ${missing.join(", ")}` : !isNew && !dirty ? "Chưa có thay đổi" : "";
   const requestClose = async () => {
@@ -221,7 +220,7 @@ export default function PersonnelDrawer({
               <h4>Hồ sơ</h4>
               <div className="drawer-grid">
                 <label>
-                  Họ và tên
+                  <span>Họ và tên <span className="required-mark">*</span></span>
                   <input
                     required
                     value={form.name}
@@ -229,7 +228,7 @@ export default function PersonnelDrawer({
                   />
                 </label>
                 <label>
-                  Email đăng nhập
+                  <span>Email đăng nhập <span className="required-mark">*</span></span>
                   <input
                     required
                     type="email"
@@ -245,7 +244,7 @@ export default function PersonnelDrawer({
                   />
                 </label>
                 <label>
-                  {isNew ? "Mật khẩu" : "Mật khẩu mới"}
+                  <span>{isNew ? "Mật khẩu" : "Mật khẩu mới"}{isNew && <> <span className="required-mark">*</span></>}</span>
                   <input
                     type="password"
                     minLength={8}
@@ -308,13 +307,13 @@ export default function PersonnelDrawer({
                   <label>
                     Mã giáo viên
                     <input
-                      required
                       value={form.employee_code}
+                      placeholder="Để trống để tự tạo"
                       onChange={(e) => set("employee_code", e.target.value)}
                     />
                   </label>
                   <label>
-                    Trạng thái công tác
+                    <span>Trạng thái công tác <span className="required-mark">*</span></span>
                     <select
                       value={form.employment_status}
                       onChange={(e) => set("employment_status", e.target.value)}

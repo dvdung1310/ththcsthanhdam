@@ -364,11 +364,6 @@
   display: block;
 }
 
-.required-mark {
-  margin-left: 2px;
-  color: var(--c-danger);
-  font-weight: 700;
-}
 
 .pp-tree,
 .pp-people {
