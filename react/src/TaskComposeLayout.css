@@ -1,27 +1,3 @@
-.task-modal form:has(.task-compose-body) {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  overflow: auto;
-}
-
-.task-compose-body {
-  display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(330px, 1fr);
-  flex: 1;
-  align-items: start;
-  gap: 0 26px;
-  padding: 20px 24px 8px;
-}
-
-.task-compose-main,
-.task-compose-aside {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
 .task-compose-body .form-block {
   display: flex;
   flex-direction: column;
@@ -54,7 +30,6 @@
   font-size: 12px;
   font-weight: 600;
 }
-
 
 .task-compose-body .block-toggle {
   padding: 10px 12px;
@@ -116,38 +91,6 @@
 
 .task-compose-body .assignment-mode-picker {
   margin: 0;
-}
-
-.task-modal form:has(.task-compose-body) > .modal-actions {
-  flex: none;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
-  background: #fff;
-}
-
-@media (max-width: 860px) {
-  .task-compose-body {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 18px;
-  }
-
-  .task-modal form:has(.task-compose-body) > .modal-actions {
-    flex-wrap: wrap;
-  }
-
-  .task-modal form:has(.task-compose-body) > .modal-actions > button {
-    white-space: nowrap;
-  }
-}
-
-.task-modal:has(.task-compose-body) {
-  width: min(1040px, 96vw);
-  height: auto;
-  max-height: min(860px, 94vh);
 }
 
 .task-compose-body .field input,
@@ -246,13 +189,6 @@
 .task-compose-body .document-picker > label {
   flex: none;
   padding: 8px 10px;
-}
-
-.task-modal .modal-actions .primary-btn:disabled,
-.workflow-form button:disabled {
-  opacity: 0.5;
-  box-shadow: none;
-  cursor: not-allowed;
 }
 
 .task-compose-body .rich-content {
