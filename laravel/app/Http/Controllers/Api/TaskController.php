@@ -249,8 +249,9 @@ class TaskController extends Controller
             'links.*' => ['required', 'url:http,https', 'max:2048'],
             'submission_files' => ['nullable', 'array', 'max:20'],
             'submission_files.*' => ['file', 'max:20480', 'mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,txt,jpg,jpeg,png,zip,rar'],
-        ]);
+        ], ['links.*.url' => 'Link “:input” không hợp lệ, cần bắt đầu bằng http:// hoặc https://.']);
         $links = collect($data['links'] ?? [])->filter()->unique()->values()->all();
+        abort_if(blank($data['comment'] ?? null) && $links === [] && ! $request->hasFile('submission_files'), 422, 'Cần ít nhất một: file, link hoặc ghi chú.');
         $version = ((int) $task->submissions()->max('version')) + 1;
         $old = $task->status;
         DB::transaction(function () use ($task, $teacher, $request, $data, $links, $version, $old) {
