@@ -485,7 +485,7 @@ class TaskController extends Controller
 
     private function canManageTask(Request $request, Task $task): bool
     {
-        if ($this->isPersonal($task) || $this->isTaskAssignee($request, $task) || ! $request->user()->hasPermission('tasks.assign')) {
+        if ($this->isPersonal($task) || ! $request->user()->hasPermission('tasks.assign')) {
             return false;
         }
 
@@ -516,7 +516,7 @@ class TaskController extends Controller
         if ($this->isReviewer($task, $request->user()->id)) {
             return true;
         }
-        if ($this->isTaskAssignee($request, $task)) {
+        if ($this->isPersonalTaskFor($request, $task)) {
             return false;
         }
 
@@ -540,12 +540,11 @@ class TaskController extends Controller
     private function reviewQueue($query, Request $request)
     {
         $user = $request->user();
-        $units = $user->memberUnitIds();
+        $teacherId = $user->teacher?->id ?? 0;
 
         return $query->where('status', Task::WAITING_APPROVAL)
-            ->where(fn ($q) => $q->whereHas('reviewers', fn ($r) => $r->where('users.id', $user->id))->orWhere(function ($b) use ($user, $units, $request) {
-                $b->whereDoesntHave('teachers', fn ($t) => $t->where('teachers.id', $user->teacher?->id ?? 0))
-                    ->whereDoesntHave('departments', fn ($d) => $d->whereIn('departments.id', $units ?: [0]));
+            ->where(fn ($q) => $q->whereHas('reviewers', fn ($r) => $r->where('users.id', $user->id))->orWhere(function ($b) use ($user, $teacherId, $request) {
+                $b->whereNot(fn ($own) => $own->where('created_by', $user->id)->doesntHave('departments')->whereHas('teachers', fn ($t) => $t->where('teachers.id', $teacherId))->has('teachers', '=', 1));
                 if (! $this->hasSchoolWideTaskAuthority($request)) {
                     $b->where('created_by', $user->id);
                 }
