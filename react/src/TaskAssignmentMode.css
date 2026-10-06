@@ -25,10 +25,10 @@
 }
 
 .assignment-mode-picker button.active {
-  border-color: #d7d0fa;
-  color: #6048d2;
+  border-color: var(--c-primary-soft-2);
+  color: var(--c-primary);
   background: #fff;
-  box-shadow: 0 2px 8px rgba(45, 35, 105, 0.09);
+  box-shadow: 0 2px 8px rgba(15,23,42,0.045);
 }
 
 @media (max-width: 680px) {

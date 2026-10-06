@@ -47,8 +47,8 @@
 .task-drawer-tags code {
   padding: 3px 7px;
   border-radius: 6px;
-  color: #6451c9;
-  background: #f1effe;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
   font-family: inherit;
   font-size: 11px;
   font-weight: 700;
@@ -79,9 +79,9 @@
 }
 
 .task-drawer-head-actions button:hover {
-  color: #5a3fd6;
-  border-color: #d8d1fc;
-  background: #f6f4ff;
+  color: var(--c-primary);
+  border-color: var(--c-primary-soft-2);
+  background: var(--c-primary-tint);
 }
 
 .task-drawer-body {
@@ -99,9 +99,9 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  border: 1px solid #e3ddfb;
-  border-radius: 12px;
-  background: #faf9ff;
+  border: 1px solid var(--c-primary-soft-2);
+  border-radius: 7px;
+  background: var(--c-primary-tint);
 }
 
 .drawer-actions .workflow-form {
@@ -139,8 +139,8 @@
 
 .drawer-actions textarea:focus,
 .comment-composer textarea:focus {
-  border-color: #a996f7;
-  box-shadow: 0 0 0 3px rgba(106, 78, 224, 0.12);
+  border-color: var(--c-primary-line);
+  box-shadow: 0 0 0 3px rgba(31,78,121,0.12);
 }
 
 .drawer-action-row {
@@ -186,15 +186,15 @@
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.6px;
-  text-transform: uppercase;
+  text-transform:none;
 }
 
 .drawer-section h4 em {
   min-width: 18px;
   padding: 1px 6px;
-  border-radius: 99px;
-  color: #5a3fd6;
-  background: #efebff;
+  border-radius: 4px;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
   font-size: 11px;
   font-style: normal;
   letter-spacing: 0;
@@ -235,8 +235,8 @@
   display: grid;
   place-items: center;
   border-radius: 8px;
-  color: #6650d5;
-  background: #eeebff;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
 }
 
 .drawer-section .detail-attachments button > div {
@@ -346,8 +346,8 @@
 .task-drawer-type {
   padding: 3px 8px;
   border-radius: 99px;
-  color: #4f46b8;
-  background: #eef0ff;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
   font-size: 11px;
   font-weight: 700;
 }
@@ -355,7 +355,7 @@
 .task-timeline {
   padding: 14px 16px;
   border: 1px solid #e6e9f0;
-  border-radius: 12px;
+  border-radius: 7px;
   background: #fafbfd;
 }
 
@@ -389,7 +389,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border-radius: 99px;
+  border-radius: 4px;
   font-size: 12px;
   font-style: normal;
   font-weight: 700;
@@ -421,7 +421,7 @@
 }
 
 .task-timeline.good .task-timeline-track i {
-  background: linear-gradient(90deg, #17a871, #57cd9c);
+  background: #2f7a5b;
 }
 
 .task-timeline.warn em {
@@ -430,7 +430,7 @@
 }
 
 .task-timeline.warn .task-timeline-track i {
-  background: linear-gradient(90deg, #f0a43a, #f7c672);
+  background: #b7791f;
 }
 
 .task-timeline.alert {
@@ -444,14 +444,14 @@
 }
 
 .task-timeline.alert .task-timeline-track i {
-  background: linear-gradient(90deg, #df5266, #f19da8);
+  background: #b03a48;
 }
 
 .task-drawer-people {
   display: flex;
   flex-direction: column;
   border: 1px solid #e6e9f0;
-  border-radius: 12px;
+  border-radius: 7px;
 }
 
 .person-row {
@@ -609,8 +609,8 @@
 }
 
 .drawer-file:hover {
-  border-color: #d8d1fc;
-  background: #faf9ff;
+  border-color: var(--c-primary-soft-2);
+  background: var(--c-primary-tint);
 }
 
 .drawer-file-main {
@@ -634,8 +634,8 @@
   display: grid;
   place-items: center;
   border-radius: 8px;
-  color: #6650d5;
-  background: #eeebff;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
 }
 
 .drawer-file-main > span {

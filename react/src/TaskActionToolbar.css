@@ -10,7 +10,7 @@
   gap: 13px;
   padding: 18px;
   border: 1px solid #e5e8f1;
-  border-radius: 15px;
+  border-radius: 8px;
   background: #fff;
   text-align: left;
   color: #24314b;
@@ -21,11 +21,11 @@
 }
 .task-action-cards > button:hover,
 .task-action-cards > button.selected {
-  border-color: #a38cf0;
+  border-color: var(--c-primary-line);
   box-shadow: 0 5px 18px #6751d51a;
 }
 .task-action-cards > button.selected {
-  background: #faf8ff;
+  background: var(--c-primary-tint);
 }
 .task-action-cards i {
   width: 47px;
@@ -33,9 +33,9 @@
   flex-shrink: 0;
   display: grid;
   place-items: center;
-  background: #efebff;
-  color: #7053e5;
-  border-radius: 13px;
+  background: var(--c-primary-soft);
+  color: var(--c-primary);
+  border-radius: 7px;
 }
 .task-action-cards .blue i {
   background: #e8f2ff;
@@ -100,9 +100,9 @@
   cursor: pointer;
 }
 .task-action-main-filters > button.active {
-  color: #674ed5;
-  background: #f4f0ff;
-  border-color: #d2c7f9;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
+  border-color: var(--c-primary-soft-2);
 }
 .action-task-search {
   display: flex;
@@ -123,9 +123,9 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
-  border: 1px solid #e4e0f4;
-  border-radius: 11px;
-  background: #faf9fe;
+  border: 1px solid var(--c-primary-soft-2);
+  border-radius: 7px;
+  background: var(--c-primary-tint);
 }
 .task-action-advanced > label {
   display: grid;
@@ -156,15 +156,15 @@
   align-items: center;
   gap: 8px;
   margin-top: 12px;
-  color: #6d5bb2;
+  color: var(--c-primary);
   font-size: 11px;
 }
 .task-action-active button {
   padding: 4px 8px;
   border: 0;
   border-radius: 5px;
-  background: #f0ecff;
-  color: #674ed1;
+  background: var(--c-primary-soft);
+  color: var(--c-primary);
   cursor: pointer;
 }
 @media (max-width: 1150px) {

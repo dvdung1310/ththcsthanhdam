@@ -14,7 +14,7 @@
   flex-direction: column;
   overflow: hidden;
   border: 1px solid #e6e9f1;
-  border-radius: 13px;
+  border-radius: 7px;
   background: #fff;
 }
 
@@ -55,7 +55,7 @@
 .dl-splitter:hover::after,
 body.dl-resizing .dl-splitter::after {
   height: 100%;
-  background: #a996f7;
+  background: var(--c-primary-line);
 }
 
 body.dl-resizing {
@@ -71,7 +71,7 @@ body.dl-resizing {
   flex-direction: column;
   overflow: hidden;
   border: 1px solid #e6e9f1;
-  border-radius: 13px;
+  border-radius: 7px;
   background: #fff;
 }
 
@@ -113,8 +113,8 @@ body.dl-resizing {
 }
 
 .dl-breadcrumbs button:hover {
-  color: #5a3fd6;
-  background: #f6f4ff;
+  color: var(--c-primary);
+  background: var(--c-primary-tint);
 }
 
 .dl-filters {
@@ -178,7 +178,7 @@ body.dl-resizing {
 }
 
 .dl-content.dragging {
-  background: #faf9ff;
+  background: var(--c-primary-tint);
 }
 
 .dl-drop-hint {
@@ -189,10 +189,10 @@ body.dl-resizing {
   place-items: center;
   align-content: center;
   gap: 8px;
-  border: 2px dashed #a996f7;
-  border-radius: 12px;
-  color: #5a3fd6;
-  background: rgba(250, 249, 255, 0.92);
+  border: 2px dashed var(--c-primary-line);
+  border-radius: 7px;
+  color: var(--c-primary);
+  background: rgba(31,78,121,0.92);
   font-size: 14px;
   font-weight: 700;
   pointer-events: none;
@@ -220,7 +220,7 @@ body.dl-resizing {
   font-weight: 700;
   letter-spacing: 0.4px;
   text-align: left;
-  text-transform: uppercase;
+  text-transform:none;
   white-space: nowrap;
 }
 
@@ -242,7 +242,7 @@ body.dl-resizing {
 }
 
 .dl-table tbody tr.selected {
-  background: #f1eeff;
+  background: var(--c-primary-soft);
 }
 
 .dl-table td.dl-name {
@@ -266,8 +266,8 @@ body.dl-resizing {
 }
 
 .dl-node-icon.file {
-  color: #6a4ee0;
-  background: #f1eeff;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
 }
 
 .dl-node-icon.folder {
@@ -462,7 +462,7 @@ body.dl-resizing {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.6px;
-  text-transform: uppercase;
+  text-transform:none;
 }
 
 .dl-ai {
@@ -471,10 +471,10 @@ body.dl-resizing {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  border: 1px solid #ddd6fe;
+  border: 1px solid var(--c-primary-soft-2);
   border-radius: 8px;
-  color: #5a3fd6;
-  background: #faf9ff;
+  color: var(--c-primary);
+  background: var(--c-primary-tint);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -511,7 +511,7 @@ body.dl-resizing {
   margin-left: 6px;
   padding: 0;
   border: 0;
-  color: #5a3fd6;
+  color: var(--c-primary);
   background: none;
   font: inherit;
   font-weight: 700;
@@ -525,7 +525,7 @@ body.dl-resizing {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  border-radius: 14px;
+  border-radius: 8px;
   background: #fff;
   box-shadow: 0 25px 70px rgba(13, 20, 45, 0.25);
 }
@@ -546,8 +546,8 @@ body.dl-resizing {
 }
 
 .dl-name-dialog input:focus {
-  border-color: #a996f7;
-  box-shadow: 0 0 0 3px rgba(106, 78, 224, 0.12);
+  border-color: var(--c-primary-line);
+  box-shadow: 0 0 0 3px rgba(31,78,121,0.12);
 }
 
 .dl-name-dialog footer {
@@ -622,8 +622,8 @@ body.dl-resizing {
   flex: none;
   padding: 2px 7px;
   border-radius: 99px;
-  color: #5a3fd6;
-  background: #efebff;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
   font-size: 11px;
   font-weight: 700;
 }
@@ -666,7 +666,7 @@ body.dl-resizing {
 }
 
 .dl-detail-task b {
-  color: #5a3fd6;
+  color: var(--c-primary);
   font-size: 12px;
 }
 
@@ -680,7 +680,7 @@ body.dl-resizing {
   align-self: flex-start;
   margin-top: 4px;
   padding: 2px 8px;
-  border-radius: 99px;
+  border-radius: 4px;
   color: #46516a;
   background: #eef0f5;
   font-size: 11px;
@@ -739,8 +739,8 @@ body.dl-resizing {
 }
 
 .dl-detail-locations button:hover {
-  border-color: #c6bdf5;
-  background: #faf9ff;
+  border-color: var(--c-primary-line);
+  background: var(--c-primary-tint);
 }
 
 .dl-detail-locations button svg {
@@ -769,12 +769,12 @@ body.dl-resizing {
   flex: none;
   display: grid;
   place-items: center;
-  border-radius: 12px;
+  border-radius: 7px;
 }
 
 .dl-detail-icon.file {
-  color: #6a4ee0;
-  background: #f1eeff;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
 }
 
 .dl-detail-icon.folder {
@@ -830,7 +830,7 @@ body.dl-resizing {
   display: flex;
   flex-direction: column;
   border: 1px solid #eceef3;
-  border-radius: 11px;
+  border-radius: 7px;
 }
 
 .dl-info > div {
@@ -873,7 +873,7 @@ body.dl-resizing {
   border-radius: 50%;
   object-fit: cover;
   color: #fff;
-  background: linear-gradient(135deg, #8b6cf0, #5a3fd6);
+  background: var(--c-primary);
   font-style: normal;
   font-weight: 700;
 }
@@ -956,7 +956,7 @@ body.dl-resizing {
 .dl-link-btn {
   padding: 0;
   border: 0;
-  color: #5a3fd6;
+  color: var(--c-primary);
   background: none;
   font-size: 12px;
   font-weight: 700;
@@ -979,8 +979,8 @@ body.dl-resizing {
 
 .dl-shared-mark:hover,
 .dl-shared-mark:focus-visible {
-  color: #5a3fd6;
-  background: #efebff;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
 }
 
 .dl-share-tip {
@@ -1001,7 +1001,7 @@ body.dl-resizing {
   color: #8a92a8;
   font-size: 11px;
   letter-spacing: 0.4px;
-  text-transform: uppercase;
+  text-transform:none;
 }
 
 .dl-share-tip > span {
@@ -1059,7 +1059,7 @@ body.dl-resizing {
 
 .dl-collapse:hover h4,
 .dl-collapse:hover h5 {
-  color: #5a3fd6;
+  color: var(--c-primary);
 }
 
 .dl-access-summary {
@@ -1069,7 +1069,7 @@ body.dl-resizing {
   align-items: center;
   gap: 10px;
   border: 1px solid #eceef3;
-  border-radius: 11px;
+  border-radius: 7px;
   color: #46516a;
   background: #fff;
   font-size: 13px;
@@ -1079,8 +1079,8 @@ body.dl-resizing {
 }
 
 .dl-access-summary:hover {
-  border-color: #c6bdf5;
-  background: #faf9ff;
+  border-color: var(--c-primary-line);
+  background: var(--c-primary-tint);
 }
 
 .dl-access-summary > span:last-child {

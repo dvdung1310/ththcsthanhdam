@@ -105,7 +105,7 @@
   width: min(360px, 100%);
   padding: 8px;
   border: 1px solid #e3e6ef;
-  border-radius: 12px;
+  border-radius: 7px;
   background: #fff;
   box-shadow: 0 16px 40px rgba(17, 24, 48, 0.16);
 }

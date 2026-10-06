@@ -30,8 +30,8 @@
 }
 
 .action-menu button:hover:not(:disabled) {
-  color: #5e48d1;
-  background: #f0edff;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
 }
 
 .action-menu button:disabled {
@@ -77,6 +77,6 @@
 .action-menu-trigger:hover,
 .action-menu-trigger.open {
   border-color: #e5e7ee;
-  color: #5a3fd6;
-  background: #f6f4ff;
+  color: var(--c-primary);
+  background: var(--c-primary-tint);
 }

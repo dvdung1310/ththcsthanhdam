@@ -54,7 +54,7 @@
 .task-type-card {
   overflow: hidden;
   border: 1px solid #eceef4;
-  border-radius: 16px;
+  border-radius: 8px;
   background: #fff;
   box-shadow: 0 8px 24px rgba(31, 42, 72, 0.05);
 }
@@ -78,7 +78,7 @@
 }
 
 .task-type-toolbar h2 svg {
-  color: #6a4fe0;
+  color: var(--c-primary);
 }
 
 .task-type-chips {
@@ -94,7 +94,7 @@
   align-items: center;
   gap: 6px;
   border: 1px solid #e3e6ee;
-  border-radius: 99px;
+  border-radius: 4px;
   color: #52607f;
   background: #fff;
   font-size: 12px;
@@ -103,15 +103,15 @@
 }
 
 .task-type-chips button.active {
-  border-color: #c6bdf5;
-  color: #4b33c9;
-  background: #f1eeff;
+  border-color: var(--c-primary-line);
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
 }
 
 .task-type-chips em {
   min-width: 18px;
   padding: 0 5px;
-  border-radius: 99px;
+  border-radius: 4px;
   background: #eef0f5;
   font-size: 11px;
   font-style: normal;
@@ -132,8 +132,8 @@
 }
 
 .task-type-search:focus-within {
-  border-color: #8b6cf0;
-  outline: 3px solid rgba(139, 108, 240, 0.15);
+  border-color: var(--c-primary);
+  outline: 3px solid rgba(31,78,121,0.15);
 }
 
 .task-type-search input {
@@ -160,7 +160,7 @@
   font-weight: 700;
   letter-spacing: 0.4px;
   text-align: left;
-  text-transform: uppercase;
+  text-transform:none;
 }
 
 .task-type-table td {
@@ -174,7 +174,7 @@
 }
 
 .task-type-table tbody tr:hover {
-  background: #faf9ff;
+  background: var(--c-primary-tint);
 }
 
 .task-type-table td b,
@@ -219,7 +219,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border-radius: 99px;
+  border-radius: 4px;
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
@@ -264,8 +264,8 @@
 
 .task-type-actions > button:hover {
   border-color: #e5e7ee;
-  color: #5a3fd6;
-  background: #f6f4ff;
+  color: var(--c-primary);
+  background: var(--c-primary-tint);
 }
 
 .task-type-actions .action-menu-trigger {
@@ -293,7 +293,7 @@
   padding: 20px 22px;
   display: grid;
   gap: 14px;
-  border-radius: 16px;
+  border-radius: 8px;
   background: #fff;
   box-shadow: 0 24px 60px rgba(15, 23, 49, 0.25);
 }
@@ -327,9 +327,9 @@
   flex: none;
   display: grid;
   place-items: center;
-  border-radius: 11px;
-  color: #5a43c9;
-  background: #f1edff;
+  border-radius: 7px;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
 }
 
 .task-type-dialog-close {
@@ -379,8 +379,8 @@
 
 .task-type-dialog input:focus,
 .task-type-dialog textarea:focus {
-  border-color: #8b6cf0;
-  box-shadow: 0 0 0 3px rgba(139, 108, 240, 0.15);
+  border-color: var(--c-primary);
+  box-shadow: 0 0 0 3px rgba(31,78,121,0.15);
 }
 
 .task-type-dialog-error {

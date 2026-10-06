@@ -9,7 +9,7 @@
   display: flex;
   flex-direction: column;
   border: 1px solid #e3e6ee;
-  border-radius: 12px;
+  border-radius: 7px;
   background: #fff;
   box-shadow: 0 18px 40px rgba(31, 42, 72, 0.18);
   overflow: hidden;
@@ -61,7 +61,7 @@
 }
 
 .pp-unit.focused {
-  background: #efebff;
+  background: var(--c-primary-soft);
 }
 
 .pp-unit-name {
@@ -80,7 +80,7 @@
 }
 
 .pp-unit.focused .pp-unit-name {
-  color: #4b33c9;
+  color: var(--c-primary);
   font-weight: 700;
 }
 
@@ -122,8 +122,8 @@
 }
 
 .people-picker .pp-check.checked {
-  border-color: #6a4ee0;
-  background: #6a4ee0;
+  border-color: var(--c-primary);
+  background: var(--c-primary);
 }
 
 .pp-people {
@@ -213,7 +213,7 @@
 }
 
 .pp-person.selected {
-  background: #f1eeff;
+  background: var(--c-primary-soft);
 }
 
 .pp-person > img,
@@ -228,8 +228,8 @@
 .pp-person > i {
   display: grid;
   place-items: center;
-  color: #5e46d6;
-  background: #ece8ff;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
   font-size: 12px;
   font-style: normal;
   font-weight: 700;
@@ -237,7 +237,7 @@
 
 .pp-person > svg {
   flex: none;
-  color: #6a4ee0;
+  color: var(--c-primary);
 }
 
 .pp-person-main {
@@ -278,8 +278,8 @@
 }
 
 .pp-roles em.unit {
-  color: #5a3fd6;
-  background: #efebff;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
 }
 
 .pp-roles em.plain {
@@ -297,8 +297,8 @@
 .reviewer-picker .assignee-chip small {
   padding: 1px 6px;
   border-radius: 5px;
-  color: #5a3fd6;
-  background: #efebff;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
   font-size: 11px;
 }
 
@@ -327,7 +327,7 @@
   place-items: center;
   border-radius: 50%;
   color: #fff;
-  background: linear-gradient(145deg, #7b68df, #5541c8);
+  background: var(--c-primary);
   font-size: 10px;
   font-style: normal;
   font-weight: 700;
@@ -374,8 +374,8 @@
 }
 
 .people-picker .pp-expand:hover {
-  color: #5a3fd6;
-  background: #ece8ff;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
 }
 
 .people-picker .pp-expand svg {
@@ -396,7 +396,7 @@
   padding: 1px 6px;
   border-radius: 99px;
   color: #fff;
-  background: #6a4ee0;
+  background: var(--c-primary);
   font-size: 10px;
   font-style: normal;
   font-weight: 700;

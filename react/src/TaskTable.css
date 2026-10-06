@@ -62,7 +62,7 @@
 
 .task-table tbody tr:hover td:first-child,
 .task-table tbody tr:hover td:last-child {
-  background: #faf9ff;
+  background: var(--c-primary-tint);
 }
 
 .task-table-wrap.shadow-left .task-table th:first-child,
@@ -106,14 +106,14 @@
 }
 
 .name-chip.me {
-  color: #5a3fd6;
-  background: #efebff;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
 }
 
 .name-chip.more {
-  color: #5a3fd6;
+  color: var(--c-primary);
   background: #fff;
-  border: 1px solid #ddd6fe;
+  border: 1px solid var(--c-primary-soft-2);
   cursor: help;
 }
 
@@ -135,9 +135,9 @@
   right: -6px;
   display: grid;
   place-items: center;
-  border-radius: 99px;
+  border-radius: 4px;
   color: #fff;
-  background: #7153e3;
+  background: var(--c-primary);
   font-size: 9px;
   font-style: normal;
 }
@@ -162,9 +162,9 @@
 
 .column-picker > button.active,
 .column-picker > button:hover {
-  color: #5a3fd6;
-  border-color: #d8d1fc;
-  background: #f6f4ff;
+  color: var(--c-primary);
+  border-color: var(--c-primary-soft-2);
+  background: var(--c-primary-tint);
 }
 
 .column-picker-menu {
@@ -217,7 +217,7 @@
 }
 
 .task-type-name {
-  color: #4f46b8;
+  color: var(--c-primary);
   font-weight: 700;
 }
 
@@ -234,7 +234,7 @@
 }
 
 .name-stack.clickable:hover .name-chip.more {
-  border-color: #a996f7;
+  border-color: var(--c-primary-line);
 }
 
 .name-popover {
@@ -244,7 +244,7 @@
   z-index: 60;
   overflow-y: auto;
   border: 1px solid #e3e6ee;
-  border-radius: 12px;
+  border-radius: 7px;
   background: #fff;
   box-shadow: 0 18px 40px rgba(31, 42, 72, 0.18);
   white-space: normal;

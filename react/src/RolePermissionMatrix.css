@@ -1,7 +1,7 @@
 .matrix-card {
   padding: 22px 24px;
   border: 1px solid #eceef4;
-  border-radius: 16px;
+  border-radius: 8px;
   background: #fff;
   box-shadow: 0 8px 24px rgba(31, 42, 72, 0.05);
 }
@@ -35,13 +35,13 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  border: 1px solid #e4e0fb;
-  border-radius: 12px;
-  background: #faf9ff;
+  border: 1px solid var(--c-primary-soft-2);
+  border-radius: 7px;
+  background: var(--c-primary-tint);
 }
 
 .matrix-savebar span {
-  color: #5a43c9;
+  color: var(--c-primary);
   font-size: 12px;
   font-weight: 600;
 }
@@ -62,7 +62,7 @@
 .matrix-wrap {
   overflow: auto;
   border: 1px solid #eceef3;
-  border-radius: 12px;
+  border-radius: 7px;
 }
 
 .matrix {
@@ -78,12 +78,12 @@
   padding: 12px 8px;
   vertical-align: top;
   border-bottom: 1px solid #eceef3;
-  background: #fbfbfd;
+  background: var(--c-primary-tint);
   text-align: center;
 }
 
 .matrix th.dirty {
-  background: #f3efff;
+  background: var(--c-primary-soft);
 }
 
 .matrix th b,
@@ -151,12 +151,12 @@
 
 .matrix .module-row td {
   padding: 8px 14px;
-  color: #6b50df;
-  background: #f7f6fd;
+  color: var(--c-primary);
+  background: var(--c-primary-tint);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
+  text-transform:none;
 }
 
 .matrix td {
@@ -168,13 +168,13 @@
 }
 
 .matrix td.cell.changed {
-  background: #f3efff;
+  background: var(--c-primary-soft);
 }
 
 .matrix td.cell input {
   width: 17px;
   height: 17px;
-  accent-color: #6549db;
+  accent-color: var(--c-primary);
   cursor: pointer;
 }
 
