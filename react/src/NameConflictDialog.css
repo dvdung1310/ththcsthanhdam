@@ -38,7 +38,7 @@
 
 .name-conflict-dialog header p {
   margin: 4px 0 0;
-  color: #6d7690;
+  color: var(--c-text-2);
   font-size: 13px;
   overflow-wrap: anywhere;
 }
@@ -81,7 +81,7 @@
 .ncd-options small {
   display: block;
   margin-top: 2px;
-  color: #8a92a8;
+  color: var(--c-muted);
   font-size: 12px;
   overflow-wrap: anywhere;
 }

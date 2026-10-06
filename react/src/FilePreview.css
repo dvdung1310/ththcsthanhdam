@@ -46,7 +46,7 @@
 
 .fp-title small {
   margin-top: 2px;
-  color: #9aa1b8;
+  color: var(--c-muted);
   font-size: 12px;
 }
 
@@ -221,7 +221,7 @@
 
 .fp-tools small {
   padding: 0 8px 0 6px;
-  color: #9aa1b8;
+  color: var(--c-muted);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -305,7 +305,7 @@
 }
 
 .fp-card-icon.error {
-  color: #c2273a;
+  color: var(--c-danger);
   background: #fdecee;
 }
 
@@ -318,13 +318,13 @@
 }
 
 .fp-card > small {
-  color: #8a92a8;
+  color: var(--c-muted);
   font-size: 12px;
 }
 
 .fp-card p {
   margin: 6px 0 12px;
-  color: #6d7690;
+  color: var(--c-text-2);
   font-size: 13px;
   line-height: 1.5;
 }

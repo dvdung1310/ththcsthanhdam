@@ -39,7 +39,7 @@
 
 .personnel-drawer > header p {
   margin: 4px 0 0;
-  color: #8a92a8;
+  color: var(--c-muted);
   font-size: 12px;
 }
 
@@ -50,7 +50,7 @@
   place-items: center;
   border: 1px solid #e3e6ed;
   border-radius: 9px;
-  color: #65708b;
+  color: var(--c-text-2);
   background: #fff;
   cursor: pointer;
 }
@@ -216,7 +216,7 @@
 }
 
 .role-pick > label small {
-  color: #8a92a8;
+  color: var(--c-muted);
   font-size: 11px;
 }
 
@@ -254,7 +254,7 @@
 .role-readonly small {
   width: 100%;
   margin-top: 6px;
-  color: #9299ab;
+  color: var(--c-muted);
   font-size: 11px;
 }
 
@@ -262,7 +262,7 @@
   margin-top: 14px;
   padding: 10px 12px;
   border-radius: 9px;
-  color: #b4232f;
+  color: var(--c-danger);
   background: #fdecee;
   font-size: 12px;
   font-weight: 600;
@@ -281,7 +281,7 @@
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  color: #9299ab;
+  color: var(--c-muted);
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -297,7 +297,7 @@
   align-items: center;
   gap: 6px;
   border: 0;
-  color: #e44856;
+  color: var(--c-danger);
   background: none;
   font-size: 12px;
   font-weight: 600;
@@ -370,7 +370,7 @@
 }
 
 .ev-teacher-month small {
-  color: #8a92a8;
+  color: var(--c-muted);
   font-size: 11px;
   font-weight: 600;
 }
@@ -383,7 +383,7 @@
 
 .ev-teacher-month.pending em,
 .ev-teacher-month.empty {
-  color: #a0a7b9;
+  color: var(--c-muted);
   font-style: italic;
 }
 

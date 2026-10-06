@@ -12,7 +12,10 @@
   --c-accent: #f8b808;
   --c-text: #1f2937;
   --c-text-2: #4b5563;
-  --c-muted: #6b7280;
+  --c-muted: #5f6775;
+  --c-warning: #9a5b0b;
+  --c-success: #1d6b3f;
+  --c-danger: #a8323e;
   --c-border: #dde1e6;
   --c-border-soft: #eceef1;
   --c-bg: #f4f5f7;
@@ -144,8 +147,13 @@
   color: var(--c-muted) !important;
 }
 
-.app-shell .ev-page a {
+.app-shell .ev-page a:not(.primary-btn):not(.secondary-btn) {
   color: var(--c-primary);
+}
+
+.app-shell .primary-btn,
+.app-shell a.primary-btn {
+  color: #fff !important;
 }
 
 .app-shell .ev-page .ev-table th,
