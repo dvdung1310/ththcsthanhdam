@@ -191,6 +191,7 @@ class TaskController extends Controller
         $data = $this->validateTask($request);
         $this->ensureAssignmentScope($request, $data);
         $before = $this->taskSnapshot($task);
+        $assignedBefore = $this->assigneeUsers($task)->pluck('id')->all();
         $added = DB::transaction(function () use ($request, $data, $task) {
             $task->update($this->taskAttributes($data));
             $this->syncAssignees($task, $data, $request->user());
@@ -202,6 +203,7 @@ class TaskController extends Controller
         });
         $this->notifyReviewers($task, $added);
         $this->logTaskChanges($request, $task, $before);
+        $this->notifyAssignees($task, [...$assignedBefore, $request->user()->id]);
 
         return response()->json(['message' => 'Đã cập nhật công việc thành công.', 'data' => $this->serialize($this->loadTask($task))]);
     }
@@ -857,9 +859,9 @@ class TaskController extends Controller
         });
     }
 
-    private function notifyAssignees(Task $task): void
+    private function notifyAssignees(Task $task, array $exceptIds = []): void
     {
-        $this->assigneeUsers($task)->unique('id')->each(function (User $user) use ($task) {
+        $this->assigneeUsers($task)->unique('id')->reject(fn (User $user) => in_array($user->id, $exceptIds, true))->each(function (User $user) use ($task) {
             try {
                 $user->notify(new TaskAssignedNotification($task));
             } catch (\Throwable $exception) {
