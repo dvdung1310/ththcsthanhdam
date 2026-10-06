@@ -39,9 +39,10 @@ export default function NotificationCenter({ user, onOpenTask, onOpenLink, onUnr
   }, [open])
 
   const loadNotifications = useCallback(async () => {
-    const response = await apiFetch('/api/notifications', { headers: { Accept: 'application/json' }, silent: true })
-    if (!response.ok) return
-    const payload = await response.json()
+    const response = await apiFetch('/api/notifications', { headers: { Accept: 'application/json' }, silent: true }).catch(() => null)
+    if (!response?.ok) return
+    const payload = await response.json().catch(() => null)
+    if (!payload) return
     const newest = payload.data?.[0]
     if (latestNotificationId.current && newest?.id !== latestNotificationId.current && !newest?.read_at) {
       setToast({ ...newest.data, title: newest.data?.title, message: newest.data?.message })
@@ -88,7 +89,7 @@ export default function NotificationCenter({ user, onOpenTask, onOpenLink, onUnr
   }, [user?.id, loadNotifications])
 
   const markRead = async (notification) => {
-    if (!notification.read_at) await apiFetch(`/api/notifications/${notification.id}/read`, { method: 'POST', headers: { Accept: 'application/json' } })
+    if (!notification.read_at) await apiFetch(`/api/notifications/${notification.id}/read`, { method: 'POST', headers: { Accept: 'application/json' } }).catch(() => null)
     await loadNotifications()
     if (notification.data?.link) onOpenLink?.(notification.data.link)
     else if (notification.data?.code) onOpenTask?.(notification.data.code)
@@ -96,7 +97,7 @@ export default function NotificationCenter({ user, onOpenTask, onOpenLink, onUnr
   }
 
   const markAllRead = async () => {
-    await apiFetch('/api/notifications/read-all', { method: 'POST', headers: { Accept: 'application/json' } })
+    await apiFetch('/api/notifications/read-all', { method: 'POST', headers: { Accept: 'application/json' } }).catch(() => null)
     await loadNotifications()
   }
 
