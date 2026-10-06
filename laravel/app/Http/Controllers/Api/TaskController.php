@@ -35,7 +35,9 @@ class TaskController extends Controller
 {
     private const SUBMISSION_ACTIVITY = ['Đã gửi bài nộp.', 'Đã chỉnh sửa bài nộp', 'Đã yêu cầu chỉnh sửa bài nộp.'];
 
-    private const ACTIVITY_PREFIXES = ['Đã gửi bài nộp.', 'Đã chỉnh sửa bài nộp', 'Đã xác nhận hoàn thành.', 'Đã yêu cầu chỉnh sửa bài nộp.', 'Đã bật chia sẻ bài nộp', 'Đã tắt chia sẻ bài nộp', 'Hủy công việc: '];
+    private const ACTIVITY_PREFIXES = ['Đã gửi bài nộp.', 'Đã chỉnh sửa bài nộp', 'Đã xác nhận hoàn thành.', 'Đã yêu cầu chỉnh sửa bài nộp.', 'Đã bật chia sẻ bài nộp', 'Đã tắt chia sẻ bài nộp', 'Đã tạo công việc', 'Đã cập nhật công việc:', 'Đã bắt đầu thực hiện', 'Hủy công việc: '];
+
+    private const PRIORITY_LABELS = ['low' => 'Thấp', 'normal' => 'Bình thường', 'high' => 'Cao', 'urgent' => 'Khẩn cấp'];
 
     public function index(Request $request): JsonResponse
     {
@@ -107,6 +109,7 @@ class TaskController extends Controller
             $this->syncLibraryFiles($request, $task, $data);
             $this->storeAttachments($request, $task);
             $this->recordStatus($task, null, Task::NOT_STARTED, 'Khởi tạo và giao công việc', $request->user());
+            $task->updates()->create(['created_by' => $request->user()->id, 'status' => Task::NOT_STARTED, 'content' => 'Đã tạo công việc.']);
 
             return $task;
         });
@@ -129,6 +132,7 @@ class TaskController extends Controller
             $this->syncLibraryFiles($request, $task, $data);
             $this->storeAttachments($request, $task);
             $this->recordStatus($task, null, Task::NOT_STARTED, 'Tự tạo công việc cá nhân', $request->user());
+            $task->updates()->create(['created_by' => $request->user()->id, 'status' => Task::NOT_STARTED, 'content' => 'Đã tạo công việc.']);
 
             return $task;
         });
@@ -186,6 +190,7 @@ class TaskController extends Controller
         abort_unless($this->canManageTask($request, $task), 403, 'Bạn không được sửa công việc này.');
         $data = $this->validateTask($request);
         $this->ensureAssignmentScope($request, $data);
+        $before = $this->taskSnapshot($task);
         $added = DB::transaction(function () use ($request, $data, $task) {
             $task->update($this->taskAttributes($data));
             $this->syncAssignees($task, $data, $request->user());
@@ -196,6 +201,7 @@ class TaskController extends Controller
             return $this->syncReviewers($task, $data);
         });
         $this->notifyReviewers($task, $added);
+        $this->logTaskChanges($request, $task, $before);
 
         return response()->json(['message' => 'Đã cập nhật công việc thành công.', 'data' => $this->serialize($this->loadTask($task))]);
     }
@@ -205,6 +211,7 @@ class TaskController extends Controller
         abort_unless($this->isPersonalTaskFor($request, $task), 403, 'Bạn chỉ được sửa công việc cá nhân do chính mình tạo.');
         $request->merge(['teacher_ids' => [$request->user()->teacher->id], 'department_ids' => []]);
         $data = $this->validateTask($request);
+        $before = $this->taskSnapshot($task);
         $added = DB::transaction(function () use ($request, $data, $task) {
             $task->update($this->taskAttributes($data));
             $this->syncLibraryFiles($request, $task, $data);
@@ -214,6 +221,7 @@ class TaskController extends Controller
             return $this->syncReviewers($task, $data);
         });
         $this->notifyReviewers($task, $added);
+        $this->logTaskChanges($request, $task, $before);
 
         return response()->json(['message' => 'Đã cập nhật công việc cá nhân thành công.', 'data' => $this->serialize($this->loadTask($task))]);
     }
@@ -244,7 +252,8 @@ class TaskController extends Controller
         $old = $task->status;
         DB::transaction(function () use ($task, $data, $old, $request) {
             $task->update(['status' => $data['status']]);
-            $task->updates()->create(['teacher_id' => $request->user()->teacher?->id, 'created_by' => $request->user()->id, 'status' => $data['status'], 'content' => $data['content'] ?? null]);
+            $started = $old === Task::NOT_STARTED && $data['status'] === Task::IN_PROGRESS;
+            $task->updates()->create(['teacher_id' => $request->user()->teacher?->id, 'created_by' => $request->user()->id, 'status' => $data['status'], 'content' => $data['content'] ?? ($started ? 'Đã bắt đầu thực hiện.' : null)]);
             if ($old !== $data['status']) {
                 $this->recordStatus($task, $old, $data['status'], $data['content'] ?? 'Cập nhật trạng thái', $request->user());
             }
@@ -556,6 +565,84 @@ class TaskController extends Controller
             'can_self_complete' => $this->canSelfComplete($request, $task),
             'can_cancel' => $this->canCancel($request, $task),
         ];
+    }
+
+    private function taskSnapshot(Task $task): array
+    {
+        $task->refresh()->load(['teachers.user', 'departments', 'reviewers', 'libraryFiles', 'category']);
+        $attachments = DB::table('file_attachments')->join('files', 'files.id', '=', 'file_attachments.file_id')
+            ->where('attachable_type', Task::class)->where('attachable_id', $task->id)->pluck('files.original_name', 'files.id');
+
+        return [
+            'title' => $task->title,
+            'description' => trim((string) $task->description),
+            'starts_at' => $task->starts_at?->format('H:i d/m/Y'),
+            'due_at' => $task->due_at?->format('H:i d/m/Y'),
+            'priority' => $task->priority,
+            'category' => $task->category?->name,
+            'share' => (bool) $task->share_submissions,
+            'assignees' => [
+                ...$task->departments->mapWithKeys(fn ($unit) => ['u'.$unit->id => $unit->name])->all(),
+                ...$task->teachers->mapWithKeys(fn (Teacher $teacher) => ['t'.$teacher->id => $teacher->user?->name])->all(),
+            ],
+            'reviewers' => $task->reviewers->mapWithKeys(fn (User $user) => [$user->id => $user->name])->all(),
+            'files' => [
+                ...$task->libraryFiles->mapWithKeys(fn (LibraryNode $node) => ['l'.$node->id => $node->name])->all(),
+                ...$attachments->mapWithKeys(fn ($name, $id) => ['a'.$id => $name])->all(),
+            ],
+        ];
+    }
+
+    private function logTaskChanges(Request $request, Task $task, array $before): void
+    {
+        $after = $this->taskSnapshot($task);
+        $changes = [];
+        $moved = fn (?string $from, ?string $to, string $empty) => ($from ?? $empty).' → '.($to ?? $empty);
+        if ($before['title'] !== $after['title']) {
+            $changes[] = 'đổi tên thành “'.$after['title'].'”';
+        }
+        if ($before['due_at'] !== $after['due_at']) {
+            $changes[] = 'hạn '.$moved($before['due_at'], $after['due_at'], 'không thời hạn');
+        }
+        if ($before['starts_at'] !== $after['starts_at']) {
+            $changes[] = 'bắt đầu '.$moved($before['starts_at'], $after['starts_at'], 'chưa đặt');
+        }
+        if ($before['priority'] !== $after['priority']) {
+            $changes[] = 'ưu tiên '.(self::PRIORITY_LABELS[$before['priority']] ?? $before['priority']).' → '.(self::PRIORITY_LABELS[$after['priority']] ?? $after['priority']);
+        }
+        if ($before['category'] !== $after['category']) {
+            $changes[] = 'loại '.$moved($before['category'], $after['category'], 'không phân loại');
+        }
+        foreach (['assignees' => 'người thực hiện', 'reviewers' => 'người duyệt', 'files' => 'file'] as $key => $label) {
+            $addedNames = array_values(array_diff_key($after[$key], $before[$key]));
+            $removedNames = array_values(array_diff_key($before[$key], $after[$key]));
+            if ($addedNames) {
+                $changes[] = 'thêm '.$label.' '.$this->nameList($addedNames);
+            }
+            if ($removedNames) {
+                $changes[] = 'bỏ '.$label.' '.$this->nameList($removedNames);
+            }
+        }
+        if ($before['description'] !== $after['description']) {
+            $changes[] = 'sửa mô tả';
+        }
+        if ($before['share'] !== $after['share']) {
+            $changes[] = $after['share'] ? 'bật xem chéo bài nộp' : 'tắt xem chéo bài nộp';
+        }
+        if (! $changes) {
+            return;
+        }
+        $task->updates()->create(['created_by' => $request->user()->id, 'status' => $task->status, 'content' => 'Đã cập nhật công việc: '.implode(' · ', $changes).'.']);
+        if ($before['due_at'] !== $after['due_at'] && ! $this->isPersonal($task)) {
+            $this->notify($this->assigneeUsers($task), $task, $request->user()->name.' đã đổi hạn công việc '.$task->title.': '.($after['due_at'] ?? 'không thời hạn').'.', 'due_changed', $request->user());
+        }
+    }
+
+    private function nameList(array $names): string
+    {
+        $names = array_filter($names);
+
+        return count($names) > 3 ? implode(', ', array_slice($names, 0, 3)).' và '.(count($names) - 3).' mục khác' : implode(', ', $names);
     }
 
     private function canViewAllSubmissions(Request $request, Task $task): bool

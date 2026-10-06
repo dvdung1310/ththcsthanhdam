@@ -764,3 +764,13 @@
   background: var(--c-primary-tint);
   font-size: 12px;
 }
+
+.activity-changes {
+  margin: 3px 0 2px;
+  padding-left: 16px;
+  color: var(--c-text-2);
+}
+
+.activity-changes li {
+  margin: 1px 0;
+}

@@ -2110,6 +2110,23 @@ function useNarrowScreen() {
   return narrow;
 }
 
+const CHANGE_PREFIX = "Đã cập nhật công việc:";
+
+function ActivityText({ content }) {
+  if (!content.startsWith(CHANGE_PREFIX)) return content;
+  const changes = content.slice(CHANGE_PREFIX.length).trim().replace(/\.$/, "").split(" · ");
+  return (
+    <>
+      {CHANGE_PREFIX}
+      <ul className="activity-changes">
+        {changes.map((change) => (
+          <li key={change}>{change}</li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
 function TaskChat({ task, saving, editingComment, onEditComment, onSaveComment, onComment, onDraftChange, tab, collapsed, onToggle }) {
   const [filter, setFilter] = useState("all");
   const [limit, setLimit] = useState(CHAT_PAGE);
@@ -2187,7 +2204,7 @@ function TaskChat({ task, saving, editingComment, onEditComment, onSaveComment, 
             <div className={`comment-activity ${comment.id > seen ? "new" : ""}`} key={comment.id}>
               <Activity size={13} />
               <span>
-                <b>{comment.creator_name || "Hệ thống"}</b> {comment.content} <small>· {formatMoment(comment.created_at)}</small>
+                <b>{comment.creator_name || "Hệ thống"}</b> <ActivityText content={comment.content} /> <small>· {formatMoment(comment.created_at)}</small>
               </span>
             </div>
           ) : (
