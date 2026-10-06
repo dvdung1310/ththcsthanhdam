@@ -475,7 +475,7 @@ function LeaderPicker({ unit, slot, replacing, holders, onClose, onDone }) {
   );
   const current = slot.single ? holders[0] : replacing;
   const otherRole = chosen?.unit_role && chosen.unit_role !== slot.code ? unit.slots.find((s) => s.code === chosen.unit_role)?.name : null;
-  const kind = unit.type === "to" ? "tổ" : "nhóm";
+  const kind = unit.parent_id ? "nhóm" : "tổ";
 
   const confirm = async () => {
     setSaving(true);
