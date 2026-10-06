@@ -736,60 +736,47 @@ function AvatarStack({ entries }) {
   );
 }
 
-function summarize(entries) {
-  const names = entries.map((entry) => entry.name);
-  if (names.length <= 2) return names.join(" và ");
-  return `${names.slice(0, 2).join(", ")} và ${names.length - 2} khác`;
+function accessGroups(node) {
+  return (node.inherited ?? []).map((group) => ({ ...group, entries: accessEntries(group.owner, group.shares) }));
+}
+
+function accessCount(node) {
+  const entries = [...accessEntries(node.owner, node.shares ?? []), ...accessGroups(node).flatMap((group) => group.entries)];
+  return new Set(entries.map(entryKey)).size;
 }
 
 function AccessSection({ node, onShare, onOpenFolder }) {
-  const [open, setOpen] = useState(true);
   const [openGroups, setOpenGroups] = useState([]);
-  const direct = accessEntries(node.owner, node.shares);
-  const groups = (node.inherited ?? []).map((group) => ({ ...group, entries: accessEntries(group.owner, group.shares) }));
-  const unique = [...new Map([...direct, ...groups.flatMap((group) => group.entries)].map((entry) => [entryKey(entry), entry])).values()];
+  const groups = accessGroups(node);
   const toggleGroup = (id) => setOpenGroups((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
 
   return (
     <section className="dl-access">
       <div className="dl-detail-head">
-        <button type="button" className="dl-collapse" onClick={() => setOpen(!open)} aria-expanded={open}>
-          <ChevronRight size={14} className={open ? "open" : ""} />
-          <h4>Quyền truy cập · {unique.length}</h4>
-        </button>
+        <h5 className="dl-access-group">Chia sẻ trực tiếp</h5>
         {node.abilities.can_share && <button className="dl-link-btn" onClick={() => onShare(node)}>Quản lý</button>}
       </div>
-      {!open ? (
-        <button type="button" className="dl-access-summary" onClick={() => setOpen(true)}>
-          <AvatarStack entries={unique} />
-          <span>{summarize(unique)}</span>
-        </button>
-      ) : (
-        <>
-          <h5 className="dl-access-group">Chia sẻ trực tiếp</h5>
-          <AccessList owner={node.owner} ownerLabel="Chủ sở hữu" shares={node.shares} />
-          {!node.shares.length && <p className="dl-detail-note">Chưa chia sẻ riêng cho ai.</p>}
-          {groups.map((group) => {
-            const groupOpen = openGroups.includes(group.folder_id);
-            return (
-              <div key={group.folder_id} className="dl-inherited">
-                <div className="dl-inherited-head">
-                  <button type="button" className="dl-collapse" onClick={() => toggleGroup(group.folder_id)} aria-expanded={groupOpen}>
-                    <ChevronRight size={14} className={groupOpen ? "open" : ""} />
-                    <h5 className="dl-access-group">Kế thừa từ “{group.folder_name}” · {group.entries.length}</h5>
-                  </button>
-                  {!groupOpen && <AvatarStack entries={group.entries} />}
-                  {group.can_open && (
-                    <button type="button" className="dl-link-btn" onClick={() => onOpenFolder(group.folder_id)} title={`Mở thư mục “${group.folder_name}”`}>Mở</button>
-                  )}
-                </div>
-                {groupOpen && <AccessList owner={group.owner} ownerLabel="Chủ thư mục · Chỉnh sửa" shares={group.shares} />}
-              </div>
-            );
-          })}
-          <p className="dl-detail-note">Người có quyền quản trị kho luôn xem và sửa được mọi mục.</p>
-        </>
-      )}
+      <AccessList owner={node.owner} ownerLabel="Chủ sở hữu" shares={node.shares} />
+      {!node.shares.length && <p className="dl-detail-note">Chưa chia sẻ riêng cho ai.</p>}
+      {groups.map((group) => {
+        const groupOpen = openGroups.includes(group.folder_id);
+        return (
+          <div key={group.folder_id} className="dl-inherited">
+            <div className="dl-inherited-head">
+              <button type="button" className="dl-collapse" onClick={() => toggleGroup(group.folder_id)} aria-expanded={groupOpen}>
+                <ChevronRight size={14} className={groupOpen ? "open" : ""} />
+                <h5 className="dl-access-group">Kế thừa từ “{group.folder_name}” · {group.entries.length}</h5>
+              </button>
+              {!groupOpen && <AvatarStack entries={group.entries} />}
+              {group.can_open && (
+                <button type="button" className="dl-link-btn" onClick={() => onOpenFolder(group.folder_id)} title={`Mở thư mục “${group.folder_name}”`}>Mở</button>
+              )}
+            </div>
+            {groupOpen && <AccessList owner={group.owner} ownerLabel="Chủ thư mục · Chỉnh sửa" shares={group.shares} />}
+          </div>
+        );
+      })}
+      <p className="dl-detail-note">Người có quyền quản trị kho luôn xem và sửa được mọi mục.</p>
     </section>
   );
 }
@@ -828,6 +815,7 @@ function NodeDetail({ node: initial, reloadToken, onClose, onOpen, onDownload, o
   const [saving, setSaving] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
   const [error, setError] = useState("");
+  const [tab, setTab] = useState("info");
   const isFolder = node.type === "folder";
   const Icon = isFolder ? Folder : fileIcon(node.mime_type);
   const dirty = description !== (node.description || "");
@@ -847,6 +835,7 @@ function NodeDetail({ node: initial, reloadToken, onClose, onOpen, onDownload, o
       active = false;
     };
   }, [initial.id, reloadToken]);
+  useEffect(() => setTab("info"), [initial.id]);
 
   const save = async () => {
     setSaving(true);
@@ -896,46 +885,58 @@ function NodeDetail({ node: initial, reloadToken, onClose, onOpen, onDownload, o
         {node.abilities.can_share && <button className="secondary-btn" onClick={() => onShare(node)}><Share2 size={15} /> Chia sẻ</button>}
       </div>
 
-      <section>
-        <div className="dl-detail-head"><h4>Thông tin</h4></div>
-        <InfoRows
-          rows={[
-            isFolder
-              ? ["Nội dung", stats ? `${stats.folders} thư mục · ${stats.files} file` : node.children_count != null ? `${node.children_count} mục` : "—"]
-              : ["Loại", fileKind(node.name, node.mime_type)],
-            isFolder ? ["Tổng dung lượng", stats ? formatBytes(stats.size) : "—"] : ["Dung lượng", formatBytes(node.size)],
-            ["Vị trí", <span className="dl-location-text" title={location}>{location}</span>],
-            ["Chủ sở hữu", <PersonLine person={node.owner} />],
-            showUploader && ["Người tải file lên", <PersonLine person={node.uploader} />],
-            ["Ngày tạo", fullDate(node.created_at)],
-            ["Cập nhật lần cuối", fullDate(node.updated_at)],
-            node.updated_by && ["Người cập nhật cuối", <PersonLine person={node.updated_by} />],
-            ["Quyền của bạn", LEVEL_LABELS[node.abilities.level] ?? "—"],
-          ]}
-        />
-      </section>
+      <div className="dl-detail-tabs" role="tablist">
+        <button type="button" role="tab" aria-selected={tab === "info"} className={tab === "info" ? "active" : ""} onClick={() => setTab("info")}>
+          <Info size={14} /> Thông tin
+        </button>
+        <button type="button" role="tab" aria-selected={tab === "access"} className={tab === "access" ? "active" : ""} onClick={() => setTab("access")}>
+          <Users size={14} /> Chia sẻ <em>{accessCount(node)}</em>
+        </button>
+      </div>
 
-      <AccessSection node={node} onShare={onShare} onOpenFolder={onOpenFolder} />
+      {tab === "access" ? (
+        <AccessSection node={node} onShare={onShare} onOpenFolder={onOpenFolder} />
+      ) : (
+        <>
+          <section>
+            <InfoRows
+              rows={[
+                isFolder
+                  ? ["Nội dung", stats ? `${stats.folders} thư mục · ${stats.files} file` : node.children_count != null ? `${node.children_count} mục` : "—"]
+                  : ["Loại", fileKind(node.name, node.mime_type)],
+                isFolder ? ["Tổng dung lượng", stats ? formatBytes(stats.size) : "—"] : ["Dung lượng", formatBytes(node.size)],
+                ["Vị trí", <span className="dl-location-text" title={location}>{location}</span>],
+                ["Chủ sở hữu", <PersonLine person={node.owner} />],
+                showUploader && ["Người tải file lên", <PersonLine person={node.uploader} />],
+                ["Ngày tạo", fullDate(node.created_at)],
+                ["Cập nhật lần cuối", fullDate(node.updated_at)],
+                node.updated_by && ["Người cập nhật cuối", <PersonLine person={node.updated_by} />],
+                ["Quyền của bạn", LEVEL_LABELS[node.abilities.level] ?? "—"],
+              ]}
+            />
+          </section>
 
-      <section>
-        <div className="dl-detail-head">
-          <h4>Mô tả</h4>
-          {!isFolder && node.abilities.can_edit && (
-            <button className="dl-ai" onClick={summarize} disabled={summarizing}>
-              <Sparkles size={14} /> {summarizing ? "AI đang đọc file..." : "AI tóm tắt"}
-            </button>
-          )}
-        </div>
-        {node.abilities.can_edit ? (
-          <RichTextEditor value={description} onChange={setDescription} placeholder={isFolder ? "Thêm mô tả cho thư mục..." : "Thêm mô tả hoặc tóm tắt nội dung file..."} />
-        ) : (
-          <div className="dl-description" dangerouslySetInnerHTML={{ __html: description || "<p>Chưa có mô tả.</p>" }} />
-        )}
-        {error && <p className="dl-dialog-error">{error}</p>}
-        {node.abilities.can_edit && (
-          <button className="primary-btn dl-save" onClick={save} disabled={!dirty || saving}>{saving ? "Đang lưu..." : "Lưu mô tả"}</button>
-        )}
-      </section>
+          <section>
+            <div className="dl-detail-head">
+              <h4>Mô tả</h4>
+              {!isFolder && node.abilities.can_edit && (
+                <button className="dl-ai" onClick={summarize} disabled={summarizing}>
+                  <Sparkles size={14} /> {summarizing ? "AI đang đọc file..." : "AI tóm tắt"}
+                </button>
+              )}
+            </div>
+            {node.abilities.can_edit ? (
+              <RichTextEditor value={description} onChange={setDescription} placeholder={isFolder ? "Thêm mô tả cho thư mục..." : "Thêm mô tả hoặc tóm tắt nội dung file..."} />
+            ) : (
+              <div className="dl-description" dangerouslySetInnerHTML={{ __html: description || "<p>Chưa có mô tả.</p>" }} />
+            )}
+            {error && <p className="dl-dialog-error">{error}</p>}
+            {node.abilities.can_edit && (
+              <button className="primary-btn dl-save" onClick={save} disabled={!dirty || saving}>{saving ? "Đang lưu..." : "Lưu mô tả"}</button>
+            )}
+          </section>
+        </>
+      )}
     </aside>
   );
 }
