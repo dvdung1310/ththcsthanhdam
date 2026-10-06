@@ -133,7 +133,7 @@
 
 .task-type-search:focus-within {
   border-color: var(--c-primary);
-  outline: 3px solid rgba(31,78,121,0.15);
+  outline: 3px solid rgb(var(--c-primary-rgb) / 0.15);
 }
 
 .task-type-search input {
@@ -380,7 +380,7 @@
 .task-type-dialog input:focus,
 .task-type-dialog textarea:focus {
   border-color: var(--c-primary);
-  box-shadow: 0 0 0 3px rgba(31,78,121,0.15);
+  box-shadow: 0 0 0 3px rgb(var(--c-primary-rgb) / 0.15);
 }
 
 .task-type-dialog-error {

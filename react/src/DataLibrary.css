@@ -192,7 +192,7 @@ body.dl-resizing {
   border: 2px dashed var(--c-primary-line);
   border-radius: 7px;
   color: var(--c-primary);
-  background: rgba(31,78,121,0.92);
+  background: rgb(var(--c-primary-rgb) / 0.92);
   font-size: 14px;
   font-weight: 700;
   pointer-events: none;
@@ -547,7 +547,7 @@ body.dl-resizing {
 
 .dl-name-dialog input:focus {
   border-color: var(--c-primary-line);
-  box-shadow: 0 0 0 3px rgba(31,78,121,0.12);
+  box-shadow: 0 0 0 3px rgb(var(--c-primary-rgb) / 0.12);
 }
 
 .dl-name-dialog footer {

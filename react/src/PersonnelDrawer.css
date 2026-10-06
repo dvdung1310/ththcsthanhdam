@@ -115,7 +115,7 @@
 .drawer-grid input:focus,
 .drawer-grid select:focus {
   border-color: var(--c-primary);
-  box-shadow: 0 0 0 4px rgba(31,78,121,0.12);
+  box-shadow: 0 0 0 4px rgb(var(--c-primary-rgb) / 0.12);
 }
 
 .drawer-switches {

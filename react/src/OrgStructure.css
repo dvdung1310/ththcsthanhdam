@@ -392,7 +392,7 @@
 
 .org-search:focus-within {
   border-color: var(--c-primary);
-  outline: 3px solid rgba(31,78,121,0.15);
+  outline: 3px solid rgb(var(--c-primary-rgb) / 0.15);
 }
 
 .org-search input {
@@ -589,7 +589,7 @@
 .org-dialog > label > input:focus,
 .org-dialog > label > select:focus {
   border-color: var(--c-primary);
-  outline: 3px solid rgba(31,78,121,0.15);
+  outline: 3px solid rgb(var(--c-primary-rgb) / 0.15);
 }
 
 .org-dialog-error {

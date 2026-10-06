@@ -167,7 +167,7 @@
 .task-compose-body .field select:focus,
 .task-compose-body .rich-editor:focus-within {
   border-color: var(--c-primary-line);
-  box-shadow: 0 0 0 3px rgba(31,78,121,0.12);
+  box-shadow: 0 0 0 3px rgb(var(--c-primary-rgb) / 0.12);
 }
 
 .rich-editor {

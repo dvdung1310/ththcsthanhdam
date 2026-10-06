@@ -27,7 +27,7 @@
   place-items: center;
   border-radius: 9px;
   color: var(--c-primary-line);
-  background: rgba(31,78,121,0.22);
+  background: rgb(var(--c-primary-rgb) / 0.22);
 }
 
 .fp-title {
@@ -204,7 +204,7 @@
 
 .fp-tools button.active {
   color: var(--c-primary-line);
-  background: rgba(31,78,121,0.25);
+  background: rgb(var(--c-primary-rgb) / 0.25);
 }
 
 .fp-tools .fp-zoom-value {

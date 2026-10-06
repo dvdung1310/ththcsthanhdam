@@ -12,7 +12,7 @@
 .teacher-config-form.positions>label{min-width:0;display:grid;gap:7px;color:#46516c;font-size:12px;font-weight:650}
 .teacher-config-form.positions>label:first-child{min-width:0}
 .teacher-config-form.positions input[type="text"],.teacher-config-form.positions select{width:100%;height:42px;box-sizing:border-box;padding:0 12px;border:1px solid #d9deea;border-radius:10px;color:#2f3953;background:#fff;font-size:12px;outline:0;transition:.18s}
-.teacher-config-form.positions input[type="text"]:focus,.teacher-config-form.positions select:focus{border-color:var(--c-primary);box-shadow:0 0 0 3px rgba(31,78,121,0.12)}
+.teacher-config-form.positions input[type="text"]:focus,.teacher-config-form.positions select:focus{border-color:var(--c-primary);box-shadow:0 0 0 3px rgb(var(--c-primary-rgb) / 0.12)}
 .teacher-config-form.positions .manager-check{height:42px;box-sizing:border-box;padding:0 12px;display:flex;align-items:center;gap:9px;border:1px solid #e1e4ed;border-radius:10px;background:#fff;white-space:nowrap}
 .teacher-config-form.positions .manager-check input{width:17px;height:17px;accent-color:var(--c-primary)}
 .teacher-config-form.positions>.primary-btn,.teacher-config-form.positions>.secondary-btn{height:42px;padding:0 17px;white-space:nowrap}

@@ -140,7 +140,7 @@
 .drawer-actions textarea:focus,
 .comment-composer textarea:focus {
   border-color: var(--c-primary-line);
-  box-shadow: 0 0 0 3px rgba(31,78,121,0.12);
+  box-shadow: 0 0 0 3px rgb(var(--c-primary-rgb) / 0.12);
 }
 
 .drawer-action-row {

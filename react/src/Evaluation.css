@@ -753,7 +753,7 @@
 
 .ev-score-input:focus-within {
   border-color: var(--c-primary);
-  outline: 3px solid rgba(31,78,121,0.15);
+  outline: 3px solid rgb(var(--c-primary-rgb) / 0.15);
 }
 
 .ev-score-input input {
@@ -852,7 +852,7 @@
 
 .ev-note-field textarea:focus {
   border-color: var(--c-primary);
-  outline: 3px solid rgba(31,78,121,0.15);
+  outline: 3px solid rgb(var(--c-primary-rgb) / 0.15);
   background: #fff;
 }
 
