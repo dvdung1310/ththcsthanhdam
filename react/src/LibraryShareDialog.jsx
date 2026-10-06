@@ -117,13 +117,20 @@ export default function LibraryShareDialog({ node, onClose, onSaved }) {
                 <div className="lsd-row" key={row.key}>
                   <SubjectIcon row={row} />
                   <b>{row.name}</b>
-                  <select value={row.access} onChange={(event) => setAccess(row.key, event.target.value)}>
+                  <div className="lsd-access" role="radiogroup" aria-label={`Quyền của ${row.name}`}>
                     {Object.entries(ACCESS_LABELS).map(([value, label]) => (
-                      <option key={value} value={value}>
+                      <button
+                        key={value}
+                        type="button"
+                        role="radio"
+                        aria-checked={row.access === value}
+                        className={row.access === value ? "active" : ""}
+                        onClick={() => setAccess(row.key, value)}
+                      >
                         {label}
-                      </option>
+                      </button>
                     ))}
-                  </select>
+                  </div>
                   <button type="button" onClick={() => toggleRow(row)} disabled={row.key === "all" && !canEveryone} aria-label="Bỏ chia sẻ">
                     <X size={15} />
                   </button>
