@@ -45,6 +45,7 @@ import ManagementDashboard from "./ManagementDashboard";
 import LoginPage from "./LoginPage";
 import NotificationCenter from "./NotificationCenter";
 import AiAssistant from "./AiAssistant";
+import { PageErrorBoundary } from "./AppError";
 import PersonalProfile from "./PersonalProfile";
 import DataLibrary from "./DataLibrary";
 import EvaluationHome from "./EvaluationHome";
@@ -591,6 +592,7 @@ function App() {
           </div>
         </header>
 
+        <PageErrorBoundary resetKey={location.pathname}>
         <Routes>
           <Route path="/" element={<ManagementDashboard onTask={openTask} onKpi={() => navigate("/stats")} />} />
           <Route path="/stats" element={guard("stats", <TaskStats onTask={openTask} />)} />
@@ -609,6 +611,7 @@ function App() {
           <Route path="/profile" element={<PersonalProfile user={authUser} onUserChanged={setAuthUser} />} />
           <Route path="*" element={<RouteNotice kind="missing" />} />
         </Routes>
+        </PageErrorBoundary>
       </main>
       {authUser.has_ai_assistant && <AiAssistant />}
     </div>

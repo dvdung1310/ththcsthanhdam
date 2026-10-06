@@ -5,10 +5,12 @@ import './index.css'
 import './theme.css'
 import App from './App.jsx'
 import { ConfirmProvider } from './ConfirmDialog.jsx'
+import { RouterErrorPage } from './AppError.jsx'
 
 const router = createBrowserRouter([
   {
     path: '*',
+    errorElement: <RouterErrorPage />,
     element: (
       <ConfirmProvider>
         <App />

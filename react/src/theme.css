@@ -345,3 +345,63 @@
 .login-visual {
   background: var(--c-primary-strong) !important;
 }
+
+.app-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.app-error-actions .primary-btn,
+.app-error-actions .secondary-btn {
+  height: 38px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.app-error-details {
+  width: 100%;
+  margin-top: 12px;
+  color: var(--c-muted);
+  font-size: 12px;
+  text-align: left;
+}
+
+.app-error-details summary {
+  cursor: pointer;
+  text-align: center;
+}
+
+.app-error-details code,
+.app-error-details pre {
+  margin-top: 8px;
+  padding: 8px 10px;
+  display: block;
+  overflow: auto;
+  border: 1px solid var(--c-border);
+  border-radius: var(--c-radius-sm);
+  color: var(--c-text);
+  background: var(--c-head);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.app-error-details pre {
+  max-height: 180px;
+}
+
+.app-error-page {
+  min-height: 100vh;
+  padding: 24px;
+  display: grid;
+  place-items: center;
+  background: var(--c-bg);
+}

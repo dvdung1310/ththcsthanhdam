@@ -54,9 +54,13 @@ export default function UnitMembershipEditor({ units, unitIds, roles, roleCatalo
   const impliedTo = [...new Set(selectedNhom.map((id) => unitById[id].parent_id))];
   const isSelected = (id) => unitIds.includes(id) || impliedTo.includes(id);
 
-  const positionOf = (unitId) => {
-    const row = roles.find((r) => isUnitRole(r) && r.department_id === unitId);
-    return row ? roleById[row.role_id].code : "member";
+  const isGroup = (unit) => Boolean(unit.parent_id && unitById[unit.parent_id]);
+  const positionsFor = (unit) => POSITIONS[isGroup(unit) ? "nhom" : "to"];
+
+  const positionOf = (unit) => {
+    const row = roles.find((r) => isUnitRole(r) && r.department_id === unit.id);
+    const code = row ? roleById[row.role_id]?.code : null;
+    return positionsFor(unit).some(([value]) => value === code) ? code : "member";
   };
   const conflicts = findHolderConflicts(roles, roleCatalog, people, personId);
 
@@ -64,7 +68,8 @@ export default function UnitMembershipEditor({ units, unitIds, roles, roleCatalo
 
   const setPosition = (unitId, code) => {
     const kept = roles.filter((r) => !(isUnitRole(r) && r.department_id === unitId));
-    update(unitIds, code === "member" ? kept : [...kept, { role_id: roleByCode[code].id, department_id: unitId }]);
+    const role = roleByCode[code];
+    update(unitIds, code === "member" || !role ? kept : [...kept, { role_id: role.id, department_id: unitId }]);
   };
 
   const addUnit = (unit) => {
@@ -97,8 +102,8 @@ export default function UnitMembershipEditor({ units, unitIds, roles, roleCatalo
   const selectedRoots = roots.filter((root) => isSelected(root.id));
 
   const positionSelect = (unit) => (
-    <select value={positionOf(unit.id)} disabled={!canAssignRoles} onChange={(e) => setPosition(unit.id, e.target.value)}>
-      {POSITIONS[unit.parent_id && unitById[unit.parent_id] ? "nhom" : unit.type].map(([value, label]) => (
+    <select value={positionOf(unit)} disabled={!canAssignRoles} onChange={(e) => setPosition(unit.id, e.target.value)}>
+      {positionsFor(unit).map(([value, label]) => (
         <option key={value} value={value}>
           {label}
         </option>
