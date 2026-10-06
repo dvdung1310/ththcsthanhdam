@@ -131,6 +131,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
   const [formBaseline, setFormBaseline] = useState(null);
   const [, setFormTick] = useState(0);
   const [viewDraft, setViewDraft] = useState(false);
+  const [editingSubmission, setEditingSubmission] = useState(null);
   const [commentDraft, setCommentDraft] = useState(false);
   const [showSupport, setShowSupport] = useState(false);
   const [loading, setLoading] = useState(true),
@@ -397,14 +398,12 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
   };
   const startTask = () =>
     runWorkflow("progress", { json: { status: "in_progress" } }, "Không thể cập nhật trạng thái.");
-  const submitCompletion = async (event) => {
-    event.preventDefault();
-    const formElement = event.currentTarget;
+  const submissionForm = async (formElement) => {
     const form = new FormData(formElement);
     const problem = await uploadProblem(form.getAll("submission_files[]").filter((file) => file.size));
     if (problem) {
       setError(problem);
-      return;
+      return null;
     }
     const links = String(form.get("submission_links") || "");
     form.delete("submission_links");
@@ -413,8 +412,20 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
       .map((link) => link.trim())
       .filter(Boolean)
       .forEach((link) => form.append("links[]", link));
-    if (await runWorkflow("submit-completion", { body: form }, "Không thể gửi đề nghị hoàn thành."))
+    return form;
+  };
+  const submitCompletion = async (event) => {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const form = await submissionForm(formElement);
+    if (form && (await runWorkflow("submit-completion", { body: form }, "Không thể gửi đề nghị hoàn thành.")))
       formElement.reset();
+  };
+  const updateSubmission = async (event) => {
+    event.preventDefault();
+    const form = await submissionForm(event.currentTarget);
+    if (form && (await runWorkflow(`submissions/${editingSubmission}`, { body: form }, "Không thể cập nhật bài nộp.")))
+      setEditingSubmission(null);
   };
   const reviewCompletion = async (event) => {
     event.preventDefault();
@@ -485,8 +496,9 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
     setEditing(null);
   };
   const requestCloseView = async () => {
-    if ((viewDraft || commentDraft) && !(await discardChanges("Kết quả, nhận xét hoặc trao đổi bạn đang nhập sẽ không được gửi."))) return false;
+    if ((viewDraft || commentDraft || editingSubmission) && !(await discardChanges("Kết quả, nhận xét hoặc trao đổi bạn đang nhập sẽ không được gửi."))) return false;
     setViewDraft(false);
+    setEditingSubmission(null);
     setCommentDraft(false);
     setViewing(null);
     return true;
@@ -1196,8 +1208,26 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
                             <strong>{submission.submitter}</strong>
                             <span>Lần nộp {submission.version}</span>
                           </div>
-                          <small>Nộp {formatMoment(submission.submitted_at)}</small>
+                          <small>
+                            Nộp {formatMoment(submission.submitted_at)}
+                            {submission.edited_at && <> · Đã sửa {formatMoment(submission.edited_at)}</>}
+                          </small>
+                          {submission.can_edit && editingSubmission !== submission.id && (
+                            <button type="button" className="submission-edit-btn" disabled={workflowSaving} onClick={() => setEditingSubmission(submission.id)}>
+                              <Pencil size={14} /> Sửa bài nộp
+                            </button>
+                          )}
                         </header>
+                        {submission.can_edit && editingSubmission === submission.id ? (
+                          <SubmissionForm
+                            task={viewing}
+                            submission={submission}
+                            saving={workflowSaving}
+                            onSubmit={updateSubmission}
+                            onCancel={() => setEditingSubmission(null)}
+                          />
+                        ) : (
+                          <>
                         {submission.result_content && <p>{submission.result_content}</p>}
                         {submission.status !== "submitted" && submission.reviewed_at && (
                           <div className={`submission-review ${submission.status}`}>
@@ -1232,6 +1262,8 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
                               </a>
                             ))}
                           </div>
+                        )}
+                          </>
                         )}
                       </article>
                     ))}
@@ -1821,15 +1853,17 @@ function TaskWorkflowPanel({ task, saving, error, onStart, onSubmit, onReview, o
 
 const LINK_PATTERN = /^https?:\/\/\S+$/i;
 
-function SubmissionForm({ task, saving, onSubmit, draft }) {
+function SubmissionForm({ task, submission, saving, onSubmit, onCancel, draft = {} }) {
   const [files, setFiles] = useState([]);
-  const [links, setLinks] = useState("");
-  const [comment, setComment] = useState("");
+  const [links, setLinks] = useState(() => (submission?.links ?? []).join("\n"));
+  const [comment, setComment] = useState(submission?.result_content ?? "");
   const [fileProblem, setFileProblem] = useState("");
+  const [removed, setRemoved] = useState([]);
+  const kept = (submission?.files ?? []).filter((file) => !removed.includes(file.id));
 
   const linkLines = links.split(/\r?\n/).map((line, index) => [line.trim(), index + 1]).filter(([line]) => line);
   const badLines = linkLines.filter(([line]) => !LINK_PATTERN.test(line)).map(([, number]) => number);
-  const filled = files.length > 0 || linkLines.length > 0 || comment.trim() !== "";
+  const filled = files.length > 0 || kept.length > 0 || linkLines.length > 0 || comment.trim() !== "";
   const blocked = !filled
     ? "Cần ít nhất một: file, link hoặc ghi chú."
     : badLines.length
@@ -1840,7 +1874,7 @@ function SubmissionForm({ task, saving, onSubmit, draft }) {
     : `người giao việc ${task.creator || ""}`.trim();
 
   const reset = (event) => {
-    draft.onReset(event);
+    draft.onReset?.(event);
     setFiles([]);
     setLinks("");
     setComment("");
@@ -1850,11 +1884,27 @@ function SubmissionForm({ task, saving, onSubmit, draft }) {
   return (
     <form className="workflow-form submit-form" onSubmit={onSubmit} onInput={draft.onInput} onChange={draft.onChange} onReset={reset}>
       <div className="submit-form-head">
-        <b>Nộp kết quả</b>
-        <small>Gửi tới {recipients} để duyệt</small>
+        <b>{submission ? `Sửa bài nộp lần ${submission.version}` : "Nộp kết quả"}</b>
+        <small>{submission ? `Thay đổi sẽ được báo tới ${recipients}` : `Gửi tới ${recipients} để duyệt`}</small>
       </div>
+      {removed.map((id) => (
+        <input key={id} type="hidden" name="remove_file_ids[]" value={id} />
+      ))}
+      {kept.length > 0 && (
+        <ul className="submit-existing-files">
+          {kept.map((file) => (
+            <li key={file.id}>
+              <Paperclip size={14} />
+              <span>{file.original_name}</span>
+              <button type="button" disabled={saving} title="Bỏ file này" aria-label={`Bỏ file ${file.original_name}`} onClick={() => setRemoved((current) => [...current, file.id])}>
+                <X size={14} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       <label>
-        File kết quả
+        {submission ? "Thêm file" : "File kết quả"}
         <input
           name="submission_files[]"
           type="file"
@@ -1884,8 +1934,13 @@ function SubmissionForm({ task, saving, onSubmit, draft }) {
       </label>
       <div className="drawer-action-row end">
         {blocked && <span className="submit-hint">{blocked}</span>}
+        {onCancel && (
+          <button type="button" className="secondary-btn" disabled={saving} onClick={onCancel}>
+            Hủy
+          </button>
+        )}
         <button className="primary-btn" disabled={saving || Boolean(blocked)}>
-          <Send size={15} /> {saving ? "Đang nộp..." : "Nộp kết quả"}
+          <Send size={15} /> {saving ? (submission ? "Đang lưu..." : "Đang nộp...") : submission ? "Lưu thay đổi" : "Nộp kết quả"}
         </button>
       </div>
     </form>
