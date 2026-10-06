@@ -1,12 +1,50 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Globe2, Plus, Share2, Users, X } from "lucide-react";
+import { ChevronDown, Eye, Globe2, Pencil, Plus, Share2, Users, X } from "lucide-react";
 import { apiJson } from "./api";
 import { useConfirm } from "./ConfirmDialog";
 import PeoplePicker, { useOutsideClose } from "./PeoplePicker";
 import "./LibraryShareDialog.css";
 import Avatar from "./Avatar";
+import { MenuList, menuPosition } from "./ActionMenu";
 
 export const ACCESS_LABELS = { read: "Xem", edit: "Chỉnh sửa" };
+
+const ACCESS_OPTIONS = [
+  { value: "read", icon: Eye, hint: "Mở và tải về" },
+  { value: "edit", icon: Pencil, hint: "Thêm file, tạo thư mục, đổi tên, di chuyển và chia sẻ tiếp" },
+];
+
+function AccessSelect({ value, label, onChange }) {
+  const [position, setPosition] = useState(null);
+  const buttonRef = useRef(null);
+  const toggle = () => {
+    if (position) return setPosition(null);
+    const rect = buttonRef.current.getBoundingClientRect();
+    setPosition(menuPosition(rect.right - 220, rect.bottom + 4, 220, 140));
+  };
+  return (
+    <>
+      <button type="button" ref={buttonRef} className={`lsd-access ${position ? "open" : ""}`} aria-haspopup="menu" aria-expanded={!!position} aria-label={label} onClick={toggle}>
+        {ACCESS_LABELS[value]}
+        <ChevronDown size={14} />
+      </button>
+      {position && (
+        <MenuList
+          position={position}
+          onClose={() => setPosition(null)}
+          items={ACCESS_OPTIONS.map((option) => ({
+            key: option.value,
+            label: ACCESS_LABELS[option.value],
+            hint: option.hint,
+            icon: option.icon,
+            active: option.value === value,
+            onClick: () => onChange(option.value),
+          }))}
+        />
+      )}
+    </>
+  );
+}
 
 const keyOf = (row) => (row.user_id ? `u${row.user_id}` : row.department_id ? `d${row.department_id}` : "all");
 
@@ -117,21 +155,8 @@ export default function LibraryShareDialog({ node, onClose, onSaved }) {
                 <div className="lsd-row" key={row.key}>
                   <SubjectIcon row={row} />
                   <b>{row.name}</b>
-                  <div className="lsd-access" role="radiogroup" aria-label={`Quyền của ${row.name}`}>
-                    {Object.entries(ACCESS_LABELS).map(([value, label]) => (
-                      <button
-                        key={value}
-                        type="button"
-                        role="radio"
-                        aria-checked={row.access === value}
-                        className={row.access === value ? "active" : ""}
-                        onClick={() => setAccess(row.key, value)}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                  <button type="button" onClick={() => toggleRow(row)} disabled={row.key === "all" && !canEveryone} aria-label="Bỏ chia sẻ">
+                  <AccessSelect value={row.access} label={`Quyền của ${row.name}`} onChange={(value) => setAccess(row.key, value)} />
+                  <button type="button" className="lsd-remove" onClick={() => toggleRow(row)} disabled={row.key === "all" && !canEveryone} aria-label="Bỏ chia sẻ">
                     <X size={15} />
                   </button>
                 </div>

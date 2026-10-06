@@ -136,44 +136,46 @@
 }
 
 .lsd-access {
+  height: 32px;
+  padding: 0 9px 0 12px;
   flex: none;
-  padding: 2px;
   display: inline-flex;
-  gap: 2px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #dfe3ec;
   border-radius: 8px;
-  background: #eef1f6;
-}
-
-.lsd-access button {
-  height: 28px;
-  padding: 0 11px;
-  border: 0;
-  border-radius: 6px;
-  color: var(--c-text-2);
-  background: transparent;
+  color: #34405e;
+  background: #fff;
   font: inherit;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
 }
 
-.lsd-access button:hover:not(.active) {
+.lsd-access svg {
+  color: var(--c-muted);
+  transition: transform 0.15s;
+}
+
+.lsd-access:hover,
+.lsd-access.open {
+  border-color: var(--c-primary-line);
   color: var(--c-primary);
+  background: var(--c-primary-tint);
 }
 
-.lsd-access button.active {
-  color: var(--c-primary);
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(31, 42, 72, 0.15);
+.lsd-access.open svg {
+  transform: rotate(180deg);
 }
 
-.lsd-access button:focus-visible {
-  outline: 2px solid rgb(var(--c-primary-rgb) / 0.35);
+.lsd-access:focus-visible {
+  outline: 3px solid rgb(var(--c-primary-rgb) / 0.2);
   outline-offset: 1px;
 }
 
-.lsd-row > button {
+.lsd-row > .lsd-remove {
   width: 30px;
   height: 30px;
   display: grid;
@@ -185,7 +187,7 @@
   cursor: pointer;
 }
 
-.lsd-row > button:hover:not(:disabled) {
+.lsd-row > .lsd-remove:hover:not(:disabled) {
   color: var(--c-danger);
   background: #fff1f2;
 }
