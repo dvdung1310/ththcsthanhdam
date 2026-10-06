@@ -85,6 +85,7 @@ const emptyTask = {
   description: "",
   category_id: "",
   priority: "normal",
+  share_submissions: true,
   starts_at: new Date().toISOString().slice(0, 16),
   due_at: "",
   reviewer_ids: [],
@@ -435,6 +436,18 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
     const decision = event.nativeEvent.submitter?.value;
     const comment = new FormData(event.currentTarget).get("comment");
     await runWorkflow("review-completion", { json: { decision, comment } }, "Không thể duyệt công việc.");
+  };
+  const toggleSharing = async (share) => {
+    if (
+      share &&
+      !(await confirm({
+        title: "Cho người thực hiện xem bài nộp của nhau?",
+        message: "Toàn bộ bài nộp đã có, kể cả nhận xét của người duyệt, sẽ hiện cho mọi người thực hiện công việc này.",
+        confirmText: "Bật chia sẻ",
+      }))
+    )
+      return;
+    await runWorkflow("submission-sharing", { json: { share_submissions: share } }, "Không thể đổi cài đặt bài nộp.");
   };
   const selfComplete = () =>
     runWorkflow("complete", { json: {} }, "Không thể đánh dấu hoàn thành.");
@@ -1035,6 +1048,17 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
                         </select>
                       </label>
                     </div>
+                    {editing.assignment_mode !== "self" && (
+                      <label className="share-switch form">
+                        <input type="hidden" name="share_submissions" value="0" />
+                        <input type="checkbox" name="share_submissions" value="1" defaultChecked={editing.share_submissions ?? true} />
+                        <i />
+                        <span>
+                          <b>Người thực hiện được xem bài nộp của nhau</b>
+                          <small>Tắt để mỗi người chỉ thấy bài của mình. Người duyệt và người giao vẫn xem được tất cả.</small>
+                        </span>
+                      </label>
+                    )}
                   </section>
                 </div>
               </div>
@@ -1206,6 +1230,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
                 <SubmissionGroups
                   task={viewing}
                   saving={workflowSaving}
+                  onToggleSharing={toggleSharing}
                   editingId={editingSubmission}
                   onEdit={setEditingSubmission}
                   onUpdate={updateSubmission}
@@ -1783,7 +1808,10 @@ function SubmissionForm({ task, submission, saving, onSubmit, onCancel, draft = 
     <form className="workflow-form submit-form" onSubmit={onSubmit} onInput={draft.onInput} onChange={draft.onChange} onReset={reset}>
       <div className="submit-form-head">
         <b>{submission ? `Sửa bài nộp lần ${submission.version}` : "Nộp kết quả"}</b>
-        <small>{submission ? `Thay đổi sẽ được báo tới ${recipients}` : `Gửi tới ${recipients} để duyệt`}</small>
+        <small>
+          {submission ? `Thay đổi sẽ được báo tới ${recipients}` : `Gửi tới ${recipients} để duyệt`}
+          {task.share_submissions === false && " · Chỉ người duyệt và người giao xem được"}
+        </small>
       </div>
       {removed.map((id) => (
         <input key={id} type="hidden" name="remove_file_ids[]" value={id} />
@@ -1851,7 +1879,7 @@ const SUBMISSION_STATUS = {
   revision_required: "Cần sửa",
 };
 
-function SubmissionGroups({ task, saving, editingId, onEdit, onUpdate, onPreview, onDownload, onShare }) {
+function SubmissionGroups({ task, saving, editingId, onEdit, onUpdate, onPreview, onDownload, onShare, onToggleSharing }) {
   const [toggled, setToggled] = useState({});
   const [showOlder, setShowOlder] = useState({});
   useEffect(() => {
@@ -1871,9 +1899,22 @@ function SubmissionGroups({ task, saving, editingId, onEdit, onUpdate, onPreview
   const isOpen = (submission, index) =>
     editingId === submission.id || (toggled[submission.id] ?? (index === 0 && submission.status !== "approved"));
 
+  const canToggle = task.can_manage && !task.is_personal;
+  const privateView = !task.share_submissions && !task.can_view_all_submissions;
+
   return (
-    <section className={`drawer-section teacher-submissions ${submissions.length ? "" : "empty"}`}>
-      <h4>Bài nộp {!!submissions.length && <em>{submissions.length}</em>}</h4>
+    <section className={`drawer-section teacher-submissions ${submissions.length || canToggle || privateView ? "" : "empty"}`}>
+      <div className="submission-head">
+        <h4>Bài nộp {!!submissions.length && <em>{submissions.length}</em>}</h4>
+        {canToggle && (
+          <label className="share-switch" title="Cho người thực hiện xem bài nộp của nhau">
+            <input type="checkbox" checked={task.share_submissions} disabled={saving} onChange={(event) => onToggleSharing(event.target.checked)} />
+            <i />
+            <span>Xem chéo bài nộp</span>
+          </label>
+        )}
+      </div>
+      {privateView && <p className="submission-private-note">Bạn chỉ thấy bài nộp của mình. Người duyệt và người giao xem được tất cả.</p>}
       {groups.length > 1 && (
         <p className="submission-summary">
           <b>{groups.length}</b> người đã nộp
