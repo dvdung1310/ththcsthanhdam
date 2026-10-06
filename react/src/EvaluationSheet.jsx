@@ -757,16 +757,20 @@ function CriterionRow({ criterion, row, bonus, selfMode, unitMode, reviewMode, s
       <div className="ev-criterion-title">
         <b>{criterion.code}. {criterion.title}</b>
         <small>{bonus ? "Điểm cộng" : `Tối đa ${formatScore(criterion.max_score)} điểm`}</small>
-        {lines.length > 0 && (
-          <button type="button" className={`ev-guide-toggle ${open ? "open" : ""}`} onClick={() => setOpen(!open)}>
-            Cách tính điểm <ChevronDown size={13} />
-          </button>
+        {(lines.length > 0 || notes.some((note) => !note.visible)) && (
+          <div className="ev-note-actions">
+            {lines.length > 0 && (
+              <button type="button" className={`ev-guide-toggle ${open ? "open" : ""}`} onClick={() => setOpen(!open)}>
+                Cách tính điểm <ChevronDown size={13} />
+              </button>
+            )}
+            {notes.filter((note) => !note.visible).map((note) => (
+              <button key={note.column} type="button" className="ev-add-note" onClick={() => setOpened((current) => ({ ...current, [note.column]: true }))}>
+                <Plus size={12} /> {labelled ? `Ghi chú ${note.label.toLowerCase()}` : "Ghi chú"}
+              </button>
+            ))}
+          </div>
         )}
-        {notes.filter((note) => !note.visible).map((note) => (
-          <button key={note.column} type="button" className="ev-add-note" onClick={() => setOpened((current) => ({ ...current, [note.column]: true }))}>
-            <Plus size={12} /> {labelled ? `Ghi chú ${note.label.toLowerCase()}` : "Ghi chú"}
-          </button>
-        ))}
         {open && <ul className="ev-guidance">{lines.map((line, index) => <li key={index}>{line}</li>)}</ul>}
         {criterion.requires_evidence && (
           <div className="ev-evidence">

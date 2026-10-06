@@ -867,6 +867,13 @@
   white-space: pre-wrap;
 }
 
+.ev-note-actions {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
 .ev-add-note {
   padding: 0;
   display: inline-flex;
