@@ -319,26 +319,26 @@
   background: #fff0f1;
 }
 
-.task-drawer .submission-list > article > header {
+.task-drawer .submission-group > article > header {
   align-items: center;
   justify-content: flex-start;
 }
 
-.task-drawer .submission-list > article > header > div {
+.task-drawer .submission-group > article > header > div {
   flex: 1;
   min-width: 0;
 }
 
-.task-drawer .submission-list > article > header > img,
-.task-drawer .submission-list > article > header > i {
+.task-drawer .submission-group > article > header > img,
+.task-drawer .submission-group > article > header > i {
   flex: none;
 }
 
-.task-drawer .submission-list > article {
+.task-drawer .submission-group > article {
   background: #fff;
 }
 
-.task-drawer .submission-list > article > p {
+.task-drawer .submission-group > article > p {
   padding: 0;
   color: #3f4a66;
   background: transparent;

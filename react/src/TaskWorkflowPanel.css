@@ -96,24 +96,6 @@
   font-size: 12px;
 }
 
-.submission-edit-btn {
-  margin-left: 8px;
-  padding: 4px 9px;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  border: 1px solid var(--c-primary-line);
-  border-radius: 6px;
-  color: var(--c-primary);
-  background: #fff;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.submission-edit-btn:hover:not(:disabled) {
-  background: var(--c-primary-tint);
-}
 
 .submit-existing-files {
   margin: 0;
