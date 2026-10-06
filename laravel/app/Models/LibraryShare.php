@@ -7,9 +7,8 @@ use Illuminate\Database\Eloquent\Model;
 class LibraryShare extends Model
 {
     public const READ = 'read';
-    public const UPLOAD = 'upload';
     public const EDIT = 'edit';
-    public const LEVELS = [self::READ => 1, self::UPLOAD => 2, self::EDIT => 3];
+    public const LEVELS = [self::READ => 1, self::EDIT => 3];
 
     protected $fillable = ['node_id', 'user_id', 'department_id', 'access', 'granted_by'];
 

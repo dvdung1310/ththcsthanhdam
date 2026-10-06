@@ -6,7 +6,7 @@ import PeoplePicker, { useOutsideClose } from "./PeoplePicker";
 import "./LibraryShareDialog.css";
 import Avatar from "./Avatar";
 
-export const ACCESS_LABELS = { read: "Xem", upload: "Tải lên", edit: "Chỉnh sửa" };
+export const ACCESS_LABELS = { read: "Xem", edit: "Chỉnh sửa" };
 
 const keyOf = (row) => (row.user_id ? `u${row.user_id}` : row.department_id ? `d${row.department_id}` : "all");
 
@@ -149,7 +149,7 @@ export default function LibraryShareDialog({ node, onClose, onSaved }) {
             )}
 
             <p className="lsd-legend">
-              <b>Xem</b>: mở và tải về · <b>Tải lên</b>: thêm file, tạo thư mục con · <b>Chỉnh sửa</b>: đổi tên và chia sẻ tiếp
+              <b>Xem</b>: mở và tải về · <b>Chỉnh sửa</b>: thêm file, tạo thư mục, đổi tên, di chuyển và chia sẻ tiếp
             </p>
             {error && <p className="lsd-error">{error}</p>}
           </>
