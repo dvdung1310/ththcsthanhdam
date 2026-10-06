@@ -63,3 +63,35 @@
   font-weight: 600;
   cursor: pointer;
 }
+
+.submit-form-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+
+.submit-form-head b {
+  color: var(--c-text);
+  font-size: 14px;
+}
+
+.submit-form-head small {
+  color: var(--c-muted);
+  font-size: 12px;
+}
+
+.submit-field-error {
+  display: block;
+  margin-top: 4px;
+  color: var(--c-danger);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.submit-hint {
+  margin-right: auto;
+  color: var(--c-muted);
+  font-size: 12px;
+}

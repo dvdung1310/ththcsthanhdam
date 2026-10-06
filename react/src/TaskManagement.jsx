@@ -1759,8 +1759,6 @@ function useDraftTracker(resetKeys, onDraftChange) {
 
 function TaskWorkflowPanel({ task, saving, error, onStart, onSubmit, onReview, onSelfComplete, onDraftChange }) {
   const [, track] = useDraftTracker([task.id, task.status, task.submission_count], onDraftChange);
-  const [submitOpen, setSubmitOpen] = useState(false);
-  useEffect(() => setSubmitOpen(false), [task.id, task.status]);
   const latest = task.latest_submission;
   const hasAction = task.can_update_progress || task.can_submit_completion || task.can_review_completion || task.can_self_complete;
   const waiting = task.status === "waiting_approval" && !task.can_review_completion;
@@ -1800,16 +1798,11 @@ function TaskWorkflowPanel({ task, saving, error, onStart, onSubmit, onReview, o
           </div>
         </form>
       )}
-      {(task.can_update_progress && task.status === "not_started") || task.can_submit_completion || task.can_self_complete ? (
+      {(task.can_update_progress && task.status === "not_started") || task.can_self_complete ? (
         <div className="drawer-action-row">
           {task.can_update_progress && task.status === "not_started" && (
             <button type="button" className="secondary-btn" disabled={saving} onClick={onStart}>
               <Activity size={15} /> Bắt đầu thực hiện
-            </button>
-          )}
-          {task.can_submit_completion && !submitOpen && (
-            <button type="button" className="primary-btn" disabled={saving} onClick={() => setSubmitOpen(true)}>
-              <Send size={15} /> Nộp kết quả
             </button>
           )}
           {task.can_self_complete && (
@@ -1819,37 +1812,83 @@ function TaskWorkflowPanel({ task, saving, error, onStart, onSubmit, onReview, o
           )}
         </div>
       ) : null}
-      {task.can_submit_completion && submitOpen && (
-        <form className="workflow-form submit-form" onSubmit={onSubmit} {...track("submit")}>
-          <label>
-            File kết quả
-            <input
-              name="submission_files[]"
-              type="file"
-              multiple
-              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.zip,.rar"
-              disabled={saving}
-            />
-          </label>
-          <label>
-            Đường link (mỗi dòng một link)
-            <textarea name="submission_links" rows="2" disabled={saving} placeholder="https://drive.google.com/..." />
-          </label>
-          <label>
-            Ghi chú
-            <textarea name="comment" rows="2" disabled={saving} placeholder="Mô tả kết quả đã làm..." />
-          </label>
-          <div className="drawer-action-row end">
-            <button type="button" className="secondary-btn" disabled={saving} onClick={() => setSubmitOpen(false)}>
-              Hủy
-            </button>
-            <button className="primary-btn" disabled={saving}>
-              <Send size={15} /> Gửi đề nghị duyệt
-            </button>
-          </div>
-        </form>
+      {task.can_submit_completion && (
+        <SubmissionForm key={`${task.id}-${task.submission_count ?? 0}`} task={task} saving={saving} onSubmit={onSubmit} draft={track("submit")} />
       )}
     </section>
+  );
+}
+
+const LINK_PATTERN = /^https?:\/\/\S+$/i;
+
+function SubmissionForm({ task, saving, onSubmit, draft }) {
+  const [files, setFiles] = useState([]);
+  const [links, setLinks] = useState("");
+  const [comment, setComment] = useState("");
+  const [fileProblem, setFileProblem] = useState("");
+
+  const linkLines = links.split(/\r?\n/).map((line, index) => [line.trim(), index + 1]).filter(([line]) => line);
+  const badLines = linkLines.filter(([line]) => !LINK_PATTERN.test(line)).map(([, number]) => number);
+  const filled = files.length > 0 || linkLines.length > 0 || comment.trim() !== "";
+  const blocked = !filled
+    ? "Cần ít nhất một: file, link hoặc ghi chú."
+    : badLines.length
+      ? "Sửa các link chưa hợp lệ trước khi nộp."
+      : fileProblem;
+  const recipients = task.reviewers?.length
+    ? `người duyệt ${task.reviewers.map((reviewer) => reviewer.name).join(", ")}`
+    : `người giao việc ${task.creator || ""}`.trim();
+
+  const reset = (event) => {
+    draft.onReset(event);
+    setFiles([]);
+    setLinks("");
+    setComment("");
+    setFileProblem("");
+  };
+
+  return (
+    <form className="workflow-form submit-form" onSubmit={onSubmit} onInput={draft.onInput} onChange={draft.onChange} onReset={reset}>
+      <div className="submit-form-head">
+        <b>Nộp kết quả</b>
+        <small>Gửi tới {recipients} để duyệt</small>
+      </div>
+      <label>
+        File kết quả
+        <input
+          name="submission_files[]"
+          type="file"
+          multiple
+          accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.zip,.rar"
+          disabled={saving}
+          onChange={async (event) => {
+            const list = [...event.target.files];
+            setFiles(list);
+            setFileProblem((await uploadProblem(list)) ?? "");
+          }}
+        />
+        {fileProblem && <small className="submit-field-error">{fileProblem}</small>}
+      </label>
+      <label>
+        Đường link (mỗi dòng một link)
+        <textarea name="submission_links" rows="2" value={links} disabled={saving} onChange={(event) => setLinks(event.target.value)} placeholder="https://drive.google.com/..." />
+        {badLines.length > 0 && (
+          <small className="submit-field-error">
+            {badLines.length === 1 ? `Dòng ${badLines[0]}` : `Các dòng ${badLines.join(", ")}`} không phải link hợp lệ (cần bắt đầu bằng http:// hoặc https://).
+          </small>
+        )}
+      </label>
+      <label>
+        Ghi chú
+        <textarea name="comment" rows="2" value={comment} disabled={saving} onChange={(event) => setComment(event.target.value)} placeholder="Mô tả kết quả đã làm..." />
+      </label>
+      <div className="drawer-action-row end">
+        {blocked && <span className="submit-hint">{blocked}</span>}
+        <button className="primary-btn" disabled={saving || Boolean(blocked)}>
+          <Send size={15} /> {saving ? "Đang nộp..." : "Nộp kết quả"}
+        </button>
+      </div>
+    </form>
   );
 }
 
