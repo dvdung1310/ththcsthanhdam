@@ -1,12 +1,15 @@
 /* Design tokens and shared overrides for the sober school theme. */
 :root {
-  --c-primary: #1f4e79;
-  --c-primary-hover: #173d5f;
-  --c-primary-soft: #e9eff5;
-  --c-primary-soft-2: #dbe5ee;
-  --c-primary-tint: #f4f7fa;
-  --c-primary-strong: #173d5f;
-  --c-primary-line: #b9c9d9;
+  --c-primary: #0b3d91;
+  --c-primary-rgb: 11 61 145;
+  --c-primary-hover: #08306f;
+  --c-primary-strong: #08306f;
+  --c-primary-line: #bccbe6;
+  --c-primary-soft-2: #dce5f4;
+  --c-primary-soft: #eaf0f9;
+  --c-primary-tint: #f5f8fc;
+  --c-primary-muted: #a9bcdd;
+  --c-accent: #f8b808;
   --c-text: #1f2937;
   --c-text-2: #4b5563;
   --c-muted: #6b7280;
@@ -36,7 +39,7 @@
 .app-shell .brand-logo {
   border-radius: var(--c-radius) !important;
   background: var(--c-primary) !important;
-  box-shadow: none !important;
+  box-shadow: inset 0 -3px 0 var(--c-accent) !important;
 }
 
 .app-shell .brand strong {
@@ -189,8 +192,8 @@
 }
 
 .app-shell .ev-page .ev-chip.purple {
-  color: #3b5d7d !important;
-  background: #eef2f6 !important;
+  color: var(--c-primary-hover) !important;
+  background: var(--c-primary-tint) !important;
   box-shadow: inset 0 0 0 1px var(--c-primary-line) !important;
 }
 
@@ -287,7 +290,7 @@
 }
 
 .app-shell .ev-page .ev-progress i.submitted {
-  background: #9db4cb !important;
+  background: var(--c-primary-muted) !important;
 }
 
 .app-shell .ev-page .ev-board-summary .late,
@@ -325,4 +328,12 @@
 
 .app-shell .ev-page .ev-excluded summary {
   color: var(--c-text-2) !important;
+}
+
+.login-brand > span {
+  box-shadow: inset 0 -3px 0 var(--c-accent);
+}
+
+.login-visual {
+  background: var(--c-primary-strong) !important;
 }
