@@ -146,6 +146,8 @@ class TaskController extends Controller
         $attachments = DB::table('file_attachments')->join('files', 'files.id', '=', 'file_attachments.file_id')->where('attachable_type', Task::class)->where('attachable_id', $task->id)->select('files.id', 'files.original_name', 'files.mime_type', 'files.size')->get();
         $canShareSubmissions = $task->status === Task::COMPLETED && $request->user()->hasPermission('library.view');
         $submissions = TaskSubmission::with(['teacher.user', 'reviewer:id,name'])->where('task_id', $task->id)->latest('submitted_at')->latest('id')->get()->map(fn (TaskSubmission $submission) => [
+            'can_edit' => $this->canEditSubmission($request, $task, $submission),
+            'edited_at' => $submission->edited_at?->toIso8601String(),
             'id' => $submission->id,
             'version' => $submission->version,
             'submitter' => $submission->teacher?->user?->name,
@@ -267,6 +269,45 @@ class TaskController extends Controller
         $this->notify(collect([$task->creator])->concat($task->reviewers), $task, $request->user()->name.' đã gửi đề nghị xác nhận hoàn thành: '.$task->title, 'completion_submitted', $request->user());
 
         return response()->json(['message' => 'Đã gửi đề nghị hoàn thành và thông báo cho người giao việc, người duyệt.']);
+    }
+
+    public function updateSubmission(Request $request, Task $task, TaskSubmission $submission): JsonResponse
+    {
+        abort_unless($submission->task_id === $task->id, 404);
+        abort_unless($submission->teacher_id && $submission->teacher_id === $request->user()->teacher?->id, 403, 'Bạn chỉ được sửa bài nộp của chính mình.');
+        abort_unless($this->canEditSubmission($request, $task, $submission), 422, 'Bài nộp đã được xử lý, không sửa được nữa.');
+        $data = $request->validate([
+            'comment' => ['nullable', 'string', 'max:3000'],
+            'links' => ['nullable', 'array', 'max:20'],
+            'links.*' => ['required', 'url:http,https', 'max:2048'],
+            'submission_files' => ['nullable', 'array', 'max:20'],
+            'submission_files.*' => ['file', 'max:20480', 'mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,txt,jpg,jpeg,png,zip,rar'],
+            'remove_file_ids' => ['nullable', 'array'],
+            'remove_file_ids.*' => ['integer'],
+        ], ['links.*.url' => 'Link “:input” không hợp lệ, cần bắt đầu bằng http:// hoặc https://.']);
+        $links = collect($data['links'] ?? [])->filter()->unique()->values()->all();
+        $attached = DB::table('file_attachments')->where('attachable_type', TaskSubmission::class)->where('attachable_id', $submission->id)->pluck('file_id')->map(fn ($id) => (int) $id);
+        $removed = $attached->intersect(collect($data['remove_file_ids'] ?? [])->map(fn ($id) => (int) $id))->values();
+        $keepsFiles = $attached->count() > $removed->count() || $request->hasFile('submission_files');
+        abort_if(blank($data['comment'] ?? null) && $links === [] && ! $keepsFiles, 422, 'Cần ít nhất một: file, link hoặc ghi chú.');
+
+        DB::transaction(function () use ($request, $task, $submission, $data, $links, $removed) {
+            $locked = TaskSubmission::whereKey($submission->id)->lockForUpdate()->first();
+            abort_unless($locked->status === 'submitted' && $task->fresh()->status === Task::WAITING_APPROVAL, 422, 'Bài nộp đã được xử lý, không sửa được nữa.');
+            $locked->update(['result_content' => $data['comment'] ?? null, 'links' => $links, 'edited_at' => now()]);
+            foreach ($request->file('submission_files', []) as $uploaded) {
+                $file = $this->storeFile($uploaded, 'task-submissions', $request->user());
+                DB::table('file_attachments')->insert(['file_id' => $file->id, 'attachable_type' => TaskSubmission::class, 'attachable_id' => $locked->id, 'purpose' => 'submission', 'created_at' => now(), 'updated_at' => now()]);
+            }
+            foreach ($removed as $fileId) {
+                DB::table('file_attachments')->where('file_id', $fileId)->where('attachable_type', TaskSubmission::class)->where('attachable_id', $locked->id)->delete();
+                app(FileStore::class)->releaseIfUnused($fileId);
+            }
+            $task->updates()->create(['teacher_id' => $locked->teacher_id, 'created_by' => $request->user()->id, 'status' => Task::WAITING_APPROVAL, 'content' => 'Đã chỉnh sửa bài nộp lúc '.now()->format('H:i d/m/Y').'.']);
+        });
+        $this->notify(collect([$task->creator])->concat($task->reviewers), $task, $request->user()->name.' đã chỉnh sửa bài nộp: '.$task->title, 'completion_updated', $request->user());
+
+        return response()->json(['message' => 'Đã cập nhật bài nộp và thông báo cho người duyệt.']);
     }
 
     public function reviewCompletion(Request $request, Task $task): JsonResponse
@@ -505,6 +546,15 @@ class TaskController extends Controller
         }
 
         return ! ($this->isPersonal($task) && ! $this->hasReviewers($task));
+    }
+
+    private function canEditSubmission(Request $request, Task $task, TaskSubmission $submission): bool
+    {
+        return $submission->status === 'submitted'
+            && $task->status === Task::WAITING_APPROVAL
+            && $submission->teacher_id !== null
+            && $submission->teacher_id === $request->user()->teacher?->id
+            && ! $task->submissions()->where('version', '>', $submission->version)->exists();
     }
 
     private function canReviewTask(Request $request, Task $task): bool
