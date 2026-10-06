@@ -5,6 +5,7 @@ import { apiJson } from "./api";
 import { useConfirm } from "./ConfirmDialog";
 import { STATUS_TONES } from "./evaluationUtils";
 import "./Evaluation.css";
+import Avatar from "./Avatar";
 
 const pad = (n) => String(n).padStart(2, "0");
 
@@ -293,7 +294,7 @@ export default function EvaluationPeriodEditor() {
                       </td>
                       <td>
                         <span className="ev-person">
-                          {row.avatar_url ? <img src={row.avatar_url} alt="" /> : <i>{row.name?.split(" ").at(-1)?.charAt(0)}</i>}
+                          {row.avatar_url ? <img src={row.avatar_url} alt="" /> : <Avatar name={row.name} />}
                           <span>
                             <b>{row.name}</b>
                             {row.other_units?.length > 0 && <small>Cũng thuộc: {row.other_units.join(", ")}</small>}

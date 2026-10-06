@@ -6,6 +6,7 @@ import { useConfirm } from "./ConfirmDialog";
 import { formatMoment, formatScore, parseScore } from "./evaluationUtils";
 import TablePagination, { usePagination } from "./TablePagination";
 import "./Evaluation.css";
+import Avatar from "./Avatar";
 
 let keySeed = 0;
 const newKey = () => `k${++keySeed}`;
@@ -162,7 +163,7 @@ function StatusChips({ template }) {
 function PersonStamp({ person, at, fallback = "Hệ thống" }) {
   return (
     <span className="ev-stamp">
-      {person?.avatar_url ? <img src={person.avatar_url} alt="" /> : <i>{(person?.name ?? fallback).split(" ").at(-1).charAt(0).toUpperCase()}</i>}
+      {person?.avatar_url ? <img src={person.avatar_url} alt="" /> : <Avatar name={person?.name ?? fallback} />}
       <span>
         <b>{person?.name ?? fallback}</b>
         <small>{formatMoment(at)}</small>

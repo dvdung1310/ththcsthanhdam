@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Columns3, RotateCcw } from "lucide-react";
 import "./TaskTable.css";
+import Avatar from "./Avatar";
 
 export const TASK_COLUMNS = [
   { key: "task", label: "Công việc", fixed: true },
@@ -82,8 +83,6 @@ export function ColumnPicker({ state }) {
   );
 }
 
-const chipTones = ["#0b3d91", "#3d64a8", "#2f7a5b", "#946a2e", "#8a4b5c", "#44737e"];
-
 export function NameStack({ items, max = 2, empty = "—", details, title }) {
   const [anchor, setAnchor] = useState(null);
   const popoverRef = useRef(null);
@@ -111,7 +110,7 @@ export function NameStack({ items, max = 2, empty = "—", details, title }) {
             (item.person.avatar_url ? (
               <img src={item.person.avatar_url} alt="" />
             ) : (
-              <i style={{ background: chipTones[(item.person.id || 0) % chipTones.length] }}>{item.person.name?.split(" ").at(-1)?.charAt(0)}</i>
+              <Avatar name={item.person.name} />
             ))}
           {item.label}
         </span>

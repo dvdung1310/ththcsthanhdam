@@ -45,6 +45,7 @@ import ActionMenu, { MenuList, menuPosition } from "./ActionMenu";
 import LibraryFolderTree from "./LibraryFolderTree";
 import { useNameConflicts } from "./NameConflictDialog";
 import "./DataLibrary.css";
+import Avatar from "./Avatar";
 
 
 function fileIcon(mime = "") {
@@ -640,11 +641,10 @@ function fileKind(name = "", mime = "") {
 }
 
 function PersonAvatar({ person, size = 26 }) {
-  const initial = person?.name?.trim().split(/\s+/).at(-1)?.charAt(0).toUpperCase() ?? "?";
   return person?.avatar_url ? (
     <img className="dl-avatar" src={person.avatar_url} alt="" style={{ width: size, height: size }} />
   ) : (
-    <i className="dl-avatar" style={{ width: size, height: size, fontSize: size * 0.42 }}>{initial}</i>
+    <Avatar className="dl-avatar" name={person?.name} size={size} />
   );
 }
 

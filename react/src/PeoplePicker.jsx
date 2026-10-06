@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, CheckCircle2, ChevronRight, Search, Users } from "lucide-react";
 import "./PeoplePicker.css";
+import Avatar from "./Avatar";
 
 const SCHOOL_ROLES = ["admin", "hieu_truong", "thu_ky"];
 const RANK = { admin: 0, hieu_truong: 1, thu_ky: 2, to_truong: 3, to_pho: 4, nhom_truong: 5 };
@@ -181,7 +182,7 @@ export default function PeoplePicker({
               const selected = selectedPeople.includes(person.id);
               return (
                 <button type="button" key={person.id} className={`pp-person ${selected ? "selected" : ""}`} onClick={() => onTogglePerson(person.id)}>
-                  {person.avatar_url ? <img src={person.avatar_url} alt="" /> : <i>{person.name.charAt(0)}</i>}
+                  {person.avatar_url ? <img src={person.avatar_url} alt="" /> : <Avatar name={person.name} />}
                   <span className="pp-person-main">
                     <b>{person.name}</b>
                     <span className="pp-roles">

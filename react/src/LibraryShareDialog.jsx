@@ -4,6 +4,7 @@ import { apiJson } from "./api";
 import { useConfirm } from "./ConfirmDialog";
 import PeoplePicker, { useOutsideClose } from "./PeoplePicker";
 import "./LibraryShareDialog.css";
+import Avatar from "./Avatar";
 
 export const ACCESS_LABELS = { read: "Xem", upload: "Tải lên", edit: "Chỉnh sửa" };
 
@@ -170,5 +171,5 @@ export default function LibraryShareDialog({ node, onClose, onSaved }) {
 function SubjectIcon({ row }) {
   if (row.kind === "everyone") return <i className="lsd-icon everyone"><Globe2 size={15} /></i>;
   if (row.kind === "unit") return <i className="lsd-icon unit"><Users size={15} /></i>;
-  return row.avatar_url ? <img className="lsd-icon" src={row.avatar_url} alt="" /> : <i className="lsd-icon user">{row.name?.split(" ").at(-1)?.charAt(0)}</i>;
+  return row.avatar_url ? <img className="lsd-icon" src={row.avatar_url} alt="" /> : <Avatar className="lsd-icon user" name={row.name} />;
 }

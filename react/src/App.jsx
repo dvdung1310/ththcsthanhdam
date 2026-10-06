@@ -58,6 +58,7 @@ import "./PermissionStates.css";
 import "./SystemTypography.css";
 import "./GlobalLoading.css";
 import "./NotificationTaskStates.css";
+import Avatar from "./Avatar";
 
 const navTree = [
   { key: "dashboard", label: "Tổng quan", icon: LayoutDashboard, path: "/" },
@@ -580,7 +581,7 @@ function App() {
               onUnreadChange={setUnreadCount}
             />
             <div className="profile">
-              {authUser.avatar_url ? <img className="avatar avatar-image" style={{ objectFit: "cover" }} src={authUser.avatar_url} alt="Ảnh đại diện" /> : <span className="avatar">{authUser.name.charAt(0)}</span>}
+              {authUser.avatar_url ? <img className="avatar avatar-image" style={{ objectFit: "cover" }} src={authUser.avatar_url} alt="Ảnh đại diện" /> : <Avatar as="span" className="avatar" name={authUser.name} />}
               <span>
                 <strong>{authUser.name}</strong>
                 <small>{authUser.current_position ?? authUser.roles[0]?.name ?? "Người dùng"}</small>

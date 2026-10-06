@@ -23,6 +23,7 @@ import { apiJson } from "./api";
 import PersonnelDrawer, { EMPLOYMENT_LABELS } from "./PersonnelDrawer";
 import OrgStructure from "./OrgStructure";
 import "./PersonnelManagement.css";
+import Avatar from "./Avatar";
 
 const LEADER_ROLES = ["hieu_truong", "thu_ky", "to_truong", "to_pho", "nhom_truong"];
 
@@ -317,7 +318,7 @@ export default function PersonnelManagement({ view = "people" }) {
                             {person.avatar_url ? (
                               <img src={person.avatar_url} alt={`Ảnh của ${person.name}`} />
                             ) : (
-                              <span>{person.name.split(" ").at(-1).charAt(0)}</span>
+                              <Avatar as="span" name={person.name} />
                             )}
                             <div>
                               <b>{person.name}</b>

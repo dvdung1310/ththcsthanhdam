@@ -63,6 +63,7 @@ import { downloadFile, formatBytes } from "./fileUtils";
 import FilePreview from "./FilePreview";
 import ActionMenu from "./ActionMenu";
 import { useConfirm } from "./ConfirmDialog";
+import Avatar from "./Avatar";
 
 const labels = {
   status: {
@@ -956,7 +957,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
                             alt="Ảnh đại diện"
                           />
                         ) : (
-                          <UserRoundCheck size={20} />
+                          <Avatar name={refs.current_teacher?.name} size={34} />
                         )}
                         <div>
                           <b>{refs.current_teacher?.name}</b>
@@ -1295,7 +1296,7 @@ function CompactAssignees({ editing, refs, toggle }) {
         ))}
         {teachers.map((item) => (
           <button type="button" className="assignee-chip" key={`t-${item.id}`} onClick={() => toggle("teacher_ids", item.id)} title="Bấm để bỏ chọn">
-            {item.avatar_url ? <img src={item.avatar_url} alt={`Ảnh của ${item.name}`} /> : <i>{item.name.charAt(0)}</i>}
+            {item.avatar_url ? <img src={item.avatar_url} alt={`Ảnh của ${item.name}`} /> : <Avatar name={item.name} />}
             {item.name}
             <X size={12} />
           </button>
@@ -1398,7 +1399,7 @@ function ReviewerPicker({ reviewers, units, value, onChange }) {
         </button>
         {selected.map((item) => (
           <button type="button" className="assignee-chip" key={item.id} onClick={() => toggle(item.id)} title="Bấm để bỏ chọn">
-            {item.avatar_url ? <img src={item.avatar_url} alt={`Ảnh của ${item.name}`} /> : <i>{item.name.charAt(0)}</i>}
+            {item.avatar_url ? <img src={item.avatar_url} alt={`Ảnh của ${item.name}`} /> : <Avatar name={item.name} />}
             {item.name}
             {roleChips(item, null, units).slice(0, 1).map((chip) => (
               <small key={chip.label}>{chip.label}</small>
@@ -1616,15 +1617,11 @@ function TaskTimeline({ task }) {
   );
 }
 
-const avatarTones = ["#0b3d91", "#3d64a8", "#2f7a5b", "#946a2e", "#8a4b5c", "#44737e"];
-
 function PersonAvatar({ person, size = 32 }) {
   return person.avatar_url ? (
     <img className="person-avatar" src={person.avatar_url} alt="" style={{ width: size, height: size }} />
   ) : (
-    <i className="person-avatar" style={{ width: size, height: size, background: avatarTones[(person.id || 0) % avatarTones.length] }}>
-      {person.name?.split(" ").at(-1)?.charAt(0)}
-    </i>
+    <Avatar className="person-avatar" name={person.name} size={size} />
   );
 }
 
@@ -1934,7 +1931,7 @@ function SubmissionCard({ task, submission, open, older, editing, saving, onTogg
         {submission.submitter_avatar_url ? (
           <img className="submission-avatar" src={submission.submitter_avatar_url} alt={`Ảnh của ${submission.submitter}`} />
         ) : (
-          <i className="submission-avatar-fallback">{submission.submitter?.charAt(0)}</i>
+          <Avatar className="submission-avatar-fallback" name={submission.submitter} />
         )}
         <div className="submission-who">
           <div className="submission-title">
@@ -2072,7 +2069,7 @@ function TaskChat({ task, saving, editingComment, onEditComment, onSaveComment, 
               {comment.creator_avatar_url ? (
                 <img className="comment-avatar" src={comment.creator_avatar_url} alt={`Ảnh của ${comment.creator_name}`} />
               ) : (
-                <i>{comment.creator_name?.charAt(0) || "?"}</i>
+                <Avatar name={comment.creator_name} />
               )}
               <div>
                 <header>

@@ -4,6 +4,7 @@ import { apiJson } from "./api";
 import { useConfirm } from "./ConfirmDialog";
 import { EMPLOYMENT_LABELS } from "./PersonnelDrawer";
 import "./OrgStructure.css";
+import UserAvatar from "./Avatar";
 
 const COLLAPSED_KEY = "org-collapsed";
 
@@ -336,13 +337,11 @@ function UnitDialog({ unit, roots, onClose, onSaved }) {
   );
 }
 
-const initial = (name) => (name ?? "").trim().split(/\s+/).at(-1)?.charAt(0)?.toUpperCase() ?? "?";
-
 function Avatar({ person, size = 30 }) {
   return person.avatar_url ? (
     <img className="org-avatar" src={person.avatar_url} alt="" style={{ width: size, height: size }} />
   ) : (
-    <i className="org-avatar" style={{ width: size, height: size }}>{initial(person.name)}</i>
+    <UserAvatar className="org-avatar" name={person.name} size={size} />
   );
 }
 
