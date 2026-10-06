@@ -23,7 +23,7 @@
   place-items: center;
   border-radius: 50%;
   color: #fff;
-  background: #6950d9;
+  background: var(--c-primary);
   font-size: 9px;
   font-style: normal;
   font-weight: 700;
@@ -42,7 +42,7 @@
   place-items: center;
   border-radius: 50%;
   color: #fff;
-  background: #7259dc;
+  background: var(--c-primary);
   font-size: 11px;
   font-style: normal;
   font-weight: 700;

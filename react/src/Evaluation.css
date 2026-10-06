@@ -7,7 +7,7 @@
 
 .ev-card {
   border: 1px solid #e6e9f1;
-  border-radius: 14px;
+  border-radius: 8px;
   background: #fff;
 }
 
@@ -45,7 +45,7 @@
   padding: 4px;
   align-self: flex-start;
   border: 1px solid #e6e9f1;
-  border-radius: 12px;
+  border-radius: 7px;
   background: #fff;
 }
 
@@ -66,14 +66,14 @@
 
 .ev-tabs button.active {
   color: #fff;
-  background: linear-gradient(100deg, #5c45dc, #765be9);
+  background: var(--c-primary);
 }
 
 .ev-chip {
   display: inline-flex;
   align-items: center;
   padding: 3px 10px;
-  border-radius: 99px;
+  border-radius: 4px;
   color: #52607f;
   background: #f1f2f6;
   font-size: 12px;
@@ -87,8 +87,8 @@
 }
 
 .ev-chip.purple {
-  color: #5a3fd6;
-  background: #efebff;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
 }
 
 .ev-chip.green {
@@ -200,7 +200,7 @@
   align-items: center;
   gap: 6px;
   border: 1px solid #e3e6ee;
-  border-radius: 99px;
+  border-radius: 4px;
   color: #52607f;
   background: #fff;
   font-size: 12px;
@@ -209,15 +209,15 @@
 }
 
 .ev-status-chips button.active {
-  border-color: #c6bdf5;
-  color: #4b33c9;
-  background: #f1eeff;
+  border-color: var(--c-primary-line);
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
 }
 
 .ev-status-chips em {
   min-width: 18px;
   padding: 0 5px;
-  border-radius: 99px;
+  border-radius: 4px;
   background: #eef0f5;
   font-size: 11px;
   font-style: normal;
@@ -263,7 +263,7 @@
   font-weight: 700;
   letter-spacing: 0.4px;
   text-align: left;
-  text-transform: uppercase;
+  text-transform:none;
   white-space: nowrap;
 }
 
@@ -284,7 +284,7 @@
 }
 
 .ev-table tr.clickable:hover {
-  background: #faf9ff;
+  background: var(--c-primary-tint);
 }
 
 .ev-row-action {
@@ -316,7 +316,7 @@
   border-radius: 50%;
   object-fit: cover;
   color: #fff;
-  background: linear-gradient(135deg, #8b6cf0, #5a3fd6);
+  background: var(--c-primary);
   font-size: 13px;
   font-style: normal;
   font-weight: 700;
@@ -349,7 +349,7 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  border-radius: 16px;
+  border-radius: 8px;
   background: #fff;
   box-shadow: 0 25px 70px rgba(13, 20, 45, 0.25);
 }
@@ -410,7 +410,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #5a3fd6;
+  color: var(--c-primary);
   font-size: 13px;
   font-weight: 700;
   text-decoration: none;
@@ -452,7 +452,7 @@
 .ev-notice {
   padding: 11px 14px;
   border: 1px solid #cfe0f7;
-  border-radius: 11px;
+  border-radius: 7px;
   color: #2f5f9e;
   background: #f2f7fe;
   font-size: 13px;
@@ -541,7 +541,7 @@
 }
 
 .ev-section h3 span {
-  color: #6a4ee0;
+  color: var(--c-primary);
 }
 
 .ev-section header small {
@@ -574,7 +574,7 @@
 .ev-switch input {
   width: 16px;
   height: 16px;
-  accent-color: #5a3fd6;
+  accent-color: var(--c-primary);
 }
 
 .ev-section.disabled header h3,
@@ -611,7 +611,7 @@
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.4px;
-  text-transform: uppercase;
+  text-transform:none;
 }
 
 .ev-criteria-head span:not(:first-child),
@@ -647,7 +647,7 @@
   align-items: center;
   gap: 2px;
   border: 0;
-  color: #5a3fd6;
+  color: var(--c-primary);
   background: none;
   font-size: 12px;
   font-weight: 600;
@@ -687,7 +687,7 @@
   display: inline-flex;
   align-items: center;
   border: 1px solid #e3e6ee;
-  border-radius: 99px;
+  border-radius: 4px;
   background: #fff;
 }
 
@@ -721,10 +721,10 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  border: 1px dashed #c6bdf5;
+  border: 1px dashed var(--c-primary-line);
   border-radius: 99px;
-  color: #5a3fd6;
-  background: #faf9ff;
+  color: var(--c-primary);
+  background: var(--c-primary-tint);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -752,8 +752,8 @@
 }
 
 .ev-score-input:focus-within {
-  border-color: #8b6cf0;
-  outline: 3px solid rgba(139, 108, 240, 0.15);
+  border-color: var(--c-primary);
+  outline: 3px solid rgb(var(--c-primary-rgb) / 0.15);
 }
 
 .ev-score-input input {
@@ -832,7 +832,7 @@
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.3px;
-  text-transform: uppercase;
+  text-transform:none;
 }
 
 .ev-note-field textarea {
@@ -851,8 +851,8 @@
 }
 
 .ev-note-field textarea:focus {
-  border-color: #8b6cf0;
-  outline: 3px solid rgba(139, 108, 240, 0.15);
+  border-color: var(--c-primary);
+  outline: 3px solid rgb(var(--c-primary-rgb) / 0.15);
   background: #fff;
 }
 
@@ -881,7 +881,7 @@
 }
 
 .ev-add-note:hover {
-  color: #5a3fd6;
+  color: var(--c-primary);
 }
 
 .ev-total-invalid {
@@ -971,7 +971,7 @@
   background: #fafbfd;
   font-size: 13px;
   font-weight: 700;
-  border-radius: 0 0 14px 14px;
+  border-radius: 0 0 8px 8px;
 }
 
 .ev-summary {
@@ -1031,7 +1031,7 @@
 
 .ev-summary-table tr.grand td {
   border-top: 2px solid #e3e6ee;
-  color: #4b33c9;
+  color: var(--c-primary);
   font-size: 15px;
 }
 
@@ -1040,8 +1040,8 @@
   display: flex;
   flex-direction: column;
   gap: 3px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #f4f1ff, #fbfaff);
+  border-radius: 7px;
+  background: var(--c-primary-soft);
 }
 
 .ev-grade small {
@@ -1049,11 +1049,11 @@
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.3px;
-  text-transform: uppercase;
+  text-transform:none;
 }
 
 .ev-grade b {
-  color: #4b33c9;
+  color: var(--c-primary);
   font-size: 18px;
 }
 
@@ -1114,7 +1114,7 @@
 .ev-review input[type="checkbox"] {
   width: 16px;
   height: 16px;
-  accent-color: #5a3fd6;
+  accent-color: var(--c-primary);
 }
 
 .ev-trail {
@@ -1165,7 +1165,7 @@
   border-radius: 50%;
   object-fit: cover;
   color: #fff;
-  background: linear-gradient(135deg, #8b6cf0, #5a3fd6);
+  background: var(--c-primary);
   font-size: 12px;
   font-style: normal;
   font-weight: 700;
@@ -1340,11 +1340,11 @@
   color: #8a92a8;
   font-size: 11px;
   font-weight: 700;
-  text-transform: uppercase;
+  text-transform:none;
 }
 
 .ev-tpl-totals b {
-  color: #4b33c9;
+  color: var(--c-primary);
   font-size: 20px;
 }
 
@@ -1401,7 +1401,7 @@
   font-size: 11px;
   font-weight: 700;
   text-align: left;
-  text-transform: uppercase;
+  text-transform:none;
 }
 
 .ev-tpl-grades td {
@@ -1427,7 +1427,7 @@
   width: 16px;
   min-height: 16px;
   height: 16px;
-  accent-color: #5a3fd6;
+  accent-color: var(--c-primary);
 }
 
 .ev-tpl-tools {
@@ -1449,8 +1449,8 @@
 }
 
 .ev-tpl-tools button:hover:not(:disabled) {
-  color: #5a3fd6;
-  background: #f1eeff;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
 }
 
 .ev-tpl-tools button.danger:hover {
@@ -1464,7 +1464,7 @@
 }
 
 .ev-tpl-section {
-  border-left: 4px solid #8b6cf0;
+  border-left: 4px solid var(--c-primary);
 }
 
 .ev-tpl-section.bonus {
@@ -1483,7 +1483,7 @@
   padding: 14px 16px;
   border-bottom: 1px solid #eceef3;
   background: #fafbfd;
-  border-radius: 0 14px 0 0;
+  border-radius: 0 8px 0 0;
 }
 
 .ev-tpl-section-head input.code,
@@ -1555,10 +1555,10 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  border: 1px dashed #c6bdf5;
+  border: 1px dashed var(--c-primary-line);
   border-radius: 9px;
-  color: #5a3fd6;
-  background: #faf9ff;
+  color: var(--c-primary);
+  background: var(--c-primary-tint);
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
@@ -1593,7 +1593,7 @@
 }
 
 .ev-segment button.active {
-  color: #4b33c9;
+  color: var(--c-primary);
   background: #fff;
   box-shadow: 0 1px 4px rgba(31, 42, 86, 0.12);
 }
@@ -1613,8 +1613,8 @@
 }
 
 .ev-roster-chevron:hover {
-  color: #5a3fd6;
-  background: #ece8ff;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
 }
 
 .ev-roster-chevron svg {
@@ -1627,9 +1627,9 @@
 
 .ev-role-chip {
   padding: 1px 7px;
-  border-radius: 99px;
-  color: #5a3fd6;
-  background: #f1eeff;
+  border-radius: 4px;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
@@ -1680,7 +1680,7 @@
 }
 
 .primary-btn.danger {
-  background: linear-gradient(100deg, #d23a4e, #e45869);
+  background: #b03a48;
 }
 
 .primary-btn.danger:disabled {
@@ -1714,7 +1714,7 @@
 }
 
 .ev-table tr.clickable:hover .ev-row-arrow {
-  color: #5a3fd6;
+  color: var(--c-primary);
 }
 
 .ev-stamp {
@@ -1733,7 +1733,7 @@
   border-radius: 50%;
   object-fit: cover;
   color: #fff;
-  background: linear-gradient(135deg, #8b6cf0, #5a3fd6);
+  background: var(--c-primary);
   font-size: 11px;
   font-style: normal;
   font-weight: 700;
@@ -1798,7 +1798,7 @@
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.3px;
-  text-transform: uppercase;
+  text-transform:none;
 }
 
 .ev-tpl-info dt:first-child {
@@ -1838,8 +1838,8 @@
 }
 
 .ev-tpl-periods a:hover {
-  border-color: #c6bdf5;
-  color: #5a3fd6;
+  border-color: var(--c-primary-line);
+  color: var(--c-primary);
 }
 
 .ev-tpl-view header {
@@ -1878,7 +1878,7 @@
   align-items: center;
   gap: 10px;
   border: 1px solid #e3e6ee;
-  border-radius: 14px;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.97);
   box-shadow: 0 12px 40px rgba(31, 42, 86, 0.16);
 }
@@ -2298,7 +2298,7 @@
 }
 
 .ev-period-template svg {
-  color: #6a4ee0;
+  color: var(--c-primary);
 }
 
 .ev-period-template span {
@@ -2307,7 +2307,7 @@
 }
 
 .ev-period-template a {
-  color: #4b33c9;
+  color: var(--c-primary);
   font-size: 13px;
   font-weight: 600;
   text-decoration: none;
@@ -2362,14 +2362,14 @@
 }
 
 .ev-unit-item.active {
-  background: #efebff;
+  background: var(--c-primary-soft);
 }
 
 .ev-unit-item input {
   width: 15px;
   height: 15px;
   flex: none;
-  accent-color: #5a3fd6;
+  accent-color: var(--c-primary);
 }
 
 .ev-unit-spacer {
@@ -2379,7 +2379,7 @@
 
 .ev-unit-icon {
   flex: none;
-  color: #6a4ee0;
+  color: var(--c-primary);
 }
 
 .ev-unit-name {
@@ -2393,7 +2393,7 @@
 }
 
 .ev-unit-item.active .ev-unit-name {
-  color: #4b33c9;
+  color: var(--c-primary);
   font-weight: 600;
 }
 
@@ -2429,8 +2429,8 @@
 
 .ev-unit-excluded:hover,
 .ev-unit-excluded.active {
-  color: #4b33c9;
-  background: #f6f4ff;
+  color: var(--c-primary);
+  background: var(--c-primary-tint);
 }
 
 .ev-people-toolbar {
@@ -2493,11 +2493,11 @@
 .ev-people-table input[type="checkbox"] {
   width: 16px;
   height: 16px;
-  accent-color: #5a3fd6;
+  accent-color: var(--c-primary);
 }
 
 .ev-people-table tr.selected {
-  background: #fbfaff;
+  background: var(--c-primary-tint);
 }
 
 .ev-people-table tr.disabled td {
@@ -2582,13 +2582,13 @@
 }
 
 .ev-steps li.current {
-  color: #4b33c9;
+  color: var(--c-primary);
 }
 
 .ev-steps li.current i {
-  border-color: #6a4fe0;
+  border-color: var(--c-primary);
   color: #fff;
-  background: #6a4fe0;
+  background: var(--c-primary);
 }
 
 .ev-steps li.done {
@@ -2622,7 +2622,7 @@
 .ev-due {
   margin-left: 6px;
   padding: 1px 7px;
-  border-radius: 99px;
+  border-radius: 4px;
   font-size: 11px;
   font-style: normal;
   font-weight: 700;
@@ -2673,7 +2673,7 @@
 
 .ev-link-btn {
   border: 0;
-  color: #5a3fd6;
+  color: var(--c-primary);
   background: transparent;
   font-size: 12.5px;
   font-weight: 600;
@@ -2700,9 +2700,9 @@
 }
 
 .ev-filters select.active {
-  border-color: #c6bdf5;
-  color: #4b33c9;
-  background: #f1eeff;
+  border-color: var(--c-primary-line);
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
 }
 
 .ev-board-summary {
@@ -2723,7 +2723,7 @@
 .ev-board-summary .late {
   padding: 2px 9px;
   border: 0;
-  border-radius: 99px;
+  border-radius: 4px;
   color: #c2273a;
   background: #fdecee;
   font-size: 12px;
@@ -2738,7 +2738,7 @@
 
 .ev-board-table th.sortable:hover,
 .ev-board-table th.sorted {
-  color: #4b33c9;
+  color: var(--c-primary);
 }
 
 .ev-board-table th svg {
@@ -2756,7 +2756,7 @@
 }
 
 .ev-progress i.scored {
-  background: #7b5ff0;
+  background: var(--c-primary);
 }
 
 .ev-progress i.submitted {
@@ -2822,7 +2822,7 @@
 
 .ev-summary-grid th.sortable:hover,
 .ev-summary-grid th.sorted {
-  color: #4b33c9;
+  color: var(--c-primary);
 }
 
 .ev-summary-grid th svg {
@@ -2878,7 +2878,7 @@
 }
 
 .ev-month-cell:hover {
-  background: #f1eeff;
+  background: var(--c-primary-soft);
 }
 
 .ev-month-cell small {
@@ -2951,13 +2951,13 @@
 
 .ev-sparkline polyline {
   fill: none;
-  stroke: #7b5ff0;
+  stroke: var(--c-primary);
   stroke-width: 2;
 }
 
 .ev-sparkline circle {
   fill: #fff;
-  stroke: #7b5ff0;
+  stroke: var(--c-primary);
   stroke-width: 2;
 }
 

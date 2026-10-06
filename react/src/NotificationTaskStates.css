@@ -10,6 +10,6 @@
 .realtime-toast.notification-approved>span{background:#15945d}
 .realtime-toast.notification-revision{border-color:#f0bcc3;background:#fff0f1}
 .realtime-toast.notification-revision>span{background:#d94352}
-.task-table-card tbody tr.notification-active-task td{background:#f0edff;border-top:1px solid #8b74ed;border-bottom:1px solid #8b74ed}
-.task-table-card tbody tr.notification-active-task td:first-child{box-shadow:inset 4px 0 #654be0}
-.task-table-card tbody tr.notification-active-task .task-name b{color:#573dce}
+.task-table-card tbody tr.notification-active-task td{background:var(--c-primary-soft);border-top:1px solid var(--c-primary);border-bottom:1px solid var(--c-primary)}
+.task-table-card tbody tr.notification-active-task td:first-child{box-shadow:inset 4px 0 var(--c-primary)}
+.task-table-card tbody tr.notification-active-task .task-name b{color:var(--c-primary)}

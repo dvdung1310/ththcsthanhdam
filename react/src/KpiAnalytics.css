@@ -5,7 +5,7 @@
   background: white;
   border: 1px solid #e5e9f3;
   padding: 18px;
-  border-radius: 16px;
+  border-radius: 8px;
 }
 .kpi-analysis-filters label {
   display: flex;
@@ -49,7 +49,7 @@
   gap: 12px;
   border: 1px solid #e5e9f3;
   background: #fff;
-  border-radius: 16px;
+  border-radius: 8px;
   padding: 20px;
 }
 .kpi-analytic-cards article > span {
@@ -88,7 +88,7 @@
 .kpi-analysis-panel {
   background: white;
   border: 1px solid #e5e9f3;
-  border-radius: 16px;
+  border-radius: 8px;
   padding: 22px;
   margin-bottom: 18px;
 }
@@ -126,14 +126,14 @@
   font-size: 13px;
 }
 .kpi-trend b {
-  color: #6248d9;
+  color: var(--c-primary);
 }
 .kpi-trend-track {
   height: 165px;
   position: relative;
   width: 100%;
   max-width: 52px;
-  background: #f5f3fc;
+  background: var(--c-primary-soft);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -141,7 +141,7 @@
   position: absolute;
   bottom: 0;
   width: 100%;
-  background: linear-gradient(0deg, #6350dd, #b0a4ff);
+  background: var(--c-primary);
   border-radius: 8px;
 }
 .kpi-trend small {
@@ -175,7 +175,7 @@
   border-radius: 8px;
 }
 .kpi-loss-row:nth-of-type(2) .kpi-loss-track span {
-  background: #9380e6;
+  background: var(--c-primary);
 }
 .kpi-department-grid {
   display: grid;
@@ -186,7 +186,7 @@
   background: #fafbff;
   border: 1px solid #e4e8f2;
   padding: 16px;
-  border-radius: 12px;
+  border-radius: 7px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -196,8 +196,8 @@
   cursor: pointer;
 }
 .kpi-department-grid button:hover {
-  border-color: #9380e6;
-  background: #f5f2ff;
+  border-color: var(--c-primary);
+  background: var(--c-primary-soft);
 }
 .kpi-department-grid small {
   display: block;
@@ -211,15 +211,15 @@
   align-items: center;
   white-space: nowrap;
   font-size: 13px;
-  color: #6850d7;
+  color: var(--c-primary);
 }
 .kpi-open-task {
   margin-top: 10px;
   padding: 7px 10px;
-  border: 1px solid #dcd6f4;
+  border: 1px solid var(--c-primary-soft-2);
   border-radius: 8px;
-  background: #f6f3ff;
-  color: #6850d7;
+  background: var(--c-primary-tint);
+  color: var(--c-primary);
   display: flex;
   gap: 6px;
   align-items: center;

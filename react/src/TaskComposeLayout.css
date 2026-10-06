@@ -34,7 +34,7 @@
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.6px;
-  text-transform: uppercase;
+  text-transform:none;
 }
 
 .task-compose-body .field {
@@ -64,16 +64,16 @@
   border: 1px dashed #dbdfe9;
   border-radius: 10px;
   color: #4b5671;
-  background: #fbfbfd;
+  background: var(--c-primary-tint);
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
 }
 
 .task-compose-body .block-toggle:hover {
-  border-color: #c6bdf5;
-  color: #5a3fd6;
-  background: #faf9ff;
+  border-color: var(--c-primary-line);
+  color: var(--c-primary);
+  background: var(--c-primary-tint);
 }
 
 .task-compose-body .block-toggle > span {
@@ -88,8 +88,8 @@
   min-width: 19px;
   padding: 1px 6px;
   border-radius: 99px;
-  color: #5a3fd6;
-  background: #efebff;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
   font-size: 11px;
   font-style: normal;
   text-align: center;
@@ -166,8 +166,8 @@
 .task-compose-body .field input:focus,
 .task-compose-body .field select:focus,
 .task-compose-body .rich-editor:focus-within {
-  border-color: #a996f7;
-  box-shadow: 0 0 0 3px rgba(106, 78, 224, 0.12);
+  border-color: var(--c-primary-line);
+  box-shadow: 0 0 0 3px rgb(var(--c-primary-rgb) / 0.12);
 }
 
 .rich-editor {
@@ -199,8 +199,8 @@
 }
 
 .rich-toolbar button:hover {
-  color: #5d46d8;
-  background: #e9e6fb;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
 }
 
 .rich-content {
@@ -266,13 +266,13 @@
   justify-content: center;
   border: 1px dashed #cfd5e2;
   border-radius: 9px;
-  color: #5a3fd6;
-  background: #fbfbfd;
+  color: var(--c-primary);
+  background: var(--c-primary-tint);
 }
 
 .task-compose-body .assignee-chip-list .add-assignee:only-child:hover {
-  border-color: #a996f7;
-  background: #faf9ff;
+  border-color: var(--c-primary-line);
+  background: var(--c-primary-tint);
 }
 
 .task-compose-body .attachment-dropzone {

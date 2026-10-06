@@ -13,7 +13,7 @@
 }
 .management-heading span {
   font-size: 10px;
-  color: #7462cc;
+  color: var(--c-primary);
   font-weight: 800;
   letter-spacing: 1px;
 }
@@ -28,10 +28,10 @@
 .management-heading button,
 .management-panel header button {
   padding: 8px 12px;
-  border: 1px solid #e3ddfa;
+  border: 1px solid var(--c-primary-soft-2);
   border-radius: 8px;
   background: #fff;
-  color: #674ed1;
+  color: var(--c-primary);
   cursor: pointer;
 }
 .management-cards {
@@ -43,7 +43,7 @@
   position: relative;
   padding: 20px;
   border: 1px solid #e6e9f2;
-  border-radius: 15px;
+  border-radius: 8px;
   background: #fff;
   min-height: 130px;
   box-shadow: 0 4px 20px #26314f04;
@@ -77,11 +77,11 @@
   top: 20px;
   width: 43px;
   height: 43px;
-  border-radius: 12px;
+  border-radius: 7px;
   display: grid;
   place-items: center;
-  background: #f0edff;
-  color: #6c50d9;
+  background: var(--c-primary-soft);
+  color: var(--c-primary);
 }
 .management-icon.blue {
   background: #eaf3ff;
@@ -113,7 +113,7 @@
 .management-panel {
   padding: 18px;
   border: 1px solid #e6e9f2;
-  border-radius: 14px;
+  border-radius: 8px;
   background: #fff;
   min-width: 0;
 }
@@ -132,7 +132,7 @@
   font-size: 10px;
   background: #fff6e6;
   padding: 5px 8px;
-  border-radius: 15px;
+  border-radius: 8px;
 }
 .attention-summary {
   display: grid;
@@ -148,7 +148,7 @@
 .attention-summary b {
   display: block;
   font-size: 21px;
-  color: #6851ce;
+  color: var(--c-primary);
 }
 .attention-summary span {
   font-size: 10px;
@@ -214,7 +214,7 @@
   cursor: pointer;
 }
 .month-progress:hover > div span {
-  color: #5b3fc4;
+  color: var(--c-primary);
 }
 .month-progress > div {
   display: flex;
@@ -240,16 +240,16 @@
   border-radius: 8px;
 }
 .month-track .green {
-  background: linear-gradient(90deg, #17a871, #57cd9c);
+  background: #2f7a5b;
 }
 .month-track .purple {
-  background: linear-gradient(90deg, #7153e3, #a58bf3);
+  background: var(--c-primary);
 }
 .month-track .blue {
-  background: linear-gradient(90deg, #2f7fe0, #8bbcf3);
+  background: var(--c-primary);
 }
 .month-track .red {
-  background: linear-gradient(90deg, #df5266, #f19da8);
+  background: #b03a48;
 }
 .department-kpi-item > button {
   width: 100%;
@@ -269,12 +269,12 @@
   flex: 1;
 }
 .department-kpi-item > button b {
-  color: #6852d0;
+  color: var(--c-primary);
   font-size: 11px;
 }
 .department-teacher-list {
   padding: 4px 10px;
-  background: #faf9ff;
+  background: var(--c-primary-tint);
   border-radius: 8px;
 }
 .department-teacher-list > div {
@@ -285,7 +285,7 @@
   font-size: 10px;
 }
 .department-teacher-list b {
-  color: #6651cc;
+  color: var(--c-primary);
 }
 .management-empty {
   padding: 15px 0;
@@ -301,7 +301,7 @@
 }
 .personal-dashboard-kpi {
   display: block;
-  color: #6750d0;
+  color: var(--c-primary);
   font-size: 26px;
   margin: 20px 0;
 }

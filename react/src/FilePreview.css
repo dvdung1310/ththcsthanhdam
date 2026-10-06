@@ -26,8 +26,8 @@
   display: grid;
   place-items: center;
   border-radius: 9px;
-  color: #c9bcff;
-  background: rgba(139, 108, 240, 0.22);
+  color: var(--c-primary-line);
+  background: rgb(var(--c-primary-rgb) / 0.22);
 }
 
 .fp-title {
@@ -177,7 +177,7 @@
   align-items: center;
   gap: 2px;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
+  border-radius: 7px;
   background: rgba(20, 24, 40, 0.92);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
   transform: translateX(-50%);
@@ -203,8 +203,8 @@
 }
 
 .fp-tools button.active {
-  color: #c9bcff;
-  background: rgba(139, 108, 240, 0.25);
+  color: var(--c-primary-line);
+  background: rgb(var(--c-primary-rgb) / 0.25);
 }
 
 .fp-tools .fp-zoom-value {
@@ -286,7 +286,7 @@
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  border-radius: 16px;
+  border-radius: 8px;
   color: #273250;
   background: #fff;
   text-align: center;
@@ -299,9 +299,9 @@
   margin-bottom: 6px;
   display: grid;
   place-items: center;
-  border-radius: 16px;
-  color: #6a4ee0;
-  background: #f1eeff;
+  border-radius: 8px;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
 }
 
 .fp-card-icon.error {

@@ -34,8 +34,8 @@
   align-items: flex-start;
   gap: 8px;
   border-radius: 9px;
-  color: #5a43c9;
-  background: #f1edff;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
   font-size: 12px;
   line-height: 1.5;
 }

@@ -18,10 +18,11 @@ class UnitController extends Controller
     public function index(Request $request): JsonResponse
     {
         $unitIds = $request->user()->managedUnitIds();
-        $members = DB::table('teacher_department')->whereNull('ends_on')->selectRaw('department_id, COUNT(*) as total')->groupBy('department_id')->pluck('total', 'department_id');
+        $memberships = DB::table('teacher_department')->whereNull('ends_on')->get(['teacher_id', 'department_id']);
+        $members = fn (int $id) => $memberships->whereIn('department_id', Department::withDescendants([$id]))->pluck('teacher_id')->unique()->count();
 
         return response()->json([
-            'units' => Department::ordered($unitIds, false)->map(fn ($unit) => [...$unit, 'members' => (int) ($members[$unit['id']] ?? 0)])->values(),
+            'units' => Department::ordered($unitIds, false)->map(fn ($unit) => [...$unit, 'members' => $members($unit['id'])])->values(),
             'can_configure' => $unitIds === null && $request->user()->hasPermission('teachers.manage'),
         ]);
     }
@@ -31,24 +32,144 @@ class UnitController extends Controller
         $managed = $request->user()->managedUnitIds();
         abort_unless($managed === null || in_array($unit->id, $managed, true), 403, 'Bạn không phụ trách đơn vị này.');
 
-        $leaders = User::whereHas('roles', fn ($q) => $q->where('role_user.department_id', $unit->id))
-            ->with(['roles' => fn ($q) => $q->where('role_user.department_id', $unit->id)])->orderBy('name')->get()
-            ->flatMap(fn (User $user) => $user->roles->map(fn (Role $role) => ['user_id' => $user->id, 'name' => $user->name, 'role' => $role->name]))->values();
+        return response()->json($this->detail($unit, $request->user()));
+    }
+
+    public function leaderCandidates(Request $request, Department $unit): JsonResponse
+    {
+        $this->ensureCanAssign($request);
+        $scope = Department::withDescendants([$unit->id]);
+        $held = DB::table('role_user')->where('department_id', $unit->id)->join('roles', 'roles.id', '=', 'role_user.role_id')->pluck('roles.code', 'role_user.user_id');
+
+        $teachers = Teacher::with(['user.roles', 'departments' => fn ($q) => $q->wherePivotNull('ends_on')])
+            ->where('employment_status', 'working')->whereHas('user', fn ($q) => $q->where('status', 'active'))->get()
+            ->map(fn (Teacher $teacher) => [
+                'user_id' => $teacher->user_id,
+                'name' => $teacher->user->name,
+                'employee_code' => $teacher->employee_code,
+                'avatar_url' => $this->avatar($teacher->user),
+                'units' => $teacher->departments->map(fn ($d) => Department::pathLabel($d->id))->values(),
+                'roles' => $teacher->user->roleLabels(),
+                'in_unit' => $teacher->departments->pluck('id')->intersect($scope)->isNotEmpty(),
+                'unit_role' => $held[$teacher->user_id] ?? null,
+            ])
+            ->sortBy(fn (array $row) => [! $row['in_unit'], $row['name']])->values();
+
+        return response()->json(['data' => $teachers]);
+    }
+
+    public function assignLeader(Request $request, Department $unit): JsonResponse
+    {
+        $this->ensureCanAssign($request);
+        $slots = collect($this->slots($unit))->keyBy('code');
+        $data = $request->validate([
+            'role_code' => ['required', Rule::in($slots->keys()->all())],
+            'user_id' => ['required', 'integer', 'exists:users,id'],
+            'replace_user_id' => ['nullable', 'integer', 'exists:users,id'],
+        ], ['role_code.in' => 'Chức vụ này không áp dụng cho đơn vị đã chọn.']);
+        $user = User::with('teacher')->findOrFail($data['user_id']);
+        abort_unless($user->teacher, 422, 'Chỉ giáo viên mới giữ được chức vụ trong tổ, nhóm.');
+        abort_if($user->teacher->employment_status !== 'working' || $user->status !== 'active', 422, "{$user->name} hiện không làm việc hoặc tài khoản bị khóa.");
+        $role = Role::where('code', $data['role_code'])->firstOrFail();
+        $unitRoleIds = Role::whereIn('code', $slots->keys())->pluck('id');
+
+        DB::transaction(function () use ($unit, $user, $role, $data, $unitRoleIds, $request) {
+            if (in_array($role->code, Role::SINGLE_HOLDER, true)) {
+                DB::table('role_user')->where('role_id', $role->id)->where('department_id', $unit->id)->where('user_id', '!=', $user->id)->delete();
+            }
+            if (! empty($data['replace_user_id']) && (int) $data['replace_user_id'] !== $user->id) {
+                DB::table('role_user')->where('role_id', $role->id)->where('department_id', $unit->id)->where('user_id', $data['replace_user_id'])->delete();
+            }
+            DB::table('role_user')->where('user_id', $user->id)->where('department_id', $unit->id)->whereIn('role_id', $unitRoleIds)->where('role_id', '!=', $role->id)->delete();
+            DB::table('role_user')->updateOrInsert(
+                ['role_id' => $role->id, 'user_id' => $user->id, 'department_id' => $unit->id],
+                ['assigned_by' => $request->user()->id, 'expires_at' => null, 'created_at' => now(), 'updated_at' => now()],
+            );
+            $this->ensureMembership($user->teacher, $unit);
+        });
+
+        return response()->json(['message' => "Đã giao {$role->name} {$unit->name} cho {$user->name}.", 'data' => $this->detail($unit->fresh(), $request->user())]);
+    }
+
+    public function removeLeader(Request $request, Department $unit): JsonResponse
+    {
+        $this->ensureCanAssign($request);
+        $data = $request->validate([
+            'role_code' => ['required', Rule::in(array_column($this->slots($unit), 'code'))],
+            'user_id' => ['required', 'integer', 'exists:users,id'],
+        ], ['role_code.in' => 'Chức vụ này không áp dụng cho đơn vị đã chọn.']);
+        $role = Role::where('code', $data['role_code'])->firstOrFail();
+        DB::table('role_user')->where('role_id', $role->id)->where('department_id', $unit->id)->where('user_id', $data['user_id'])->delete();
+        $name = User::whereKey($data['user_id'])->value('name');
+
+        return response()->json(['message' => "Đã gỡ {$role->name} của {$name}.", 'data' => $this->detail($unit, $request->user())]);
+    }
+
+    private function detail(Department $unit, User $actor): array
+    {
+        $scope = Department::withDescendants([$unit->id]);
+        $leaders = User::with(['teacher', 'roles' => fn ($q) => $q->where('role_user.department_id', $unit->id)])
+            ->whereHas('roles', fn ($q) => $q->where('role_user.department_id', $unit->id))->orderBy('name')->get()
+            ->flatMap(fn (User $user) => $user->roles->map(fn (Role $role) => [
+                'user_id' => $user->id, 'name' => $user->name, 'role' => $role->name, 'role_code' => $role->code,
+                'employee_code' => $user->teacher?->employee_code, 'avatar_url' => $this->avatar($user),
+            ]))->values();
         $members = Teacher::with(['user.roles', 'departments' => fn ($q) => $q->wherePivotNull('ends_on')])->inUnits([$unit->id])->orderBy('employee_code')->get()
             ->map(fn (Teacher $teacher) => [
                 'user_id' => $teacher->user_id,
                 'name' => $teacher->user->name,
                 'employee_code' => $teacher->employee_code,
+                'avatar_url' => $this->avatar($teacher->user),
                 'employment_status' => $teacher->employment_status,
                 'roles' => $teacher->user->roleLabels(),
+                'group_ids' => $teacher->departments->pluck('id')->intersect($scope)->reject(fn ($id) => $id === $unit->id)->values(),
                 'via' => $teacher->departments->pluck('id')->contains($unit->id) ? null : $teacher->departments->filter(fn ($d) => $d->parent_id === $unit->id)->map(fn ($d) => $d->name)->join(', '),
             ])->values();
 
-        return response()->json([
+        return [
             'unit' => ['id' => $unit->id, 'name' => $unit->name, 'label' => Department::pathLabel($unit->id), 'type' => $unit->type, 'parent_id' => $unit->parent_id, 'is_active' => $unit->is_active],
             'leaders' => $leaders,
+            'slots' => $this->slots($unit),
+            'can_assign' => $this->canAssign($actor),
             'members' => $members,
+        ];
+    }
+
+    private function slots(Department $unit): array
+    {
+        $codes = $unit->type === Department::TYPE_TO ? [Role::TO_TRUONG, Role::TO_PHO] : [Role::NHOM_TRUONG];
+
+        return Role::whereIn('code', $codes)->get()->sortBy(fn (Role $role) => array_search($role->code, $codes, true))
+            ->map(fn (Role $role) => ['code' => $role->code, 'name' => $role->name, 'single' => in_array($role->code, Role::SINGLE_HOLDER, true)])->values()->all();
+    }
+
+    private function ensureMembership(Teacher $teacher, Department $unit): void
+    {
+        $scope = Department::withDescendants([$unit->id]);
+        $inScope = DB::table('teacher_department')->where('teacher_id', $teacher->id)->whereNull('ends_on')->whereIn('department_id', $scope)->exists();
+        if ($inScope) {
+            return;
+        }
+        $hasPrimary = DB::table('teacher_department')->where('teacher_id', $teacher->id)->whereNull('ends_on')->where('is_primary', true)->exists();
+        DB::table('teacher_department')->insert([
+            'teacher_id' => $teacher->id, 'department_id' => $unit->id, 'is_primary' => ! $hasPrimary,
+            'starts_on' => now()->toDateString(), 'created_at' => now(), 'updated_at' => now(),
         ]);
+    }
+
+    private function canAssign(User $actor): bool
+    {
+        return $actor->hasPermission('roles.manage') && $actor->managedUnitIds() === null;
+    }
+
+    private function ensureCanAssign(Request $request): void
+    {
+        abort_unless($this->canAssign($request->user()), 403, 'Bạn không có quyền giao chức vụ.');
+    }
+
+    private function avatar(?User $user): ?string
+    {
+        return $user?->avatar_path ? route('avatars.show', ['filename' => basename($user->avatar_path)]) : null;
     }
 
     public function store(Request $request): JsonResponse

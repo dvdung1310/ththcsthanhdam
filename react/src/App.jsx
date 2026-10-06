@@ -349,7 +349,7 @@ const _legacyTeachers = [
   ["Trần Văn Nam", "Tổ Toán", "96.5", "#ffd8bd"],
   ["Nguyễn Thị Mai", "Tổ Ngữ văn", "94.2", "#f8cfe0"],
   ["Lê Minh Quân", "Tổ KHTN", "92.1", "#cfe8df"],
-  ["Phạm Thu Hà", "Tổ Ngoại ngữ", "91.3", "#d9dcff"],
+  ["Phạm Thu Hà", "Tổ Ngoại ngữ", "91.3", "#dce5f4"],
   ["Hoàng Quốc Bảo", "Tổ Xã hội", "90.4", "#ffe4a8"],
 ];
 

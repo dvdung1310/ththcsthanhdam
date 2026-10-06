@@ -1,0 +1,339 @@
+/* Design tokens and shared overrides for the sober school theme. */
+:root {
+  --c-primary: #0b3d91;
+  --c-primary-rgb: 11 61 145;
+  --c-primary-hover: #08306f;
+  --c-primary-strong: #08306f;
+  --c-primary-line: #bccbe6;
+  --c-primary-soft-2: #dce5f4;
+  --c-primary-soft: #eaf0f9;
+  --c-primary-tint: #f5f8fc;
+  --c-primary-muted: #a9bcdd;
+  --c-accent: #f8b808;
+  --c-text: #1f2937;
+  --c-text-2: #4b5563;
+  --c-muted: #6b7280;
+  --c-border: #dde1e6;
+  --c-border-soft: #eceef1;
+  --c-bg: #f4f5f7;
+  --c-head: #f7f8fa;
+  --c-radius: 6px;
+  --c-radius-sm: 4px;
+}
+
+/* Shell */
+.app-shell {
+  background: var(--c-bg) !important;
+}
+
+.app-shell .sidebar {
+  background: #fff !important;
+  border-right: 1px solid var(--c-border) !important;
+  box-shadow: none !important;
+}
+
+.app-shell .brand {
+  border-bottom-color: var(--c-border-soft) !important;
+}
+
+.app-shell .brand-logo {
+  border-radius: var(--c-radius) !important;
+  background: var(--c-primary) !important;
+  box-shadow: inset 0 -3px 0 var(--c-accent) !important;
+}
+
+.app-shell .brand strong {
+  color: var(--c-text) !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell .nav-list .nav-link {
+  border-radius: var(--c-radius-sm) !important;
+  color: var(--c-text-2) !important;
+  transition: background 0.12s ease !important;
+}
+
+.app-shell .nav-list .nav-link:hover {
+  color: var(--c-text) !important;
+  background: #f1f3f5 !important;
+  transform: none !important;
+}
+
+.app-shell .nav-list .nav-link.active,
+.app-shell .nav-list .nav-children .nav-link.active {
+  color: var(--c-primary) !important;
+  background: var(--c-primary-soft) !important;
+  box-shadow: inset 3px 0 0 var(--c-primary) !important;
+  font-weight: 600 !important;
+}
+
+.app-shell .nav-list .nav-parent.in-group,
+.app-shell .nav-list .nav-parent.in-group .nav-chevron {
+  color: var(--c-primary) !important;
+}
+
+.app-shell .nav-list em,
+.app-shell .nav-list .active em {
+  border-radius: var(--c-radius-sm) !important;
+  color: var(--c-text-2) !important;
+  background: #e8eaee !important;
+}
+
+.app-shell .topbar {
+  background: #fff !important;
+  border-bottom: 1px solid var(--c-border) !important;
+  backdrop-filter: none !important;
+}
+
+.app-shell .search-box {
+  border-radius: var(--c-radius) !important;
+}
+
+.app-shell .avatar {
+  border-radius: 50% !important;
+  background: var(--c-primary-soft) !important;
+  color: var(--c-primary) !important;
+  box-shadow: none !important;
+}
+
+.app-shell .logout-button {
+  border-radius: var(--c-radius-sm) !important;
+  color: var(--c-text-2) !important;
+  background: #f1f3f5 !important;
+}
+
+/* Buttons */
+.app-shell .primary-btn {
+  border-radius: var(--c-radius) !important;
+  background: var(--c-primary) !important;
+  box-shadow: none !important;
+}
+
+.app-shell .primary-btn:hover:not(:disabled) {
+  background: var(--c-primary-hover) !important;
+}
+
+.app-shell .secondary-btn {
+  border-radius: var(--c-radius) !important;
+  border-color: var(--c-border) !important;
+  color: var(--c-text-2) !important;
+  box-shadow: none !important;
+}
+
+.principal-ai-toggle {
+  height: 40px !important;
+  border: 1px solid var(--c-border) !important;
+  border-radius: var(--c-radius) !important;
+  color: var(--c-primary) !important;
+  background: #fff !important;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08) !important;
+  font-weight: 600 !important;
+}
+
+/* Evaluation pages */
+.app-shell .ev-page .ev-card {
+  border: 1px solid var(--c-border) !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+}
+
+.app-shell .ev-page .ev-hero p,
+.app-shell .ev-page .ev-period-meta,
+.app-shell .ev-page .ev-sub,
+.app-shell .ev-page .ev-muted {
+  color: var(--c-muted) !important;
+}
+
+.app-shell .ev-page a {
+  color: var(--c-primary);
+}
+
+.app-shell .ev-page .ev-table th,
+.app-shell .ev-page .ev-criteria-head,
+.app-shell .ev-page .ev-summary-table th {
+  color: var(--c-text-2) !important;
+  background: var(--c-head) !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+
+.app-shell .ev-page .ev-table th,
+.app-shell .ev-page .ev-table td {
+  border-bottom-color: var(--c-border-soft) !important;
+}
+
+.app-shell .ev-page .ev-table tr.clickable:hover {
+  background: #f7f9fb !important;
+}
+
+.app-shell .ev-page .ev-table td b,
+.app-shell .ev-page .ev-person b {
+  color: var(--c-text) !important;
+}
+
+.app-shell .ev-page .ev-person i {
+  border-radius: 50% !important;
+  color: var(--c-primary) !important;
+  background: var(--c-primary-soft) !important;
+}
+
+.app-shell .ev-page .ev-chip {
+  padding: 2px 8px !important;
+  border-radius: var(--c-radius-sm) !important;
+  font-weight: 500 !important;
+}
+
+.app-shell .ev-page .ev-chip.blue,
+.app-shell .ev-page .ev-chip.purple {
+  color: var(--c-primary) !important;
+  background: var(--c-primary-soft) !important;
+}
+
+.app-shell .ev-page .ev-chip.purple {
+  color: var(--c-primary-hover) !important;
+  background: var(--c-primary-tint) !important;
+  box-shadow: inset 0 0 0 1px var(--c-primary-line) !important;
+}
+
+.app-shell .ev-page .ev-chip.green {
+  color: #1d6b3f !important;
+  background: #e8f3ec !important;
+}
+
+.app-shell .ev-page .ev-chip.orange {
+  color: #8a5a12 !important;
+  background: #f8f0e1 !important;
+}
+
+.app-shell .ev-page .ev-chip.muted {
+  color: var(--c-text-2) !important;
+  background: #eef0f2 !important;
+}
+
+.app-shell .ev-page .ev-status-chips button,
+.app-shell .ev-page .task-type-chips button {
+  height: 30px !important;
+  border-radius: var(--c-radius-sm) !important;
+  border-color: var(--c-border) !important;
+  color: var(--c-text-2) !important;
+  font-weight: 500 !important;
+}
+
+.app-shell .ev-page .ev-status-chips button.active {
+  border-color: var(--c-primary) !important;
+  color: var(--c-primary) !important;
+  background: var(--c-primary-soft) !important;
+}
+
+.app-shell .ev-page .ev-status-chips em {
+  border-radius: var(--c-radius-sm) !important;
+  color: inherit !important;
+  background: transparent !important;
+  font-weight: 600 !important;
+}
+
+.app-shell .ev-page select,
+.app-shell .ev-page .ev-search,
+.app-shell .ev-page .ev-period-select select,
+.app-shell .ev-page .ev-filters select {
+  border-radius: var(--c-radius-sm) !important;
+  border-color: var(--c-border) !important;
+}
+
+.app-shell .ev-page .ev-filters select.active {
+  border-color: var(--c-primary) !important;
+  color: var(--c-primary) !important;
+  background: var(--c-primary-soft) !important;
+}
+
+.app-shell .ev-page .ev-link-btn,
+.app-shell .ev-page .ev-board-table th.sorted,
+.app-shell .ev-page .ev-board-table th.sortable:hover,
+.app-shell .ev-page .ev-summary-grid th.sorted,
+.app-shell .ev-page .ev-summary-grid th.sortable:hover {
+  color: var(--c-primary) !important;
+}
+
+.app-shell .ev-page .ev-steps li {
+  font-weight: 500 !important;
+}
+
+.app-shell .ev-page .ev-steps li.current {
+  color: var(--c-primary) !important;
+}
+
+.app-shell .ev-page .ev-steps li.current i {
+  border-color: var(--c-primary) !important;
+  background: var(--c-primary) !important;
+}
+
+.app-shell .ev-page .ev-steps li.done {
+  color: #1d6b3f !important;
+}
+
+.app-shell .ev-page .ev-steps li.done i {
+  border-color: #b7d6c3 !important;
+  color: #1d6b3f !important;
+  background: #e8f3ec !important;
+}
+
+.app-shell .ev-page .ev-progress {
+  height: 5px !important;
+  border-radius: 2px !important;
+  background: #e5e7eb !important;
+}
+
+.app-shell .ev-page .ev-progress i.scored {
+  background: var(--c-primary) !important;
+}
+
+.app-shell .ev-page .ev-progress i.submitted {
+  background: var(--c-primary-muted) !important;
+}
+
+.app-shell .ev-page .ev-board-summary .late,
+.app-shell .ev-page .ev-due {
+  border-radius: var(--c-radius-sm) !important;
+}
+
+.app-shell .ev-page .ev-row-arrow {
+  color: #9aa1ab !important;
+}
+
+.app-shell .ev-page .ev-table tr.clickable:hover .ev-row-arrow {
+  color: var(--c-primary) !important;
+}
+
+.app-shell .ev-page .ev-month-cell:hover {
+  background: var(--c-primary-soft) !important;
+}
+
+.app-shell .ev-page .ev-summary-grid th.stat,
+.app-shell .ev-page .ev-summary-grid td.stat {
+  background: #fafbfc !important;
+}
+
+.app-shell .ev-page .action-menu-trigger:hover,
+.app-shell .ev-page .action-menu-trigger.open {
+  color: var(--c-primary) !important;
+  background: var(--c-primary-soft) !important;
+}
+
+.app-shell .ev-page .pagination button.active {
+  border-color: var(--c-primary) !important;
+  background: var(--c-primary) !important;
+}
+
+.app-shell .ev-page .ev-excluded summary {
+  color: var(--c-text-2) !important;
+}
+
+.login-brand > span {
+  box-shadow: inset 0 -3px 0 var(--c-accent);
+}
+
+.login-visual {
+  background: var(--c-primary-strong) !important;
+}

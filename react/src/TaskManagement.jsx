@@ -1666,7 +1666,7 @@ function TaskTimeline({ task }) {
   );
 }
 
-const avatarTones = ["#7b68df", "#2f7fe0", "#17a871", "#e0862f", "#d14d72", "#4b9aa8"];
+const avatarTones = ["#0b3d91", "#3d64a8", "#2f7a5b", "#946a2e", "#8a4b5c", "#44737e"];
 
 function PersonAvatar({ person, size = 32 }) {
   return person.avatar_url ? (

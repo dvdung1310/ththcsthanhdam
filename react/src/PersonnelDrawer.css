@@ -79,11 +79,11 @@
 
 .drawer-body h4 {
   margin: 0 0 12px;
-  color: #6b50df;
+  color: var(--c-primary);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
+  text-transform:none;
 }
 
 .drawer-grid {
@@ -114,8 +114,8 @@
 
 .drawer-grid input:focus,
 .drawer-grid select:focus {
-  border-color: #7359e9;
-  box-shadow: 0 0 0 4px rgba(115, 89, 233, 0.12);
+  border-color: var(--c-primary);
+  box-shadow: 0 0 0 4px rgb(var(--c-primary-rgb) / 0.12);
 }
 
 .drawer-switches {
@@ -162,7 +162,7 @@
 }
 
 .switch input:checked + span {
-  background: #6b50df;
+  background: var(--c-primary);
 }
 
 .switch input:checked + span::after {
@@ -188,8 +188,8 @@
 }
 
 .role-pick.selected {
-  border-color: #c9bff7;
-  background: #f6f3ff;
+  border-color: var(--c-primary-line);
+  background: var(--c-primary-tint);
 }
 
 .role-pick.unavailable {
@@ -207,7 +207,7 @@
 
 .role-pick > label input {
   grid-row: span 2;
-  accent-color: #6549db;
+  accent-color: var(--c-primary);
 }
 
 .role-pick > label b {
@@ -227,7 +227,7 @@
   align-items: center;
   gap: 4px;
   border: 0;
-  color: #664dde;
+  color: var(--c-primary);
   background: none;
   font-size: 12px;
   font-weight: 600;
@@ -243,9 +243,9 @@
 .role-readonly span,
 .role-readonly em {
   padding: 4px 10px;
-  border-radius: 999px;
-  color: #5a43c9;
-  background: #f1edff;
+  border-radius: 4px;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
   font-size: 12px;
   font-style: normal;
   font-weight: 600;
@@ -274,7 +274,7 @@
   align-items: center;
   gap: 8px;
   border-top: 1px solid #eceef3;
-  background: #fbfbfd;
+  background: var(--c-primary-tint);
 }
 
 .drawer-status {
@@ -365,8 +365,8 @@
 }
 
 .ev-teacher-month:hover {
-  border-color: #c6bdf5;
-  background: #faf9ff;
+  border-color: var(--c-primary-line);
+  background: var(--c-primary-tint);
 }
 
 .ev-teacher-month small {
@@ -389,6 +389,6 @@
 
 .ev-teacher-month .ev-chip {
   padding: 2px 8px;
-  border-radius: 99px;
+  border-radius: 4px;
   font-size: 11px;
 }

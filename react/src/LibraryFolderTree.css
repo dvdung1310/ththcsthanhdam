@@ -16,7 +16,7 @@
 }
 
 .lft-row.selected {
-  background: #efebff;
+  background: var(--c-primary-soft);
 }
 
 .lft-row.root {
@@ -46,8 +46,8 @@
 }
 
 .lft-toggle:hover {
-  color: #5a3fd6;
-  background: #e8e3ff;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
 }
 
 .lft-toggle svg {
@@ -75,7 +75,7 @@
 }
 
 .lft-row.selected .lft-label {
-  color: #4b33c9;
+  color: var(--c-primary);
   font-weight: 700;
 }
 
@@ -102,7 +102,7 @@
 }
 
 .lft-row.root .lft-label svg {
-  color: #6a4ee0;
+  color: var(--c-primary);
 }
 
 .lft-row.disabled .lft-label svg {

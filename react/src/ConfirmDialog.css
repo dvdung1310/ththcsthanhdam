@@ -16,7 +16,7 @@
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 4px 14px;
-  border-radius: 16px;
+  border-radius: 8px;
   background: #fff;
   box-shadow: 0 25px 70px rgba(13, 20, 45, 0.28);
   animation: confirm-in 0.18s ease;
@@ -27,9 +27,9 @@
   height: 44px;
   display: grid;
   place-items: center;
-  border-radius: 12px;
-  color: #6b50df;
-  background: #f1edff;
+  border-radius: 7px;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
 }
 
 .tone-danger .confirm-icon {
