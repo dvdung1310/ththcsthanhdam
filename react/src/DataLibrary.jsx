@@ -899,24 +899,6 @@ function NodeDetail({ node: initial, reloadToken, onClose, onOpen, onDownload, o
       ) : (
         <>
           <section>
-            <InfoRows
-              rows={[
-                isFolder
-                  ? ["Nội dung", stats ? `${stats.folders} thư mục · ${stats.files} file` : node.children_count != null ? `${node.children_count} mục` : "—"]
-                  : ["Loại", fileKind(node.name, node.mime_type)],
-                isFolder ? ["Tổng dung lượng", stats ? formatBytes(stats.size) : "—"] : ["Dung lượng", formatBytes(node.size)],
-                ["Vị trí", <span className="dl-location-text" title={location}>{location}</span>],
-                ["Chủ sở hữu", <PersonLine person={node.owner} />],
-                showUploader && ["Người tải file lên", <PersonLine person={node.uploader} />],
-                ["Ngày tạo", fullDate(node.created_at)],
-                ["Cập nhật lần cuối", fullDate(node.updated_at)],
-                node.updated_by && ["Người cập nhật cuối", <PersonLine person={node.updated_by} />],
-                ["Quyền của bạn", LEVEL_LABELS[node.abilities.level] ?? "—"],
-              ]}
-            />
-          </section>
-
-          <section>
             <div className="dl-detail-head">
               <h4>Mô tả</h4>
               {!isFolder && node.abilities.can_edit && (
@@ -935,6 +917,25 @@ function NodeDetail({ node: initial, reloadToken, onClose, onOpen, onDownload, o
               <button className="primary-btn dl-save" onClick={save} disabled={!dirty || saving}>{saving ? "Đang lưu..." : "Lưu mô tả"}</button>
             )}
           </section>
+          <section>
+            <div className="dl-detail-head"><h4>Chi tiết</h4></div>
+            <InfoRows
+              rows={[
+                isFolder
+                  ? ["Nội dung", stats ? `${stats.folders} thư mục · ${stats.files} file` : node.children_count != null ? `${node.children_count} mục` : "—"]
+                  : ["Loại", fileKind(node.name, node.mime_type)],
+                isFolder ? ["Tổng dung lượng", stats ? formatBytes(stats.size) : "—"] : ["Dung lượng", formatBytes(node.size)],
+                ["Vị trí", <span className="dl-location-text" title={location}>{location}</span>],
+                ["Chủ sở hữu", <PersonLine person={node.owner} />],
+                showUploader && ["Người tải file lên", <PersonLine person={node.uploader} />],
+                ["Ngày tạo", fullDate(node.created_at)],
+                ["Cập nhật lần cuối", fullDate(node.updated_at)],
+                node.updated_by && ["Người cập nhật cuối", <PersonLine person={node.updated_by} />],
+                ["Quyền của bạn", LEVEL_LABELS[node.abilities.level] ?? "—"],
+              ]}
+            />
+          </section>
+
         </>
       )}
     </aside>
