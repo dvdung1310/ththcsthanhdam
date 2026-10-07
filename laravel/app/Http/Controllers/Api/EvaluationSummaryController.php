@@ -195,7 +195,7 @@ class EvaluationSummaryController extends Controller
                 'id' => $p->id, 'key' => $this->key($p), 'label' => 'T'.$p->month.'/'.$p->year, 'full_label' => $p->label(),
                 'status' => $p->status, 'official' => $p->status === EvaluationPeriod::PUBLISHED,
             ])->values(),
-            'year_periods' => $yearPeriods->map(fn (EvaluationPeriod $p) => ['key' => $this->key($p), 'label' => 'T'.$p->month.'/'.$p->year])->values(),
+            'year_periods' => $yearPeriods->map(fn (EvaluationPeriod $p) => ['key' => $this->key($p), 'label' => 'T'.$p->month.'/'.$p->year, 'official' => $p->status === EvaluationPeriod::PUBLISHED, 'school_year' => self::schoolYear($p->year, $p->month)])->values(),
             'grades' => $grades,
             'mixed_grades' => $mixed,
             'homeroom' => $filters['homeroom'] ?? null,

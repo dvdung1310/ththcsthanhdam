@@ -1,0 +1,151 @@
+.mrp {
+  position: relative;
+  display: inline-flex;
+}
+
+.mrp .dd-trigger b {
+  color: inherit;
+}
+
+.mrp-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 50;
+  display: flex;
+  border: 1px solid #dfe3ec;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 12px 35px rgba(25, 31, 55, 0.22);
+}
+
+.mrp-presets {
+  width: 172px;
+  margin: 0;
+  padding: 8px;
+  list-style: none;
+  border-right: 1px solid #eceef3;
+}
+
+.mrp-presets button {
+  width: 100%;
+  min-height: 32px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 0;
+  border-radius: 6px;
+  color: #414b65;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.mrp-presets button:hover {
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
+}
+
+.mrp-presets button.selected {
+  color: var(--c-primary);
+  font-weight: 600;
+}
+
+.mrp-grids {
+  max-height: 360px;
+  padding: 10px 12px;
+  overflow-y: auto;
+  display: grid;
+  gap: 12px;
+}
+
+.mrp-grids h5 {
+  margin: 0 0 6px;
+  color: var(--c-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.mrp-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 52px);
+  gap: 4px;
+}
+
+.mrp-grid button {
+  height: 38px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 3px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: #34405e;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mrp-grid button:hover:not(:disabled) {
+  border-color: var(--c-primary-line);
+}
+
+.mrp-grid button:disabled {
+  color: #c3c8d4;
+  background: none;
+  cursor: not-allowed;
+}
+
+.mrp-grid button.in-range:not(:disabled) {
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
+}
+
+.mrp-grid button.edge:not(:disabled) {
+  color: #fff;
+  background: var(--c-primary);
+}
+
+.mrp-grid i,
+.mrp-hint i {
+  width: 5px;
+  height: 5px;
+  display: inline-block;
+  border-radius: 50%;
+}
+
+.mrp-grid i.official,
+.mrp-hint i.official {
+  background: var(--c-success);
+}
+
+.mrp-grid i.pending,
+.mrp-hint i.pending {
+  border: 1px solid var(--c-muted);
+}
+
+.mrp-grid button.edge i.official {
+  background: #fff;
+}
+
+.mrp-hint {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 12px;
+  color: var(--c-muted);
+  font-size: 11.5px;
+}
+
+.mrp-hint span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
