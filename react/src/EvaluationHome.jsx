@@ -189,8 +189,8 @@ export default function EvaluationHome() {
               <div className="ev-period-flow">
                 <PeriodSteps status={period.status} />
                 <div className="ev-period-meta">
-                  <DueDate label="Tự chấm đến" due={period.self_due_on} active={period.status === "open"} />
-                  <DueDate label="Tổ chấm đến" due={period.unit_due_on} active={period.status === "open"} />
+                  <DueDate label="Tự chấm" due={period.self_due_on} active={period.status === "open"} />
+                  <DueDate label="Tổ chấm" due={period.unit_due_on} active={period.status === "open"} />
                 </div>
               </div>
             )}
@@ -270,7 +270,7 @@ function DueDate({ label, due, active }) {
   const past = active ? daysPast(due) : null;
   return (
     <span>
-      {label} <b>{formatDay(due)}</b>
+      {label} <b title={formatDay(due)}>{due ? `${String(new Date(due).getDate()).padStart(2, "0")}/${String(new Date(due).getMonth() + 1).padStart(2, "0")}` : "—"}</b>
       {due && past !== null && (past > 0 ? <em className="ev-due late">quá {past} ngày</em> : past >= -3 && <em className="ev-due soon">{past === 0 ? "hôm nay" : `còn ${-past} ngày`}</em>)}
     </span>
   );
