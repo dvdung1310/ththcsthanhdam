@@ -134,8 +134,14 @@ class EvaluationSummaryController extends Controller
 
     private function build(array $filters): array
     {
-        $years = EvaluationPeriod::get(['year', 'month'])->map(fn ($p) => self::schoolYear($p->year, $p->month))->unique()->sortDesc()->values();
-        $year = (int) ($filters['school_year'] ?? $years->first() ?? self::schoolYear((int) now()->year, (int) now()->month));
+        $all = EvaluationPeriod::get(['year', 'month', 'status']);
+        $years = $all->map(fn ($p) => self::schoolYear($p->year, $p->month))->unique()->sortDesc()->values();
+        $published = fn (int $y) => $all->filter(fn ($p) => $p->status === EvaluationPeriod::PUBLISHED && self::schoolYear($p->year, $p->month) === $y)->count();
+        $fallback = null;
+        if (empty($filters['school_year']) && $years->count() > 1 && $published($years->first()) < 2) {
+            $fallback = ['school_year' => $years->first(), 'label' => $years->first().'–'.($years->first() + 1), 'published' => $published($years->first())];
+        }
+        $year = (int) ($filters['school_year'] ?? ($fallback ? $years->get(1) : $years->first()) ?? self::schoolYear((int) now()->year, (int) now()->month));
         $from = $filters['from'] ?? null;
         $to = $filters['to'] ?? null;
 
@@ -185,6 +191,7 @@ class EvaluationSummaryController extends Controller
             'year_periods' => $yearPeriods->map(fn (EvaluationPeriod $p) => ['key' => $this->key($p), 'label' => 'T'.$p->month.'/'.$p->year])->values(),
             'grades' => $grades,
             'mixed_grades' => $mixed,
+            'fallback' => $fallback,
             'homeroom' => $filters['homeroom'] ?? null,
             'teachers' => $teachers->all(),
         ];
