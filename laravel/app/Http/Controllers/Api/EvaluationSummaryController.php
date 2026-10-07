@@ -56,10 +56,12 @@ class EvaluationSummaryController extends Controller
         $teachers = $this->rows(collect($summary['teachers']), $filters);
         $periods = collect($summary['periods']);
         $grades = $summary['grades'];
+        $columnsByYear = $summary['all_years'];
+        $timeColumns = $columnsByYear ? collect($summary['year_columns']) : $periods;
 
         $sheet = new XlsxWriter();
-        $columns = 4 + $periods->count() + count($grades) + 4;
-        $sheet->widths([5, 7, 26, 20, ...array_fill(0, $periods->count(), 13), ...array_fill(0, count($grades), 8), 8, 8, 9, 9]);
+        $columns = 4 + $timeColumns->count() + count($grades) + 4;
+        $sheet->widths([5, 7, 26, 20, ...array_fill(0, $timeColumns->count(), 13), ...array_fill(0, count($grades), 8), 8, 8, 9, 9]);
         $sheet->addRow(['TRƯỜNG TH & THCS THANH ĐÀM'], XlsxWriter::PLAIN);
         $sheet->addRow(['HỘI ĐỒNG THI ĐUA KHEN THƯỞNG'], XlsxWriter::PLAIN);
         $row = $sheet->addRow(['BẢNG TỔNG HỢP KẾT QUẢ THI ĐUA HẰNG THÁNG'], XlsxWriter::TITLE);
@@ -71,7 +73,7 @@ class EvaluationSummaryController extends Controller
 
         $sheet->addRow([
             'STT', 'Hạng', 'Họ và tên', 'Tổ / nhóm',
-            ...$periods->map(fn (array $p) => $p['label'].($p['official'] ? '' : ' (chưa công bố)')),
+            ...($columnsByYear ? $timeColumns->map(fn (array $y) => 'Năm học '.$y['label']) : $periods->map(fn (array $p) => $p['label'].($p['official'] ? '' : ' (chưa công bố)'))),
             ...array_map(fn (array $g) => $g['short'], $grades),
             'KXL', 'Vi phạm', 'Số tháng', 'Điểm TB',
         ], XlsxWriter::HEADER);
@@ -82,7 +84,9 @@ class EvaluationSummaryController extends Controller
                 ['value' => $teacher['rank'] ?? '', 'style' => XlsxWriter::CELL_CENTER],
                 $teacher['name'],
                 trim(($teacher['team']['name'] ?? '').($teacher['group'] ? ' / '.$teacher['group']['name'] : '')),
-                ...$periods->map(fn (array $p) => ['value' => $this->cellText($teacher['cells'][$p['id']] ?? null), 'style' => XlsxWriter::CELL_CENTER]),
+                ...($columnsByYear
+                    ? $timeColumns->map(fn (array $y) => ['value' => isset($teacher['years'][$y['value']]) ? $this->number($teacher['years'][$y['value']]['average']).' ('.$teacher['years'][$y['value']]['months'].' th)' : '—', 'style' => XlsxWriter::CELL_CENTER])
+                    : $periods->map(fn (array $p) => ['value' => $this->cellText($teacher['cells'][$p['id']] ?? null), 'style' => XlsxWriter::CELL_CENTER])),
                 ...array_map(fn (array $g) => ['value' => $teacher['stats']['counts'][$g['key']] ?? 0, 'style' => XlsxWriter::CELL_CENTER], $grades),
                 ['value' => $teacher['stats']['no_grade'], 'style' => XlsxWriter::CELL_CENTER],
                 ['value' => $teacher['stats']['violations'], 'style' => XlsxWriter::CELL_CENTER],
@@ -101,7 +105,7 @@ class EvaluationSummaryController extends Controller
 
         $path = tempnam(sys_get_temp_dir(), 'tdx');
         $sheet->save($path, 'Tổng hợp');
-        $name = 'tong-hop-thi-dua-'.$summary['school_year'].'-'.($summary['school_year'] + 1)
+        $name = 'tong-hop-thi-dua-'.($columnsByYear ? 'tat-ca' : $summary['school_year'].'-'.($summary['school_year'] + 1))
             .($periods->isEmpty() ? '' : '-t'.Str::after($periods->first()['label'], 'T').'-t'.Str::after($periods->last()['label'], 'T'))
             .'.xlsx';
         $name = str_replace('/', '-', $name);
@@ -112,7 +116,7 @@ class EvaluationSummaryController extends Controller
     private function filters(Request $request): array
     {
         $data = $request->validate([
-            'school_year' => ['nullable', 'integer', 'min:2000', 'max:2100'],
+            'school_year' => ['nullable', 'regex:/^(all|\d{4})$/'],
             'from' => ['nullable', 'date_format:Y-m'],
             'to' => ['nullable', 'date_format:Y-m'],
             'team' => ['nullable', 'integer'],
@@ -141,12 +145,13 @@ class EvaluationSummaryController extends Controller
         if (empty($filters['school_year']) && $years->count() > 1 && $published($years->first()) < 2) {
             $fallback = ['school_year' => $years->first(), 'label' => $years->first().'–'.($years->first() + 1), 'published' => $published($years->first())];
         }
-        $year = (int) ($filters['school_year'] ?? ($fallback ? $years->get(1) : $years->first()) ?? self::schoolYear((int) now()->year, (int) now()->month));
+        $allYears = ($filters['school_year'] ?? null) === 'all';
+        $year = $allYears ? null : (int) ($filters['school_year'] ?? ($fallback ? $years->get(1) : $years->first()) ?? self::schoolYear((int) now()->year, (int) now()->month));
         $from = $filters['from'] ?? null;
         $to = $filters['to'] ?? null;
 
         $yearPeriods = EvaluationPeriod::with('template')->get()
-            ->filter(fn (EvaluationPeriod $p) => self::schoolYear($p->year, $p->month) === $year)
+            ->filter(fn (EvaluationPeriod $p) => $allYears || self::schoolYear($p->year, $p->month) === $year)
             ->sortBy(fn (EvaluationPeriod $p) => $this->key($p))
             ->values();
         $periods = $yearPeriods->filter(fn (EvaluationPeriod $p) => (! $from || $this->key($p) >= $from) && (! $to || $this->key($p) <= $to))->values();
@@ -169,6 +174,9 @@ class EvaluationSummaryController extends Controller
             }
 
             $latest = $sheets->sortByDesc(fn (Evaluation $sheet) => $this->key($periodById[$sheet->period_id]))->first();
+            $byYear = collect($cells)->filter(fn (array $c) => $c['official'] && $c['total'] !== null && ($homeroom === null || $c['is_homeroom'] === $homeroom))
+                ->groupBy(fn (array $c, $periodId) => self::schoolYear($periodById[$periodId]->year, $periodById[$periodId]->month), true)
+                ->map(fn (Collection $items) => ['average' => round($items->avg('total'), 2), 'months' => $items->count()]);
 
             return [
                 'id' => $teacher->id, 'name' => $teacher->user?->name, 'code' => $teacher->employee_code, 'avatar_url' => $this->avatar($teacher->user),
@@ -176,13 +184,18 @@ class EvaluationSummaryController extends Controller
                 'in_frame' => $homeroom === null || $sheets->contains(fn (Evaluation $sheet) => (bool) $sheet->is_homeroom === $homeroom),
                 ...$this->directory->placement($teacher),
                 'cells' => $cells,
+                'years' => $byYear->all(),
                 'stats' => $this->stats($cells, $grades, $homeroom),
             ];
         })->sort(fn (array $a, array $b) => $this->directory->compareNames($a['name'], $b['name']))->values();
 
         return [
-            'school_years' => $years->push($year)->unique()->sortDesc()->values()->map(fn (int $y) => ['value' => $y, 'label' => $y.'–'.($y + 1)]),
-            'school_year' => $year,
+            'school_years' => $years->when($year, fn ($list) => $list->push($year))->unique()->sortDesc()->values()->map(fn (int $y) => ['value' => $y, 'label' => $y.'–'.($y + 1)]),
+            'school_year' => $allYears ? 'all' : $year,
+            'all_years' => $allYears,
+            'year_columns' => $periods->groupBy(fn (EvaluationPeriod $p) => self::schoolYear($p->year, $p->month))->sortKeys()
+                ->map(fn (Collection $items, int $y) => ['value' => $y, 'label' => $y.'–'.($y + 1), 'months' => $items->count(), 'official' => $items->where('status', EvaluationPeriod::PUBLISHED)->count()])->values(),
+            'mixed_scale' => collect($maxBase)->map(fn (array $base) => $base['homeroom'].'/'.$base['regular'])->unique()->count() > 1,
             'range_label' => $this->rangeLabel($year, $periods),
             'periods' => $periods->map(fn (EvaluationPeriod $p) => [
                 'id' => $p->id, 'key' => $this->key($p), 'label' => 'T'.$p->month.'/'.$p->year, 'full_label' => $p->label(),
@@ -365,9 +378,9 @@ class EvaluationSummaryController extends Controller
         return floor($value) == $value ? (string) (int) $value : rtrim(number_format($value, 2, ',', ''), '0');
     }
 
-    private function rangeLabel(int $year, Collection $periods): string
+    private function rangeLabel(?int $year, Collection $periods): string
     {
-        $label = 'Năm học '.$year.'–'.($year + 1);
+        $label = $year ? 'Năm học '.$year.'–'.($year + 1) : 'Tất cả các năm';
         if ($periods->isEmpty()) {
             return $label;
         }
