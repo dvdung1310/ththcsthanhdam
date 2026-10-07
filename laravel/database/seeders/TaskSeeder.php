@@ -39,7 +39,8 @@ class TaskSeeder extends Seeder
         mt_srand(20262);
         $this->now = CarbonImmutable::now()->setSecond(0);
         $this->categories = TaskCategory::pluck('id', 'name')->all();
-        $this->libraryFiles = DB::table('library_nodes')->where('type', 'file')->whereNotNull('parent_id')->pluck('id')->all();
+        $shared = DB::table('library_nodes')->where('is_system', true)->whereNull('parent_id')->where('type', 'folder')->value('id');
+        $this->libraryFiles = $shared ? DB::table('library_nodes')->where('type', 'file')->where('parent_id', $shared)->pluck('id')->all() : [];
 
         for ($ago = 11; $ago >= 1; $ago--) {
             $month = $this->now->startOfMonth()->subMonths($ago);
