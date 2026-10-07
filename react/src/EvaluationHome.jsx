@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
-import { ArrowDown, ArrowUp, Award, CalendarPlus, Check, CheckCircle2, ChevronRight, ClipboardList, Trash2, Megaphone, MessageSquare, RotateCcw, Search, Send, Settings2, TriangleAlert, X } from "lucide-react";
+import { AlignJustify, ArrowDown, ArrowUp, Award, CalendarDays, Rows3, CalendarPlus, Check, CheckCircle2, ChevronRight, ClipboardList, Trash2, Megaphone, MessageSquare, RotateCcw, Search, Send, Settings2, TriangleAlert, X } from "lucide-react";
 import { apiJson } from "./api";
 import ActionMenu from "./ActionMenu";
 import { useConfirm } from "./ConfirmDialog";
 import TablePagination, { usePagination } from "./TablePagination";
-import { STATUS_TONES, daysPast, formatDay, formatPercent, formatScore, schoolYearLabel, schoolYearOf } from "./evaluationUtils";
+import { STATUS_TONES, daysPast, formatDay, formatScore, gradeCode, gradeTone, schoolYearLabel, schoolYearOf } from "./evaluationUtils";
+import Dropdown from "./Dropdown";
+import UnitPicker from "./UnitPicker";
+import InfoPopover from "./InfoPopover";
+import useFitHeight from "./useFitHeight";
 import "./Evaluation.css";
 import Avatar from "./Avatar";
 
@@ -122,6 +126,17 @@ export default function EvaluationHome() {
     if (ok) run(() => apiJson(`/api/evaluation-periods/${period.id}/reopen`, { method: "POST" }));
   };
 
+  const templateInfo = (
+    <InfoPopover label="Bộ tiêu chí đang áp dụng">
+      Bộ tiêu chí đang áp dụng:{" "}
+      {abilities.can_manage && overview?.template ? (
+        <Link to={`/evaluations/templates/${overview.template.id}`}><b>{overview.template.name}</b></Link>
+      ) : (
+        <b>{overview?.template?.name ?? "Chưa có"}</b>
+      )}
+    </InfoPopover>
+  );
+
   if (!overview) return <div className="ev-page"><div className="empty-state"><Award className="loading-icon" size={34} /><b>Đang tải...</b></div></div>;
 
   return (
@@ -133,24 +148,6 @@ export default function EvaluationHome() {
           <button onClick={() => setSuccess("")}><X size={17} /></button>
         </div>
       )}
-
-      <section className="ev-hero">
-        <p>
-          Bộ tiêu chí đang áp dụng:{" "}
-          {abilities.can_manage && overview.template ? (
-            <Link to={`/evaluations/templates/${overview.template.id}`}><b>{overview.template.name}</b></Link>
-          ) : (
-            <b>{overview.template?.name ?? "Chưa có"}</b>
-          )}
-        </p>
-        {abilities.can_manage && (
-          <div className="ev-hero-actions">
-            <button className="primary-btn" onClick={() => navigate("/evaluations/periods/new")}>
-              <CalendarPlus size={16} /> Mở kỳ đánh giá
-            </button>
-          </div>
-        )}
-      </section>
 
       {(hasOwn || !canBoard) && canBoard && (
         <nav className="ev-tabs" role="tablist">
@@ -172,43 +169,55 @@ export default function EvaluationHome() {
       )}
 
       {tab === "mine" ? (
-        <MySheets periods={overview.data} />
+        <MySheets periods={overview.data} info={templateInfo} />
       ) : (
         <section className="ev-card">
-          <div className={`ev-board-head ${overview.data.length ? "" : "empty"}`}>
+          <div className={`ev-board-head compact ${overview.data.length ? "" : "empty"}`}>
             {overview.data.length > 0 && (
-              <label className="ev-period-select">
-                <span>Kỳ đánh giá</span>
-                <select value={periodId ?? ""} onChange={(e) => setParam({ period: e.target.value, status: "", flag: "" })}>
-                  {overview.data.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-                </select>
-              </label>
-            )}
-            {period && <PeriodSteps status={period.status} />}
-            {period && abilities.can_manage && (
-              <div className="ev-period-actions">
-                {period.status === "open" && <button className="primary-btn" onClick={disclose}><Send size={15} /> Gửi kết quả dự kiến</button>}
-                {period.status === "disclosed" && <button className="primary-btn" onClick={publish}><Megaphone size={15} /> Công bố</button>}
-                {period.status === "published" && <button className="secondary-btn" onClick={reopen}><RotateCcw size={15} /> Mở lại</button>}
-                {period.status !== "published" && (
-                  <ActionMenu
-                    className="ev-period-more"
-                    items={[
-                      { key: "edit", label: "Sửa kỳ", icon: Settings2, onClick: () => navigate(`/evaluations/periods/${period.id}/edit`) },
-                      { key: "publish", label: "Công bố ngay", icon: Megaphone, onClick: publish, hidden: period.status !== "open" },
-                      { divider: true },
-                      { key: "delete", label: "Xóa kỳ", icon: Trash2, danger: true, onClick: () => setDeleting(period) },
-                    ]}
-                  />
-                )}
-              </div>
+              <Dropdown
+                label="Kỳ đánh giá"
+                icon={CalendarDays}
+                value={periodId ?? ""}
+                onChange={(value) => (value === "new" ? navigate("/evaluations/periods/new") : setParam({ period: String(value), status: "", flag: "" }))}
+                options={[
+                  ...overview.data.map((item) => ({ value: item.id, label: item.label, hint: item.status_label })),
+                  ...(abilities.can_manage ? [{ divider: true }, { value: "new", label: "＋ Mở kỳ đánh giá mới" }] : []),
+                ]}
+              />
             )}
             {period && (
-              <div className="ev-period-meta">
-                <DueDate label="Hạn tự chấm" due={period.self_due_on} active={period.status === "open"} />
-                <DueDate label="Hạn tổ chấm" due={period.unit_due_on} active={period.status === "open"} />
+              <div className="ev-period-flow">
+                <PeriodSteps status={period.status} />
+                <div className="ev-period-meta">
+                  <DueDate label="Tự chấm đến" due={period.self_due_on} active={period.status === "open"} />
+                  <DueDate label="Tổ chấm đến" due={period.unit_due_on} active={period.status === "open"} />
+                </div>
               </div>
             )}
+            <div className="ev-period-actions">
+              {templateInfo}
+              {!overview.data.length && abilities.can_manage && (
+                <button className="primary-btn" onClick={() => navigate("/evaluations/periods/new")}><CalendarPlus size={15} /> Mở kỳ đánh giá</button>
+              )}
+              {period && abilities.can_manage && (
+                <>
+                  {period.status === "open" && <button className="primary-btn" onClick={disclose}><Send size={15} /> Gửi kết quả dự kiến</button>}
+                  {period.status === "disclosed" && <button className="primary-btn" onClick={publish}><Megaphone size={15} /> Công bố</button>}
+                  {period.status === "published" && <button className="secondary-btn" onClick={reopen}><RotateCcw size={15} /> Mở lại</button>}
+                  {period.status !== "published" && (
+                    <ActionMenu
+                      className="ev-period-more"
+                      items={[
+                        { key: "edit", label: "Sửa kỳ", icon: Settings2, onClick: () => navigate(`/evaluations/periods/${period.id}/edit`) },
+                        { key: "publish", label: "Công bố ngay", icon: Megaphone, onClick: publish, hidden: period.status !== "open" },
+                        { divider: true },
+                        { key: "delete", label: "Xóa kỳ", icon: Trash2, danger: true, onClick: () => setDeleting(period) },
+                      ]}
+                    />
+                  )}
+                </>
+              )}
+            </div>
           </div>
 
           {!period ? (
@@ -278,7 +287,7 @@ function deadlineNote(row, period) {
   return null;
 }
 
-function MySheets({ periods }) {
+function MySheets({ periods, info }) {
   const own = periods.filter((period) => period.my_evaluation);
   const years = [...new Set(own.map((period) => schoolYearOf(period.year, period.month)))].sort((a, b) => b - a);
   const [year, setYear] = useState(null);
@@ -298,7 +307,7 @@ function MySheets({ periods }) {
   }
   return (
     <section className="ev-card">
-      <YearHistory rows={rows} years={years} year={activeYear} onYear={(value) => { setYear(value); pager.reset(); }} />
+      <YearHistory rows={rows} years={years} year={activeYear} info={info} onYear={(value) => { setYear(value); pager.reset(); }} />
       <div className="ev-table-wrap">
         <table className="ev-table ev-mine-table">
           <thead>
@@ -357,22 +366,20 @@ function MySheets({ periods }) {
   );
 }
 
-function YearHistory({ rows, years, year, onYear }) {
+function YearHistory({ rows, years, year, info, onYear }) {
   const published = [...rows].filter((period) => period.status === "published" && period.my_evaluation.total_score != null).sort((a, b) => a.year - b.year || a.month - b.month);
   const counts = {};
   published.forEach((period) => {
     const grade = period.my_evaluation.grade ?? "Không xếp loại";
     counts[grade] = (counts[grade] ?? 0) + 1;
   });
-  const percents = published.map((period) => (period.my_evaluation.max_base ? (period.my_evaluation.total_score / period.my_evaluation.max_base) * 100 : null)).filter((value) => value != null);
-  const average = percents.length ? Math.round((percents.reduce((sum, value) => sum + value, 0) / percents.length) * 10) / 10 : null;
+  const totals = published.map((period) => Number(period.my_evaluation.total_score));
+  const average = totals.length ? Math.round((totals.reduce((sum, value) => sum + value, 0) / totals.length) * 100) / 100 : null;
   return (
     <div className="ev-history">
       <div className="ev-history-text">
         {years.length > 1 ? (
-          <select value={year} onChange={(e) => onYear(Number(e.target.value))} aria-label="Năm học">
-            {years.map((item) => <option key={item} value={item}>Năm học {schoolYearLabel(item)}</option>)}
-          </select>
+          <Dropdown label="Năm học" value={year} onChange={(value) => onYear(Number(value))} options={years.map((item) => ({ value: item, label: `Năm học ${schoolYearLabel(item)}` }))} />
         ) : (
           <b>Năm học {schoolYearLabel(year)}</b>
         )}
@@ -380,13 +387,14 @@ function YearHistory({ rows, years, year, onYear }) {
           <span>
             {published.length} tháng đã công bố:{" "}
             {Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([grade, count]) => `${count} ${grade}`).join(" · ")}
-            {average != null && <> · TB <b>{formatPercent(average)}</b></>}
+            {average != null && <> · Điểm TB <b>{formatScore(average)}</b></>}
           </span>
         ) : (
           <span className="ev-muted">Chưa có tháng nào được công bố.</span>
         )}
       </div>
-      {published.length > 1 && <Sparkline points={published.map((period) => ({ label: `T${period.month}`, value: period.my_evaluation.max_base ? (period.my_evaluation.total_score / period.my_evaluation.max_base) * 100 : 0, grade: period.my_evaluation.grade }))} />}
+      {published.length > 1 && <Sparkline points={published.map((period) => ({ label: `T${period.month}`, value: Number(period.my_evaluation.total_score), max: period.my_evaluation.max_base, grade: period.my_evaluation.grade }))} />}
+      {info}
     </div>
   );
 }
@@ -395,18 +403,19 @@ function Sparkline({ points }) {
   const width = 220;
   const height = 44;
   const values = points.map((point) => point.value);
-  const min = Math.min(...values, 60);
-  const max = Math.max(...values, 100);
+  const frame = Math.max(...points.map((point) => point.max ?? 0)) || Math.max(...values);
+  const min = Math.min(...values, frame * 0.6);
+  const max = Math.max(...values, frame);
   const x = (index) => 10 + (index * (width - 20)) / Math.max(1, points.length - 1);
   const y = (value) => 6 + (1 - (value - min) / Math.max(1, max - min)) * (height - 18);
   return (
-    <svg className="ev-sparkline" width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Điểm theo tháng (% điểm tối đa)">
-      <line x1="10" x2={width - 10} y1={y(100)} y2={y(100)} className="ref" />
+    <svg className="ev-sparkline" width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Tổng điểm theo tháng">
+      <line x1="10" x2={width - 10} y1={y(frame)} y2={y(frame)} className="ref" />
       <polyline points={points.map((point, index) => `${x(index)},${y(point.value)}`).join(" ")} />
       {points.map((point, index) => (
         <g key={point.label}>
           <circle cx={x(index)} cy={y(point.value)} r="3">
-            <title>{`${point.label}: ${formatPercent(Math.round(point.value * 10) / 10)}${point.grade ? ` · ${point.grade}` : ""}`}</title>
+            <title>{`${point.label}: ${formatScore(point.value)} điểm${point.grade ? ` · ${point.grade}` : ""}`}</title>
           </circle>
           <text x={x(index)} y={height - 1}>{point.label}</text>
         </g>
@@ -474,6 +483,7 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
   const team = Number(params.get("team")) || null;
   const group = Number(params.get("group")) || null;
   const flag = params.get("flag") ?? "";
+  const homeroom = params.get("homeroom") ?? "";
   const search = params.get("q") ?? "";
   const sortParam = params.get("sort") ?? "name";
   const sortKey = sortParam.replace(/^-/, "");
@@ -487,9 +497,9 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
   }, [rows]);
   const groups = useMemo(() => {
     const map = new Map();
-    rows?.forEach((row) => row.group && row.team?.id === team && map.set(row.group.id, row.group.name));
-    return [...map].map(([id, name]) => ({ id, name })).sort((a, b) => collator.compare(a.name, b.name));
-  }, [rows, team]);
+    rows?.forEach((row) => row.group && map.set(row.group.id, { id: row.group.id, name: row.group.name, team_id: row.team?.id ?? null }));
+    return [...map.values()].sort((a, b) => collator.compare(a.name, b.name));
+  }, [rows]);
 
   const scoped = useMemo(() => {
     if (!rows) return null;
@@ -499,9 +509,10 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
         (!team || row.unit_ids.includes(team)) &&
         (!group || row.unit_ids.includes(group)) &&
         (!flag || matchesAttention(row, flag, period)) &&
+        (!homeroom || row.is_homeroom === (homeroom === "yes")) &&
         (!keyword || `${row.teacher.name} ${row.teacher.code ?? ""}`.toLowerCase().includes(keyword)),
     );
-  }, [rows, team, group, flag, search, period]);
+  }, [rows, team, group, flag, homeroom, search, period]);
 
   const counts = useMemo(() => {
     const result = { "": scoped?.length ?? 0 };
@@ -525,10 +536,16 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
   const submitted = scoped?.filter((row) => row.status !== "draft").length ?? 0;
   const scored = scoped?.filter((row) => row.status === "unit_scored" || row.status === "published").length ?? 0;
   const late = scoped?.filter((row) => deadlineNote(row, period)?.tone === "late").length ?? 0;
-  const filtered = Boolean(team || group || flag || search);
+  const filtered = Boolean(team || group || flag || homeroom || search);
+  const [dense, setDense] = useState(() => localStorage.getItem("thanhdam_board_density") !== "comfortable");
+  const setDensity = (value) => {
+    localStorage.setItem("thanhdam_board_density", value ? "compact" : "comfortable");
+    setDense(value);
+  };
+  const [wrapRef, footRef, tableHeight] = useFitHeight([visible ? "ready" : "loading", dense, board?.not_included?.length ?? 0]);
 
   const header = (key, label, className = "") => (
-    <th className={`${className} sortable ${sortKey === key ? "sorted" : ""}`} onClick={() => sortBy(key)} aria-sort={sortKey === key ? (descending ? "descending" : "ascending") : "none"}>
+    <th key={key} className={`${className} sortable ${sortKey === key ? "sorted" : ""}`} onClick={() => sortBy(key)} aria-sort={sortKey === key ? (descending ? "descending" : "ascending") : "none"}>
       {label}
       {sortKey === key && (descending ? <ArrowDown size={12} /> : <ArrowUp size={12} />)}
     </th>
@@ -536,72 +553,58 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
 
   return (
     <>
-      <div className="ev-filters">
+      <div className="ev-filters ev-board-chips">
         <div className="ev-status-chips">
           {STATUS_FILTERS.map(([value, label]) => (
             <button key={value} className={status === value ? "active" : ""} onClick={() => update({ status: value })}>
               {label} <em>{counts[value] ?? 0}</em>
             </button>
           ))}
+          {late > 0 && (
+            <button className={`late ${flag === "late" ? "active" : ""}`} onClick={() => update({ flag: flag === "late" ? "" : "late" })}>
+              <TriangleAlert size={13} /> {late} trễ hạn
+            </button>
+          )}
         </div>
+        {total > 0 && (
+          <span className="ev-progress thin" aria-hidden="true" title={`Đã nộp ${submitted}/${total} · Tổ chấm ${scored}/${total}`}>
+            <i className="scored" style={{ width: `${(scored / total) * 100}%` }} />
+            <i className="submitted" style={{ width: `${((submitted - scored) / total) * 100}%` }} />
+          </span>
+        )}
       </div>
-      <div className="ev-filters ev-board-filters">
-        {teams.length > 1 && (
-          <select value={team ?? ""} onChange={(e) => update({ team: e.target.value, group: "" })} aria-label="Tổ">
-            <option value="">Mọi tổ</option>
-            {teams.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </select>
-        )}
-        {team && groups.length > 0 && (
-          <select value={group ?? ""} onChange={(e) => update({ group: e.target.value })} aria-label="Nhóm">
-            <option value="">Mọi nhóm</option>
-            {groups.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </select>
-        )}
-        <select value={flag} onChange={(e) => update({ flag: e.target.value })} aria-label="Cần chú ý" className={flag ? "active" : ""}>
-          <option value="">Cần chú ý: tất cả</option>
-          {ATTENTION_FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-        </select>
-        {filtered && <button className="ev-link-btn" onClick={() => update({ team: "", group: "", flag: "", q: "" })}>Xóa bộ lọc</button>}
+      <div className="ev-filters ev-board-filters ev-summary-toolbar">
         <label className="ev-search">
           <Search size={15} />
           <input value={search} onChange={(e) => update({ q: e.target.value })} placeholder="Tìm tên hoặc mã giáo viên..." />
         </label>
-      </div>
-
-      {total > 0 && (
-        <div className="ev-board-summary">
-          <span>Đã nộp <b>{submitted}/{total}</b></span>
-          <span>Tổ chấm <b>{scored}/{total}</b></span>
-          {late > 0 && (
-            <button className="late" onClick={() => update({ flag: flag === "late" ? "" : "late" })}>
-              {late} trễ hạn
-            </button>
-          )}
-          <span className="ev-progress" aria-hidden="true">
-            <i className="scored" style={{ width: `${(scored / total) * 100}%` }} />
-            <i className="submitted" style={{ width: `${((submitted - scored) / total) * 100}%` }} />
-          </span>
+        {teams.length > 1 && <UnitPicker teams={teams} groups={groups} team={team} group={group} onChange={(next) => update(next)} />}
+        <div className="ev-segmented" role="group" aria-label="Chủ nhiệm">
+          {[["", "Tất cả"], ["yes", "Chủ nhiệm"], ["no", "Không CN"]].map(([value, label]) => (
+            <button key={value} type="button" className={homeroom === value ? "active" : ""} onClick={() => update({ homeroom: value })}>{label}</button>
+          ))}
         </div>
-      )}
-
-      {board?.not_included?.length > 0 && (
-        <details className="ev-excluded">
-          <summary>{board.not_included.length} giáo viên không tham gia kỳ này</summary>
-          <p>{board.not_included.join(", ")}</p>
-        </details>
-      )}
+        <Dropdown
+          label="Cần chú ý"
+          icon={TriangleAlert}
+          className={flag ? "picked" : ""}
+          value={flag}
+          onChange={(value) => update({ flag: String(value) })}
+          options={[{ value: "", label: "Cần chú ý: tất cả" }, { divider: true }, ...ATTENTION_FILTERS.map(([value, label]) => ({ value, label }))]}
+        />
+        {filtered && <button className="ev-link-btn" onClick={() => update({ team: "", group: "", flag: "", homeroom: "", q: "" })}>Xóa bộ lọc</button>}
+      </div>
 
       {!visible ? (
         <div className="empty-state"><Award className="loading-icon" size={30} /><b>Đang tải...</b></div>
       ) : !visible.length ? (
         <div className="empty-state"><Search size={30} /><b>Không có phiếu phù hợp</b></div>
       ) : (
-        <div className="ev-table-wrap ev-board-wrap">
-          <table className="ev-table ev-board-table">
+        <div ref={wrapRef} className="ev-table-wrap ev-board-wrap ev-summary-wrap" style={tableHeight ? { maxHeight: tableHeight } : undefined}>
+          <table className={`ev-table ev-board-table ev-summary-grid ${dense ? "dense" : ""}`}>
             <thead>
               <tr>
-                {header("name", "Giáo viên")}
+                {header("name", "Giáo viên", "sticky")}
                 {header("team", "Tổ / nhóm")}
                 {header("status", "Trạng thái")}
                 {header("self", "Tự chấm", "num")}
@@ -617,12 +620,12 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
                 const note = deadlineNote(row, period);
                 return (
                   <tr key={row.id} className="clickable" onClick={() => onOpen(row.id)}>
-                    <td>
+                    <td className="sticky">
                       <span className="ev-person">
                         {row.teacher.avatar_url ? <img src={row.teacher.avatar_url} alt="" /> : <Avatar name={row.teacher.name} />}
                         <span>
                           <b>{row.teacher.name}</b>
-                          <small>{[row.teacher.code, row.is_homeroom ? "GVCN" : null].filter(Boolean).join(" · ")}</small>
+                          <small>{row.teacher.code}{row.is_homeroom && <em className="ev-tag">GVCN</em>}</small>
                         </span>
                       </span>
                     </td>
@@ -638,7 +641,9 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
                     <td className="num">{row.unit_in_progress ? <span className="ev-muted">Đang chấm</span> : formatScore(row.unit_total)}</td>
                     <td className="num"><ScoreDiff self={row.self_total} unit={row.unit_total} /></td>
                     <td>
-                      {row.no_grade_reason ? (
+                      {dense ? (
+                        <GradeTag row={row} />
+                      ) : row.no_grade_reason ? (
                         <span className="ev-chip red">Không xếp loại</span>
                       ) : row.grade || (row.reviewed && row.suggested_grade) ? (
                         <b>{row.grade ?? row.suggested_grade}</b>
@@ -647,8 +652,8 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
                       ) : (
                         <span className="ev-muted">—</span>
                       )}
-                      {row.reviewed && <small className="ev-approved"><Check size={11} /> HT đã duyệt</small>}
-                      {row.has_violation && <small className="ev-late">Có vi phạm</small>}
+                      {!dense && row.reviewed && <small className="ev-approved"><Check size={11} /> HT đã duyệt</small>}
+                      {!dense && row.has_violation && <small className="ev-late">Có vi phạm</small>}
                     </td>
                     <td className="ev-comments">{row.comments_count > 0 && <span title="Trao đổi / giải trình"><MessageSquare size={14} /> {row.comments_count}</span>}</td>
                     <td className="ev-row-arrow"><ChevronRight size={18} /></td>
@@ -659,8 +664,36 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
           </table>
         </div>
       )}
-      <TablePagination pager={pager} noun="phiếu" sizes={[20, 50, 100]} />
+      <div ref={footRef} className="ev-summary-foot">
+        <span className="ev-summary-stats" title={`Đã nộp ${submitted}/${total} · Tổ chấm ${scored}/${total}`}>
+          <b>{visible?.length ?? 0}</b> phiếu · Đã nộp <b>{submitted}/{total}</b> · Tổ chấm <b>{scored}/{total}</b>
+          {late > 0 && <> · <b className="ev-text-red">{late}</b> trễ hạn</>}
+          {board?.not_included?.length > 0 && <span className="ev-muted" title={board.not_included.join(", ")}> · {board.not_included.length} GV không tham gia kỳ này</span>}
+        </span>
+        <div className="ev-summary-foot-tools">
+          <div className="ev-segmented small" role="group" aria-label="Mật độ">
+            <button type="button" className={dense ? "active" : ""} title="Gọn" onClick={() => setDensity(true)}><AlignJustify size={14} /></button>
+            <button type="button" className={!dense ? "active" : ""} title="Thoải mái" onClick={() => setDensity(false)}><Rows3 size={14} /></button>
+          </div>
+          <TablePagination pager={pager} noun="phiếu" sizes={[20, 50, 100]} showRange={false} />
+        </div>
+      </div>
     </>
+  );
+}
+
+function GradeTag({ row }) {
+  if (row.no_grade_reason) return <span className="ev-chip red" title={row.no_grade_reason}>KXL</span>;
+  const label = row.grade ?? row.suggested_grade;
+  if (!label) return <span className="ev-muted">—</span>;
+  const final = Boolean(row.grade || row.reviewed);
+  return (
+    <span className="ev-grade-tag" title={`${final ? "" : "Gợi ý: "}${label}${row.reviewed ? " · Hiệu trưởng đã duyệt" : ""}${row.has_violation ? " · Có vi phạm" : ""}`}>
+      <span className={`ev-chip ${gradeTone(label)} ${final ? "" : "suggested"}`}>{gradeCode(label)}</span>
+      {row.reviewed && <Check size={12} className="ev-approved-icon" />}
+      {!final && <small className="ev-muted">gợi ý</small>}
+      {row.has_violation && <small className="ev-text-red">VP</small>}
+    </span>
   );
 }
 

@@ -1,4 +1,4 @@
-export const STATUS_TONES = { draft: "muted", submitted: "blue", unit_scored: "purple", published: "green" };
+export const STATUS_TONES = { draft: "muted", submitted: "blue", unit_scored: "teal", published: "green" };
 export const PERIOD_TONES = { open: "blue", disclosed: "orange", published: "green" };
 
 export function parseScore(value) {
@@ -85,3 +85,21 @@ export const schoolYearOf = (year, month) => (month >= YEAR_START_MONTH ? year :
 export const schoolYearLabel = (year) => `${year}–${year + 1}`;
 export const GRADE_TONES = ["green", "blue", "violet", "orange", "muted", "muted"];
 export const formatPercent = (value) => (value == null ? "—" : `${formatScore(value)}%`);
+
+export function gradeCode(label) {
+  const text = (label ?? "").replace(/\s*\(.*\)\s*$/, "").trim();
+  if (/^xuất sắc$/i.test(text)) return "XS";
+  const level = /^loại\s+(.+)$/i.exec(text);
+  if (level) return level[1];
+  return text.split(/\s+/).map((word) => word.charAt(0).toUpperCase()).join("") || text;
+}
+
+const GRADE_CODE_TONES = { XS: "green", A: "blue", B: "violet", C: "orange" };
+
+export function gradeTone(label) {
+  return GRADE_CODE_TONES[gradeCode(label)] ?? "muted";
+}
+
+export function gradeShort(label) {
+  return (label ?? "").replace(/\s*\(.*\)\s*$/, "").trim();
+}
