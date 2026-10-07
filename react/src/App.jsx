@@ -65,11 +65,11 @@ const navTree = [
   { key: "stats", label: "Thống kê", icon: ChartNoAxesColumnIncreasing, path: "/stats", permission: "kpi.view" },
   {
     key: "tasks-group",
-    label: "Giao việc",
+    label: "Công việc",
     icon: ClipboardCheck,
     children: [
-      { key: "tasks", label: "Danh sách công việc", title: "Giao việc", path: "/tasks", permission: "tasks.view", badge: true },
-      { key: "task-settings", label: "Cấu hình", title: "Cấu hình giao việc", path: "/task-settings", permission: "tasks.assign", schoolOnly: true },
+      { key: "tasks", label: "Danh sách công việc", title: "Công việc", path: "/tasks", permission: "tasks.view", badge: true },
+      { key: "task-settings", label: "Cấu hình", title: "Cấu hình công việc", path: "/task-settings", permission: "tasks.assign", schoolOnly: true },
     ],
   },
   { key: "library", label: "Kho dữ liệu", icon: Database, path: "/library", permission: "library.view" },
@@ -78,8 +78,8 @@ const navTree = [
     label: "Đánh giá thi đua",
     icon: Award,
     children: [
-      { key: "evaluations", label: "Đánh giá tháng", title: "Đánh giá thi đua", path: "/evaluations", permission: "evaluation.view|evaluation.score|evaluation.manage" },
       { key: "evaluation-summary", label: "Tổng hợp", title: "Tổng hợp thi đua", path: "/evaluations/summary", permission: "evaluation.manage" },
+      { key: "evaluations", label: "Đánh giá tháng", title: "Đánh giá thi đua", path: "/evaluations", permission: "evaluation.view|evaluation.score|evaluation.manage" },
       { key: "evaluation-templates", label: "Bộ tiêu chí", title: "Bộ tiêu chí đánh giá", path: "/evaluations/templates", permission: "evaluation.manage" },
     ],
   },
