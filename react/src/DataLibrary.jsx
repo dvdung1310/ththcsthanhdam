@@ -9,9 +9,6 @@ import {
   Database,
   Download,
   Eye,
-  File,
-  FileImage,
-  FileSpreadsheet,
   FileText,
   Folder,
   FolderInput,
@@ -21,7 +18,6 @@ import {
   Info,
   Lock,
   Pencil,
-  Presentation,
   Scissors,
   Search,
   Share2,
@@ -39,7 +35,7 @@ import { useConfirm } from "./ConfirmDialog";
 import { RichTextEditor } from "./TaskManagement";
 import LibraryShareDialog, { ACCESS_LABELS } from "./LibraryShareDialog";
 import ShareFileDialog from "./ShareFileDialog";
-import { downloadFile, formatBytes } from "./fileUtils";
+import { downloadFile, fileIcon, fileKind, formatBytes } from "./fileUtils";
 import FilePreview from "./FilePreview";
 import ActionMenu, { MenuList, menuPosition } from "./ActionMenu";
 import LibraryFolderTree from "./LibraryFolderTree";
@@ -48,13 +44,6 @@ import "./DataLibrary.css";
 import Avatar from "./Avatar";
 
 
-function fileIcon(mime = "") {
-  if (mime.startsWith("image/")) return FileImage;
-  if (mime.includes("sheet") || mime.includes("excel")) return FileSpreadsheet;
-  if (mime.includes("presentation") || mime.includes("powerpoint")) return Presentation;
-  if (mime.includes("pdf") || mime.includes("word") || mime.startsWith("text/")) return FileText;
-  return File;
-}
 
 const SIDEBAR_KEY = "thanhdam_library_sidebar";
 
@@ -629,16 +618,6 @@ export default function DataLibrary({ view = "library", folderId = null, selectI
 
 const fullDate = (value) => (value ? new Date(value).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" }) : "—");
 
-function fileKind(name = "", mime = "") {
-  const extension = name.includes(".") ? name.split(".").pop().toUpperCase() : "";
-  if (mime.startsWith("image/")) return `Hình ảnh ${extension}`.trim();
-  if (mime.includes("pdf")) return "Tài liệu PDF";
-  if (mime.includes("word")) return "Tài liệu Word";
-  if (mime.includes("sheet") || mime.includes("excel")) return "Bảng tính Excel";
-  if (mime.includes("presentation") || mime.includes("powerpoint")) return "Bản trình chiếu";
-  if (mime.startsWith("text/")) return "Văn bản thuần";
-  return extension ? `Tệp ${extension}` : "Tệp";
-}
 
 function PersonAvatar({ person, size = 26 }) {
   return person?.avatar_url ? (
