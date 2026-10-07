@@ -345,13 +345,6 @@ export default function EvaluationSummary() {
           </div>
         )}
 
-        {summary?.fallback && (
-          <div className="ev-notice ev-summary-notice">
-            <Info size={14} /> Năm học {summary.fallback.label} mới có {summary.fallback.published} tháng công bố, đang hiển thị năm học {summary.school_years.find((item) => item.value === summary.school_year)?.label}.
-            <button type="button" className="ev-link-btn" onClick={() => update({ year: String(summary.fallback.school_year), from: "", to: "" })}>Xem năm học {summary.fallback.label}</button>
-          </div>
-        )}
-
         {allYears && summary?.mixed_scale && (
           <div className="ev-notice warn ev-summary-notice">
             <TriangleAlert size={14} /> Các năm học dùng thang điểm khác nhau, điểm trung bình giữa các năm chỉ nên so sánh tương đối.
