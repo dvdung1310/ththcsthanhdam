@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { ArrowDown, ArrowUp, Award, BarChart3, Check, ChevronDown, FileSpreadsheet, Info, Printer, Search, SlidersHorizontal, TriangleAlert, Users, X } from "lucide-react";
+import { AlignJustify, ArrowDown, ArrowUp, BarChart3, Check, ChevronDown, Rows3, FileSpreadsheet, Info, Printer, Search, SlidersHorizontal, TriangleAlert, Users, X } from "lucide-react";
 import { apiFetch, apiJson } from "./api";
 import TablePagination, { usePagination } from "./TablePagination";
 import { GRADE_TONES, formatScore } from "./evaluationUtils";
@@ -18,6 +18,14 @@ const VIOLATION = [["", "Tất cả"], ["yes", "Có vi phạm"], ["no", "Không 
 const STATUS = [["", "Tất cả"], ["working", "Đang làm việc"], ["on_leave", "Nghỉ phép"], ["suspended", "Tạm nghỉ"]];
 const TOPS = [["", "Tất cả"], ["3", "Top 3"], ["10", "Top 10"], ["20", "Top 20"]];
 const MEDALS = { 1: "gold", 2: "silver", 3: "bronze" };
+
+function gradeCode(label) {
+  const text = (label ?? "").trim();
+  if (/^xuất sắc$/i.test(text)) return "XS";
+  const level = /^loại\s+(.+)$/i.exec(text);
+  if (level) return level[1];
+  return text.split(/\s+/).map((word) => word.charAt(0).toUpperCase()).join("") || text;
+}
 
 function sortRows(rows, key, descending) {
   const sign = descending ? -1 : 1;
@@ -121,6 +129,31 @@ export default function EvaluationSummary() {
   const visible = useMemo(() => (rows ? sortRows(rows, sortKey, descending) : null), [rows, sortKey, descending]);
 
   const pager = usePagination(visible ?? [], 20);
+  const [dense, setDense] = useState(() => localStorage.getItem("thanhdam_summary_density") !== "comfortable");
+  const setDensity = (value) => {
+    localStorage.setItem("thanhdam_summary_density", value ? "compact" : "comfortable");
+    setDense(value);
+  };
+  const wrapRef = useRef(null);
+  const footRef = useRef(null);
+  const [tableHeight, setTableHeight] = useState(null);
+  useLayoutEffect(() => {
+    const measure = () => {
+      const wrap = wrapRef.current;
+      if (!wrap) return;
+      const top = wrap.getBoundingClientRect().top + window.scrollY;
+      const below = (footRef.current?.offsetHeight ?? 0) + 28;
+      setTableHeight(Math.max(360, Math.floor(window.innerHeight - top - below)));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    const observer = new ResizeObserver(measure);
+    if (wrapRef.current?.parentElement) observer.observe(wrapRef.current.parentElement);
+    return () => {
+      window.removeEventListener("resize", measure);
+      observer.disconnect();
+    };
+  }, [visible ? "ready" : "loading", dense]);
   const update = (values) => {
     pager.reset();
     setParam(values);
@@ -201,18 +234,6 @@ export default function EvaluationSummary() {
 
   return (
     <div className="ev-page ev-summary-page">
-      <section className="ev-hero">
-        <p>
-          Tổng hợp và xếp hạng kết quả các tháng <b>đã công bố</b> để Hội đồng thi đua tham khảo khi bình xét theo đợt và cuối năm. Hệ thống không tự xếp danh hiệu.
-        </p>
-        <div className="ev-hero-actions">
-          <button className="secondary-btn" disabled={!visible?.length} onClick={() => window.print()}><Printer size={16} /> In bảng</button>
-          <button className="primary-btn" disabled={!visible?.length || exporting} onClick={exportExcel}>
-            <FileSpreadsheet size={16} /> {exporting ? "Đang xuất..." : "Xuất Excel"}
-          </button>
-        </div>
-      </section>
-
       {error && <div className="api-error"><TriangleAlert size={16} />{error}<button onClick={() => setError("")}>Đóng</button></div>}
 
       <section className="ev-card">
@@ -245,11 +266,15 @@ export default function EvaluationSummary() {
               {yearPeriods.map((period) => <option key={period.key} value={period.key} disabled={from && period.key < from}>{period.label}</option>)}
             </select>
           </label>
-          {summary && (
-            <span className="ev-summary-scope">
-              {periods.length} tháng · <b>{officialCount}</b> đã công bố
-            </span>
-          )}
+          <div className="ev-summary-actions">
+            <InfoPopover label="Giới thiệu bảng tổng hợp">
+              Tổng hợp và xếp hạng kết quả các tháng <b>đã công bố</b> để Hội đồng thi đua tham khảo khi bình xét theo đợt và cuối năm. Hệ thống không tự xếp danh hiệu.
+            </InfoPopover>
+            <button className="secondary-btn icon-only" disabled={!visible?.length} onClick={() => window.print()} title="In bảng" aria-label="In bảng"><Printer size={16} /></button>
+            <button className="primary-btn" disabled={!visible?.length || exporting} onClick={exportExcel} title="Xuất Excel theo bộ lọc">
+              <FileSpreadsheet size={16} /> {exporting ? "Đang xuất..." : "Excel"}
+            </button>
+          </div>
         </div>
 
         <div className="ev-filters ev-summary-toolbar">
@@ -335,16 +360,6 @@ export default function EvaluationSummary() {
           </div>
         )}
 
-        {overview && (
-          <div className={`ev-summary-kpis ${loading ? "loading" : ""}`}>
-            <div><Users size={16} /><span><b>{overview.teachers}</b><small>Giáo viên</small></span></div>
-            <div><BarChart3 size={16} /><span><b>{formatScore(overview.average)}</b><small>Điểm TB chung</small></span></div>
-            <div><Award size={16} /><span><b>{overview.top_grade_teachers}</b><small>Có tháng {overview.top_grade ?? "đứng đầu"}</small></span></div>
-            <div className="warn"><TriangleAlert size={16} /><span><b>{overview.violation_teachers}</b><small>Có vi phạm</small></span></div>
-            <div className="muted"><Info size={16} /><span><b>{overview.unscored}</b><small>Chưa có điểm</small></span></div>
-          </div>
-        )}
-
         {allYears && summary?.mixed_scale && (
           <div className="ev-notice warn ev-summary-notice">
             <TriangleAlert size={14} /> Các năm học dùng thang điểm khác nhau, điểm trung bình giữa các năm chỉ nên so sánh tương đối.
@@ -364,8 +379,8 @@ export default function EvaluationSummary() {
         ) : !visible.length ? (
           <div className="empty-state"><Search size={30} /><b>Không có giáo viên phù hợp</b></div>
         ) : (
-          <div className={`ev-table-wrap ev-summary-wrap ${loading ? "loading" : ""}`}>
-            <table className="ev-table ev-summary-grid">
+          <div ref={wrapRef} className={`ev-table-wrap ev-summary-wrap ${loading ? "loading" : ""}`} style={tableHeight ? { maxHeight: tableHeight } : undefined}>
+            <table className={`ev-table ev-summary-grid ${dense ? "dense" : ""}`}>
               <thead>
                 <tr>
                   {header("rank", "Hạng", "center rank-col")}
@@ -384,7 +399,7 @@ export default function EvaluationSummary() {
                           {!period.official && <small>chưa công bố</small>}
                         </th>
                       ))}
-                  {grades.map((grade) => header(grade.key, grade.short, "num stat", grade.name))}
+                  {grades.map((grade) => header(grade.key, dense ? gradeCode(grade.short) : grade.short, "num stat", `Số tháng ${grade.name}`))}
                   {header("no_grade", "KXL", "num stat", "Số tháng không xếp loại")}
                   {header("violations", "Vi phạm", "num stat", "Số tháng có vi phạm QCCM / đạo đức nhà giáo")}
                   {header("months", "Số tháng", "num stat", "Số tháng đã công bố có điểm")}
@@ -401,8 +416,17 @@ export default function EvaluationSummary() {
                       <span className="ev-person">
                         {row.avatar_url ? <img src={row.avatar_url} alt="" /> : <Avatar name={row.name} />}
                         <span>
-                          <b>{row.name}{row.is_homeroom && <em className="ev-tag">GVCN</em>}</b>
-                          <small>{row.code}</small>
+                          {dense ? (
+                            <>
+                              <b>{row.name}</b>
+                              <small>{row.code}{row.is_homeroom && <em className="ev-tag">GVCN</em>}</small>
+                            </>
+                          ) : (
+                            <>
+                              <b>{row.name}{row.is_homeroom && <em className="ev-tag">GVCN</em>}</b>
+                              <small>{row.code}</small>
+                            </>
+                          )}
                         </span>
                       </span>
                     </td>
@@ -418,7 +442,7 @@ export default function EvaluationSummary() {
                         ))
                       : periods.map((period) => (
                           <td key={period.id} className="center">
-                            <MonthCell cell={row.cells[period.id]} grades={grades} frame={homeroom} onOpen={(id) => navigate(`/evaluations/${id}`)} />
+                            <MonthCell cell={row.cells[period.id]} grades={grades} frame={homeroom} dense={dense} onOpen={(id) => navigate(`/evaluations/${id}`)} />
                           </td>
                         ))}
                     {grades.map((grade) => <td key={grade.key} className="num stat">{row.stats.counts[grade.key] || <span className="ev-muted">0</span>}</td>)}
@@ -432,10 +456,29 @@ export default function EvaluationSummary() {
             </table>
           </div>
         )}
-        <TablePagination pager={pager} noun="giáo viên" sizes={[20, 50, 100]} />
-        <p className="ev-summary-legend">
-          <Info size={13} /> Chỉ tính các tháng đã công bố{homeroom ? (homeroom === "yes" ? ", và chỉ các tháng chủ nhiệm" : ", và chỉ các tháng không chủ nhiệm") : ""}. Điểm TB là trung bình tổng điểm các tháng được chấm, không quy đổi giữa khung chủ nhiệm và không chủ nhiệm. Hạng xét Điểm TB, rồi số tháng xếp loại cao nhất, rồi ít vi phạm; bằng nhau thì đồng hạng. Hạng tính trong phạm vi tổ, nhóm và khung chủ nhiệm đang chọn.
-        </p>
+        <div ref={footRef} className="ev-summary-foot">
+          {overview && (
+            <span className="ev-summary-stats" title={`${overview.teachers} giáo viên · Điểm TB ${formatScore(overview.average)} · ${overview.top_grade_teachers} có tháng ${overview.top_grade ?? ""} · ${overview.violation_teachers} có vi phạm · ${overview.unscored} chưa có điểm · ${officialCount}/${periods.length} tháng đã công bố`}>
+              <b>{overview.teachers}</b> GV · TB <b>{formatScore(overview.average)}</b> · <b>{overview.top_grade_teachers}</b> có {overview.top_grade ?? "hạng cao"} ·{" "}
+              <b className={overview.violation_teachers ? "ev-text-red" : ""}>{overview.violation_teachers}</b> vi phạm · <b>{overview.unscored}</b> chưa chấm
+              <span className="ev-muted"> · {allYears ? `${yearColumns.length} năm học, ` : ""}{officialCount}/{periods.length} tháng đã công bố</span>
+            </span>
+          )}
+          <div className="ev-summary-foot-tools">
+            <div className="ev-segmented small" role="group" aria-label="Mật độ">
+              <button type="button" className={dense ? "active" : ""} title="Gọn" onClick={() => setDensity(true)}><AlignJustify size={14} /></button>
+              <button type="button" className={!dense ? "active" : ""} title="Thoải mái" onClick={() => setDensity(false)}><Rows3 size={14} /></button>
+            </div>
+            <InfoPopover label="Cách tính" text="Cách tính" up>
+              Chỉ tính các tháng đã công bố{homeroom ? (homeroom === "yes" ? ", và chỉ các tháng chủ nhiệm" : ", và chỉ các tháng không chủ nhiệm") : ""}. <b>Điểm TB</b> là trung bình tổng điểm các tháng được chấm, không quy đổi giữa khung chủ nhiệm và không chủ nhiệm.
+              <br />
+              <b>Hạng</b> xét Điểm TB, rồi số tháng xếp loại cao nhất, rồi số tháng xếp loại kế tiếp, rồi ít vi phạm; bằng nhau thì đồng hạng. Hạng tính trong phạm vi tổ, nhóm và khung chủ nhiệm đang chọn; các bộ lọc khác chỉ thu hẹp danh sách.
+              <br />
+              “—”: không có phiếu tháng đó · KXL: không xếp loại · ⚠: có tháng vi phạm hoặc không xếp loại.
+            </InfoPopover>
+            <TablePagination pager={pager} noun="giáo viên" sizes={[20, 50, 100]} showRange={false} />
+          </div>
+        </div>
       </section>
 
       {summary && visible && <SummaryPrint summary={summary} rows={visible} homeroom={homeroom} />}
@@ -515,6 +558,31 @@ function UnitPicker({ teams, groups, team, group, onChange }) {
   );
 }
 
+function InfoPopover({ label, text, up = false, children }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const outside = (event) => !ref.current?.contains(event.target) && setOpen(false);
+    const escape = (event) => event.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("mousedown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open]);
+  return (
+    <span className="ev-info-pop" ref={ref}>
+      <button type="button" className={`ev-info-btn ${open ? "active" : ""}`} aria-label={label} aria-expanded={open} title={label} onClick={() => setOpen(!open)}>
+        <Info size={15} />
+        {text && <span>{text}</span>}
+      </button>
+      {open && <div className={`ev-info-panel ${up ? "up" : ""}`} role="dialog" aria-label={label}>{children}</div>}
+    </span>
+  );
+}
+
 function YearCell({ value, onOpen }) {
   if (!value) return <span className="ev-muted">—</span>;
   return (
@@ -536,7 +604,7 @@ function RankBadge({ row }) {
   );
 }
 
-function MonthCell({ cell, grades, frame, onOpen }) {
+function MonthCell({ cell, grades, frame, dense, onOpen }) {
   if (!cell) return <span className="ev-muted">—</span>;
   const outside = frame && cell.is_homeroom !== (frame === "yes");
   if (!cell.official) {
@@ -544,6 +612,12 @@ function MonthCell({ cell, grades, frame, onOpen }) {
   }
   const index = grades.findIndex((grade) => grade.key === cell.grade_key);
   const noGrade = cell.no_grade_reason || index < 0;
+  const score = (
+    <small>
+      {formatScore(cell.total)}
+      {cell.has_violation && <em className="ev-text-red"> · VP</em>}
+    </small>
+  );
   return (
     <button
       type="button"
@@ -551,11 +625,9 @@ function MonthCell({ cell, grades, frame, onOpen }) {
       onClick={() => onOpen(cell.evaluation_id)}
       title={[outside ? "Không tính: khác khung chủ nhiệm đang lọc" : null, noGrade ? `Không xếp loại${cell.no_grade_reason ? `: ${cell.no_grade_reason}` : ""}` : cell.grade_name, cell.has_violation ? "Có vi phạm" : null, cell.is_homeroom ? "GVCN" : null].filter(Boolean).join(" · ")}
     >
-      <span className={`ev-chip ${noGrade ? "red" : GRADE_TONES[index]}`}>{noGrade ? "KXL" : grades[index].short}</span>
-      <small>
-        {formatScore(cell.total)}
-        {cell.has_violation && <em className="ev-text-red"> · VP</em>}
-      </small>
+      {dense && score}
+      <span className={`ev-chip ${noGrade ? "red" : GRADE_TONES[index]}`}>{noGrade ? "KXL" : dense ? gradeCode(grades[index].short) : grades[index].short}</span>
+      {!dense && score}
     </button>
   );
 }

@@ -2818,6 +2818,23 @@
 .ev-summary-wrap {
   max-height: calc(100vh - 260px);
   overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.ev-summary-grid .rank-col {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: #fff;
+}
+
+.ev-summary-grid thead .rank-col {
+  z-index: 3;
+  background: #fafbfd;
+}
+
+.ev-summary-grid .rank-col + .sticky {
+  left: 64px;
 }
 
 .ev-summary-grid thead th {
@@ -3264,6 +3281,8 @@
 
 .ev-summary-grid .rank-col {
   width: 64px;
+  min-width: 64px;
+  max-width: 64px;
 }
 
 .ev-rank {
@@ -3300,7 +3319,7 @@
 }
 
 .ev-tag {
-  margin-left: 6px;
+  margin-left: 5px;
   padding: 1px 6px;
   border-radius: 4px;
   color: var(--c-primary);
@@ -3408,4 +3427,162 @@
 .ev-year-score {
   color: #1f2a48;
   font-size: 14px;
+}
+
+.ev-summary-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ev-summary-actions .primary-btn,
+.ev-summary-actions .secondary-btn {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ev-summary-actions .icon-only {
+  width: 36px;
+  padding: 0;
+  justify-content: center;
+}
+
+.ev-info-pop {
+  position: relative;
+  display: inline-flex;
+}
+
+.ev-info-btn {
+  height: 32px;
+  min-width: 32px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--c-muted);
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ev-info-btn:hover,
+.ev-info-btn.active {
+  border-color: var(--c-primary-line);
+  color: var(--c-primary);
+  background: var(--c-primary-tint);
+}
+
+.ev-info-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  width: min(420px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border: 1px solid #e3e6ee;
+  border-radius: 10px;
+  color: var(--c-text-2);
+  background: #fff;
+  box-shadow: 0 18px 40px rgba(31, 42, 72, 0.18);
+  font-size: 12.5px;
+  font-weight: 400;
+  line-height: 1.55;
+  text-align: left;
+}
+
+.ev-info-panel.up {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
+.ev-summary-foot {
+  padding: 8px 136px 8px 18px;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  border-top: 1px solid #eceef3;
+}
+
+.ev-summary-stats {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--c-text-2);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ev-summary-stats b {
+  color: #1f2a48;
+}
+
+.ev-summary-foot-tools {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ev-summary-foot-tools .ev-segmented button {
+  width: 30px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+}
+
+.ev-summary-foot .pagination {
+  min-height: 0;
+  padding: 0;
+}
+
+.ev-summary-grid.dense tbody td {
+  height: auto;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+
+.ev-summary-grid.dense .ev-month-cell {
+  min-width: 0;
+  padding: 3px 5px;
+  flex-direction: row;
+  gap: 5px;
+}
+
+.ev-summary-grid.dense .ev-person img,
+.ev-summary-grid.dense .ev-person i {
+  width: 26px;
+  height: 26px;
+  font-size: 11px;
+}
+
+.ev-summary-grid.dense .ev-person > span {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.ev-summary-grid.dense .ev-rank b {
+  min-width: 24px;
+  height: 24px;
+  font-size: 12px;
+}
+
+.ev-summary-grid.dense .ev-sub {
+  display: inline;
+  margin-left: 4px;
+}
+
+.ev-summary-grid.dense .ev-sub::before {
+  content: "› ";
 }
