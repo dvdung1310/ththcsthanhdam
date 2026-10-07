@@ -18,7 +18,6 @@ import {
   Pencil,
   Plus,
   RotateCcw,
-  Search,
   Send,
   Trash2,
   TriangleAlert,
@@ -57,7 +56,7 @@ import "./TaskComments.css";
 import "./TaskAvatars.css";
 import "./TaskDrawerLayout.css";
 import { apiFetch } from "./api";
-import { getUploadLimits, uploadProblem } from "./uploadLimits";
+import { uploadProblem } from "./uploadLimits";
 import { ColumnPicker, NameStack, useScrollEdges, useTaskColumns } from "./TaskTable";
 import PeoplePicker, { roleChips, useOutsideClose } from "./PeoplePicker";
 import ShareFileDialog from "./ShareFileDialog";
@@ -66,6 +65,7 @@ import FilePreview from "./FilePreview";
 import ActionMenu from "./ActionMenu";
 import { useConfirm } from "./ConfirmDialog";
 import Avatar from "./Avatar";
+import TaskDocuments from "./TaskDocuments";
 
 const labels = {
   status: {
@@ -132,8 +132,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
     }),
     [filters, setFilters] = useState(emptyActionFilters),
     [page, setPage] = useState(1),
-    [perPage, setPerPage] = useState(10),
-    [documentSearch, setDocumentSearch] = useState("");
+    [perPage, setPerPage] = useState(10);
   const scrollEdges = useScrollEdges([tasks, columnState.hidden]);
   const currentUserId = refs.current_user_id;
   const formRef = useRef(null);
@@ -245,7 +244,6 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
         assignment_mode: assignmentMode,
         teacher_ids: assignmentMode === "self" && teacherId ? [teacherId] : [],
       });
-      setDocumentSearch("");
     };
   const switchMode = async (mode) => {
     if (mode === editing.assignment_mode) return;
@@ -738,54 +736,18 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
           >
             <Paperclip size={15} />
             <span>
-              File từ Chia sẻ chung & file đính kèm
+              Tài liệu
               {attachmentCount > 0 && <em>{attachmentCount}</em>}
             </span>
             <ChevronDown size={16} className={showSupport ? "open" : ""} />
           </button>
           {showSupport && (
             <div className="block-body">
-              <span className="field-label">File từ Chia sẻ chung</span>
-              <label className="document-search">
-                <Search size={16} />
-                <input
-                  value={documentSearch}
-                  onChange={(event) =>
-                    setDocumentSearch(event.target.value)
-                  }
-                  placeholder="Tìm file trong Chia sẻ chung..."
-                />
-              </label>
-              <div className="document-picker">
-                {libraryOptions
-                  .filter((file) => file.name.toLowerCase().includes(documentSearch.toLowerCase()))
-                  .map((file) => (
-                    <label key={file.id}>
-                      <input
-                        type="checkbox"
-                        checked={editing.library_file_ids.includes(file.id)}
-                        onChange={() => toggle("library_file_ids", file.id)}
-                      />
-                      <span>
-                        <strong>{file.name}</strong>
-                        <small>
-                          {formatBytes(file.size)}
-                          {file.in_shared === false && <em className="outside-shared"> · ngoài Chia sẻ chung</em>}
-                        </small>
-                      </span>
-                      <FileText size={15} />
-                    </label>
-                  ))}
-              </div>
-              {!libraryOptions.length && (
-                <div className="no-documents">
-                  Chưa có file nào trong thư mục Chia sẻ chung. Quản lý kho có thể tải file lên tại Kho dữ liệu.
-                </div>
-              )}
-              <span className="field-label">File đính kèm</span>
-              <FileAttachmentPicker
+              <TaskDocuments
                 editing={editing}
                 setEditing={setEditing}
+                libraryOptions={libraryOptions}
+                onToggleLibrary={(id) => toggle("library_file_ids", id)}
               />
             </div>
           )}
@@ -1471,110 +1433,6 @@ function ReviewerPicker({ reviewers, units, value, onChange }) {
       {open && (
         <PeoplePicker title="Chọn người duyệt" anchorRef={ref} onClose={close} people={reviewers} units={units} selectedPeople={value} onTogglePerson={toggle} />
       )}
-    </div>
-  );
-}
-
-function FileAttachmentPicker({ editing, setEditing }) {
-  const inputRef = useRef(null);
-  const [warning, setWarning] = useState("");
-  const addFiles = async (fileList) => {
-    const files = [...fileList];
-    const limits = await getUploadLimits();
-    const incoming = files.filter((file) => file.size <= limits.max_file_bytes);
-    setWarning(incoming.length < files.length ? await uploadProblem(files) : "");
-    setEditing((current) => ({
-      ...current,
-      pending_files: [...(current.pending_files || []), ...incoming].filter(
-        (file, index, list) =>
-          list.findIndex(
-            (item) => item.name === file.name && item.size === file.size,
-          ) === index,
-      ),
-    }));
-  };
-  const removeNew = (index) =>
-    setEditing((current) => ({
-      ...current,
-      pending_files: (current.pending_files || []).filter(
-        (_, fileIndex) => fileIndex !== index,
-      ),
-    }));
-  const removeExisting = (id) =>
-    setEditing((current) => ({
-      ...current,
-      removed_attachment_ids: [...(current.removed_attachment_ids || []), id],
-    }));
-  const existing = (editing.attachments || []).filter(
-    (file) => !(editing.removed_attachment_ids || []).includes(file.id),
-  );
-  return (
-    <div className="attachment-picker">
-      <button
-        type="button"
-        className="attachment-dropzone"
-        onClick={() => inputRef.current?.click()}
-        onDragOver={(event) => event.preventDefault()}
-        onDrop={(event) => {
-          event.preventDefault();
-          addFiles(event.dataTransfer.files);
-        }}
-      >
-        <span>
-          <Plus size={22} />
-        </span>
-        <b>Chọn hoặc kéo thả file vào đây</b>
-        <small>PDF, Word, Excel, hình ảnh hoặc ZIP · Tối đa 20MB/file</small>
-      </button>
-      <input
-        ref={inputRef}
-        hidden
-        multiple
-        type="file"
-        onChange={(event) => {
-          addFiles(event.target.files);
-          event.target.value = "";
-        }}
-      />
-      {warning && <p className="attachment-warning" role="alert">{warning}</p>}
-      <div className="attachment-list">
-        {existing.map((file) => (
-          <article key={`old-${file.id}`}>
-            <i>
-              <FileText size={17} />
-            </i>
-            <div>
-              <b>{file.original_name}</b>
-              <small>{formatFileSize(file.size)} · Đã tải lên</small>
-            </div>
-            <button
-              type="button"
-              title="Xóa file"
-              onClick={() => removeExisting(file.id)}
-            >
-              <Trash2 size={16} />
-            </button>
-          </article>
-        ))}
-        {(editing.pending_files || []).map((file, index) => (
-          <article key={`new-${file.name}-${file.size}`}>
-            <i>
-              <Paperclip size={17} />
-            </i>
-            <div>
-              <b>{file.name}</b>
-              <small>{formatFileSize(file.size)} · File mới</small>
-            </div>
-            <button
-              type="button"
-              title="Xóa file"
-              onClick={() => removeNew(index)}
-            >
-              <Trash2 size={16} />
-            </button>
-          </article>
-        ))}
-      </div>
     </div>
   );
 }
