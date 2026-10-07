@@ -69,17 +69,27 @@ php artisan db:seed --force
 
 ### Demo
 
-Builds on the production data and adds:
+Builds on the production data and adds a school of about 50 people. Every demo password is `Teacher@123`.
 
-- 2 units with 5 groups, 12 teachers and 1 secretary (e.g. `mai.nt@thanhdam.edu.vn`, `nam.tv@…`, `huy.nd@…`). Every demo password is `Teacher@123`.
-- 15 current tasks, plus about 2 completed tasks per month for the last 12 months, with some late completions and a few cancelled tasks.
-- Sample library folders and files.
-- Monthly evaluations for the last 12 months, counted back from the day you seed and skipping June and July:
+- **Units:** Tổ Tự nhiên and Tổ Xã hội with 9 subject groups, Tổ Khối 1–5 for primary classes, and Tổ Năng khiếu.
+- **People:** 47 teachers (`GV001`–`GV047`) and 2 secretaries.
+  - Every unit has a leader; larger units also have deputies and group leaders, and some people hold two roles.
+  - Some teachers are on leave or new this year, one is suspended with a locked account, and about a third have a photo.
+  - The principal is `mai.nt@thanhdam.edu.vn` and the secretary is `trang.tt@…`. Leaders include `nam.tv@…`, `ha.pt@…` and `loan.nt@…`; teachers include `huong.vt@…` and `hang.ntt@…`. Logins are the given name plus the initials of the other names.
+- **Tasks:** about 190 tasks over the last 12 months, assigned to the whole school, a unit, a group or individuals, plus personal tasks.
+  - Current tasks cover every status: not started, in progress, overdue, waiting for approval, needing revision, completed and cancelled.
+  - Tasks have submissions with several versions, revisions, edits before review and approvals, discussions mixed with activity entries, deadline changes, attachments and linked library files.
+  - Some tasks hide submissions between assignees. Reminders and unread notifications are included.
+- **Library:** about 180 items, including guidance documents, a folder per unit with plans, minutes and exam papers per group, awards records, teaching initiatives and some personal folders.
+  - Files are small generated PDF, PNG, TXT, CSV, DOCX and XLSX files, with shares to everyone, to units and to individuals.
+- **Evaluations:** monthly evaluations for every teacher for the last 12 months, counted back from the day you seed and skipping June and July:
   - older months are published;
   - last month is waiting for explanations;
   - the current month is open, with draft, submitted, unit-scored and approved sheets.
 
-  Teachers have stable quality profiles, deduction notes, bonuses, violations, an unranked month, and teachers who were absent or joined mid-year.
+  Each teacher has a stable quality profile derived from the roster, with deduction notes, bonuses, violations, an unranked month, and teachers who were absent or joined mid-year.
+
+The demo data lives in `database/seeders/Demo/` (`DemoRoster` for people and units, `TaskCatalog` for task texts). Tasks and library items are only seeded into an empty database.
 
 ```bash
 # local machine (.env: APP_ENV=local); this wipes the database
