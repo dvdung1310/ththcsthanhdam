@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { ArrowDown, ArrowUp, BarChart3, FileSpreadsheet, Info, Printer, Search, TriangleAlert } from "lucide-react";
+import { ArrowDown, ArrowUp, Award, BarChart3, FileSpreadsheet, Info, Printer, Search, SlidersHorizontal, TriangleAlert, Users, X } from "lucide-react";
 import { apiFetch, apiJson } from "./api";
 import TablePagination, { usePagination } from "./TablePagination";
-import { GRADE_TONES, formatPercent, formatScore } from "./evaluationUtils";
+import { GRADE_TONES, formatScore } from "./evaluationUtils";
+import { useOutsideClose } from "./PeoplePicker";
 import "./Evaluation.css";
 import Avatar from "./Avatar";
 
@@ -11,13 +12,21 @@ const collator = new Intl.Collator("vi");
 const givenName = (name) => (name ?? "").trim().split(/\s+/).at(-1);
 const byName = (a, b) => collator.compare(givenName(a.name), givenName(b.name)) || collator.compare(a.name ?? "", b.name ?? "");
 
+const SERVER_FILTERS = ["homeroom", "grades", "gscope", "violation", "min", "max", "status", "top"];
+const HOMEROOM = [["", "Tất cả"], ["yes", "Chủ nhiệm"], ["no", "Không CN"]];
+const VIOLATION = [["", "Tất cả"], ["yes", "Có vi phạm"], ["no", "Không vi phạm"]];
+const STATUS = [["", "Tất cả"], ["working", "Đang làm việc"], ["on_leave", "Nghỉ phép"], ["suspended", "Tạm nghỉ"]];
+const TOPS = [["", "Tất cả"], ["3", "Top 3"], ["10", "Top 10"], ["20", "Top 20"]];
+const MEDALS = { 1: "gold", 2: "silver", 3: "bronze" };
+
 function sortRows(rows, key, descending) {
   const sign = descending ? -1 : 1;
   const value = {
-    team: null,
+    rank: (row) => row.rank,
     no_grade: (row) => row.stats.no_grade,
     violations: (row) => row.stats.violations,
-    average: (row) => row.stats.average_percent,
+    months: (row) => row.stats.months,
+    average: (row) => row.stats.average,
   }[key] ?? (key.startsWith("g") ? (row) => row.stats.counts[key] ?? 0 : null);
   return [...rows].sort((a, b) => {
     if (key === "team") {
@@ -32,12 +41,26 @@ function sortRows(rows, key, descending) {
   });
 }
 
+function presetRange(preset, year, periods) {
+  if (preset === "hk1") return { from: `${year}-08`, to: `${year}-12` };
+  if (preset === "hk2") return { from: `${year + 1}-01`, to: `${year + 1}-05` };
+  if (preset === "latest") {
+    const last = periods.filter((period) => period.official).at(-1) ?? periods.at(-1);
+    return last ? { from: last.key, to: last.key } : { from: "", to: "" };
+  }
+  return { from: "", to: "" };
+}
+
 export default function EvaluationSummary() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState("");
   const [exporting, setExporting] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const closeMore = () => setMoreOpen(false);
+  const moreRef = useOutsideClose(moreOpen, closeMore);
 
   const year = params.get("year") ?? "";
   const from = params.get("from") ?? "";
@@ -45,9 +68,19 @@ export default function EvaluationSummary() {
   const team = Number(params.get("team")) || null;
   const group = Number(params.get("group")) || null;
   const search = params.get("q") ?? "";
-  const sortParam = params.get("sort") ?? "name";
+  const homeroom = params.get("homeroom") ?? "";
+  const gradeFilter = (params.get("grades") ?? "").split(",").filter(Boolean);
+  const gradeScope = params.get("gscope") ?? "any";
+  const violation = params.get("violation") ?? "";
+  const min = params.get("min") ?? "";
+  const max = params.get("max") ?? "";
+  const status = params.get("status") ?? "";
+  const top = params.get("top") ?? "";
+  const sortParam = params.get("sort") ?? "rank";
   const sortKey = sortParam.replace(/^-/, "");
   const descending = sortParam.startsWith("-");
+  const [keyword, setKeyword] = useState(search);
+  const searchTimer = useRef(null);
 
   const setParam = (values) =>
     setParams((current) => {
@@ -56,56 +89,53 @@ export default function EvaluationSummary() {
       return next;
     }, { replace: true });
 
+  const query = useMemo(() => {
+    const result = new URLSearchParams();
+    [["school_year", year], ["from", from], ["to", to], ["team", team], ["group", group], ["q", search.trim()], ["homeroom", homeroom],
+      ["grades", gradeFilter.join(",")], ["grade_scope", gradeFilter.length ? gradeScope : ""], ["violation", violation], ["min", min], ["max", max], ["status", status], ["top", top]]
+      .forEach(([key, value]) => value && result.set(key, String(value)));
+    return result.toString();
+  }, [year, from, to, team, group, search, homeroom, gradeFilter.join(","), gradeScope, violation, min, max, status, top]);
+
   useEffect(() => {
-    const query = new URLSearchParams();
-    if (year) query.set("school_year", year);
-    if (from) query.set("from", from);
-    if (to) query.set("to", to);
+    let active = true;
+    setLoading(true);
     apiJson(`/api/evaluation-summary?${query}`)
       .then((result) => {
+        if (!active) return;
         setSummary(result);
         setError("");
       })
-      .catch((e) => setError(e.message));
-  }, [year, from, to]);
+      .catch((e) => active && setError(e.message))
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [query]);
 
   const rows = summary?.teachers ?? null;
-  const teams = useMemo(() => {
-    const map = new Map();
-    rows?.forEach((row) => row.team && map.set(row.team.id, row.team.name));
-    return [...map].map(([id, name]) => ({ id, name })).sort((a, b) => collator.compare(a.name, b.name));
-  }, [rows]);
-  const groups = useMemo(() => {
-    const map = new Map();
-    rows?.forEach((row) => row.group && row.team?.id === team && map.set(row.group.id, row.group.name));
-    return [...map].map(([id, name]) => ({ id, name })).sort((a, b) => collator.compare(a.name, b.name));
-  }, [rows, team]);
-
-  const visible = useMemo(() => {
-    if (!rows) return null;
-    const keyword = search.trim().toLowerCase();
-    const list = rows.filter(
-      (row) =>
-        (!team || row.unit_ids.includes(team)) &&
-        (!group || row.unit_ids.includes(group)) &&
-        (!keyword || `${row.name} ${row.code ?? ""}`.toLowerCase().includes(keyword)),
-    );
-    return sortRows(list, sortKey, descending);
-  }, [rows, team, group, search, sortKey, descending]);
+  const teams = summary?.facets?.teams ?? [];
+  const groups = (summary?.facets?.groups ?? []).filter((item) => item.team_id === team);
+  const visible = useMemo(() => (rows ? sortRows(rows, sortKey, descending) : null), [rows, sortKey, descending]);
 
   const pager = usePagination(visible ?? [], 20);
   const update = (values) => {
     pager.reset();
     setParam(values);
   };
-  const sortBy = (key) => update({ sort: sortKey === key && !descending ? `-${key}` : key === "name" ? "" : key });
+  const typeSearch = (value) => {
+    setKeyword(value);
+    clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => update({ q: value }), 300);
+  };
+  const sortBy = (key) => update({ sort: sortKey === key && !descending ? `-${key}` : key === "rank" ? "" : key });
 
   const exportExcel = async () => {
     setExporting(true);
     try {
-      const query = new URLSearchParams({ school_year: String(summary.school_year) });
-      [["from", from], ["to", to], ["team", team], ["group", group], ["q", search.trim()]].forEach(([key, value]) => value && query.set(key, value));
-      const response = await apiFetch(`/api/evaluation-summary/export?${query}`);
+      const exportQuery = new URLSearchParams(query);
+      exportQuery.set("school_year", String(summary.school_year));
+      const response = await apiFetch(`/api/evaluation-summary/export?${exportQuery}`);
       if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message ?? "Không xuất được file Excel.");
       const name = /filename="?([^";]+)"?/.exec(response.headers.get("Content-Disposition") ?? "")?.[1] ?? "tong-hop-thi-dua.xlsx";
       const url = URL.createObjectURL(await response.blob());
@@ -123,10 +153,41 @@ export default function EvaluationSummary() {
   const grades = summary?.grades ?? [];
   const yearPeriods = summary?.year_periods ?? periods;
   const officialCount = periods.filter((period) => period.official).length;
-  const filtered = Boolean(team || group || search);
+  const schoolYear = summary?.school_year;
+  const activePreset = !from && !to ? "year" : ["hk1", "hk2", "latest"].find((preset) => {
+    const range = presetRange(preset, schoolYear, yearPeriods.map((period) => ({ ...period, official: periods.find((p) => p.key === period.key)?.official ?? true })));
+    return range.from === from && range.to === to;
+  });
+  const gradeOptions = [...grades.map((grade, index) => ({ key: grade.key, label: grade.short, tone: GRADE_TONES[index] })), { key: "kxl", label: "KXL", tone: "red" }];
+  const moreCount = [gradeFilter.length > 0, violation, min || max, status].filter(Boolean).length;
+
+  const chips = [
+    team && { key: "team", label: `Tổ: ${teams.find((item) => item.id === team)?.name ?? ""}`, clear: { team: "", group: "" } },
+    group && { key: "group", label: `Nhóm: ${groups.find((item) => item.id === group)?.name ?? ""}`, clear: { group: "" } },
+    homeroom && { key: "homeroom", label: homeroom === "yes" ? "Chủ nhiệm" : "Không chủ nhiệm", clear: { homeroom: "" } },
+    gradeFilter.length > 0 && {
+      key: "grades",
+      label: `Xếp loại${gradeScope === "latest" ? " tháng gần nhất" : ""}: ${gradeFilter.map((key) => gradeOptions.find((option) => option.key === key)?.label ?? key).join(", ")}`,
+      clear: { grades: "", gscope: "" },
+    },
+    violation && { key: "violation", label: violation === "yes" ? "Có vi phạm" : "Không vi phạm", clear: { violation: "" } },
+    (min || max) && { key: "score", label: `Điểm TB ${min ? `≥ ${min}` : ""}${min && max ? " và " : ""}${max ? `≤ ${max}` : ""}`, clear: { min: "", max: "" } },
+    status && { key: "status", label: STATUS.find(([value]) => value === status)?.[1], clear: { status: "" } },
+    top && { key: "top", label: `Top ${top}`, clear: { top: "" } },
+    search && { key: "q", label: `“${search}”`, clear: { q: "" } },
+  ].filter(Boolean);
+  const clearAll = () => {
+    setKeyword("");
+    update({ team: "", group: "", q: "", ...Object.fromEntries(SERVER_FILTERS.map((key) => [key, ""])) });
+  };
+  const toggleGrade = (key) => {
+    const next = gradeFilter.includes(key) ? gradeFilter.filter((item) => item !== key) : [...gradeFilter, key];
+    update({ grades: next.join(",") });
+  };
+  const overview = summary?.overview;
 
   const header = (key, label, className = "", title) => (
-    <th className={`${className} sortable ${sortKey === key ? "sorted" : ""}`} title={title} onClick={() => sortBy(key)} aria-sort={sortKey === key ? (descending ? "descending" : "ascending") : "none"}>
+    <th key={key} className={`${className} sortable ${sortKey === key ? "sorted" : ""}`} title={title} onClick={() => sortBy(key)} aria-sort={sortKey === key ? (descending ? "descending" : "ascending") : "none"}>
       {label}
       {sortKey === key && (descending ? <ArrowDown size={12} /> : <ArrowUp size={12} />)}
     </th>
@@ -136,7 +197,7 @@ export default function EvaluationSummary() {
     <div className="ev-page ev-summary-page">
       <section className="ev-hero">
         <p>
-          Tổng hợp kết quả các tháng <b>đã công bố</b> để Hội đồng thi đua bình xét theo đợt và cuối năm. Hệ thống không tự xếp danh hiệu.
+          Tổng hợp và xếp hạng kết quả các tháng <b>đã công bố</b> để Hội đồng thi đua tham khảo khi bình xét theo đợt và cuối năm. Hệ thống không tự xếp danh hiệu.
         </p>
         <div className="ev-hero-actions">
           <button className="secondary-btn" disabled={!visible?.length} onClick={() => window.print()}><Printer size={16} /> In bảng</button>
@@ -152,10 +213,17 @@ export default function EvaluationSummary() {
         <div className="ev-filters ev-summary-range">
           <label className="ev-period-select">
             <span>Năm học</span>
-            <select value={summary?.school_year ?? ""} onChange={(e) => update({ year: e.target.value, from: "", to: "" })}>
+            <select value={schoolYear ?? ""} onChange={(e) => update({ year: e.target.value, from: "", to: "" })}>
               {summary?.school_years.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
             </select>
           </label>
+          <div className="ev-segmented" role="group" aria-label="Khoảng thời gian">
+            {[["year", "Cả năm"], ["hk1", "Học kỳ I"], ["hk2", "Học kỳ II"], ["latest", "Tháng gần nhất"]].map(([preset, label]) => (
+              <button key={preset} type="button" className={activePreset === preset ? "active" : ""} disabled={!summary} onClick={() => update(presetRange(preset, schoolYear, yearPeriods.map((period) => ({ ...period, official: periods.find((p) => p.key === period.key)?.official ?? true }))))}>
+                {label}
+              </button>
+            ))}
+          </div>
           <label className="ev-period-select">
             <span>Từ</span>
             <select value={from} onChange={(e) => update({ from: e.target.value })}>
@@ -176,25 +244,108 @@ export default function EvaluationSummary() {
             </span>
           )}
         </div>
-        <div className="ev-filters ev-board-filters">
-          {teams.length > 1 && (
-            <select value={team ?? ""} onChange={(e) => update({ team: e.target.value, group: "" })} aria-label="Tổ">
-              <option value="">Mọi tổ</option>
-              {teams.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </select>
-          )}
+
+        <div className="ev-filters ev-summary-toolbar">
+          <label className="ev-search">
+            <Search size={15} />
+            <input value={keyword} onChange={(e) => typeSearch(e.target.value)} placeholder="Tìm tên hoặc mã giáo viên..." />
+          </label>
+          <select value={team ?? ""} onChange={(e) => update({ team: e.target.value, group: "" })} aria-label="Tổ">
+            <option value="">Mọi tổ</option>
+            {teams.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
           {team && groups.length > 0 && (
             <select value={group ?? ""} onChange={(e) => update({ group: e.target.value })} aria-label="Nhóm">
               <option value="">Mọi nhóm</option>
               {groups.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
             </select>
           )}
-          {filtered && <button className="ev-link-btn" onClick={() => update({ team: "", group: "", q: "" })}>Xóa bộ lọc</button>}
-          <label className="ev-search">
-            <Search size={15} />
-            <input value={search} onChange={(e) => update({ q: e.target.value })} placeholder="Tìm tên hoặc mã giáo viên..." />
-          </label>
+          <div className="ev-segmented" role="group" aria-label="Chủ nhiệm">
+            {HOMEROOM.map(([value, label]) => (
+              <button key={value} type="button" className={homeroom === value ? "active" : ""} onClick={() => update({ homeroom: value })}>{label}</button>
+            ))}
+          </div>
+          <div className="ev-more" ref={moreRef}>
+            <button type="button" className={`ev-more-btn ${moreOpen || moreCount ? "active" : ""}`} data-picker-trigger aria-expanded={moreOpen} onClick={() => setMoreOpen(!moreOpen)}>
+              <SlidersHorizontal size={15} /> Bộ lọc khác {moreCount > 0 && <em>{moreCount}</em>}
+            </button>
+            {moreOpen && (
+              <div className="ev-more-panel" data-picker-panel role="dialog" aria-label="Bộ lọc khác">
+                <header>
+                  <b>Bộ lọc khác</b>
+                  <button type="button" onClick={closeMore} aria-label="Đóng"><X size={16} /></button>
+                </header>
+                <fieldset>
+                  <legend>Xếp loại</legend>
+                  <div className="ev-more-chips">
+                    {gradeOptions.map((option) => (
+                      <button key={option.key} type="button" className={`ev-chip ${option.tone} ${gradeFilter.includes(option.key) ? "picked" : ""}`} onClick={() => toggleGrade(option.key)}>
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="ev-segmented small">
+                    {[["any", "Có ít nhất 1 tháng"], ["latest", "Tháng gần nhất"]].map(([value, label]) => (
+                      <button key={value} type="button" className={gradeScope === value ? "active" : ""} onClick={() => update({ gscope: value === "any" ? "" : value })}>{label}</button>
+                    ))}
+                  </div>
+                </fieldset>
+                <fieldset>
+                  <legend>Vi phạm</legend>
+                  <div className="ev-segmented small">
+                    {VIOLATION.map(([value, label]) => (
+                      <button key={value} type="button" className={violation === value ? "active" : ""} onClick={() => update({ violation: value })}>{label}</button>
+                    ))}
+                  </div>
+                </fieldset>
+                <fieldset>
+                  <legend>Điểm trung bình</legend>
+                  <div className="ev-range-inputs">
+                    <input type="number" inputMode="decimal" value={min} placeholder="Từ" onChange={(e) => update({ min: e.target.value })} aria-label="Điểm từ" />
+                    <span>—</span>
+                    <input type="number" inputMode="decimal" value={max} placeholder="Đến" onChange={(e) => update({ max: e.target.value })} aria-label="Điểm đến" />
+                  </div>
+                </fieldset>
+                <fieldset>
+                  <legend>Trạng thái công tác</legend>
+                  <div className="ev-segmented small">
+                    {STATUS.map(([value, label]) => (
+                      <button key={value} type="button" className={status === value ? "active" : ""} onClick={() => update({ status: value })}>{label}</button>
+                    ))}
+                  </div>
+                </fieldset>
+              </div>
+            )}
+          </div>
+          <select value={top} onChange={(e) => update({ top: e.target.value })} aria-label="Giới hạn" className="ev-top-select">
+            {TOPS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
         </div>
+
+        {chips.length > 0 && (
+          <div className="ev-active-filters">
+            <span>Đang lọc:</span>
+            {chips.map((chip) => (
+              <button key={chip.key} type="button" onClick={() => {
+                if (chip.key === "q") setKeyword("");
+                update(chip.clear);
+              }}>
+                {chip.label} <X size={12} />
+              </button>
+            ))}
+            <button type="button" className="ev-link-btn" onClick={clearAll}>Xóa tất cả</button>
+          </div>
+        )}
+
+        {overview && (
+          <div className={`ev-summary-kpis ${loading ? "loading" : ""}`}>
+            <div><Users size={16} /><span><b>{overview.teachers}</b><small>Giáo viên</small></span></div>
+            <div><BarChart3 size={16} /><span><b>{formatScore(overview.average)}</b><small>Điểm TB chung</small></span></div>
+            <div><Award size={16} /><span><b>{overview.top_grade_teachers}</b><small>Có tháng {overview.top_grade ?? "đứng đầu"}</small></span></div>
+            <div className="warn"><TriangleAlert size={16} /><span><b>{overview.violation_teachers}</b><small>Có vi phạm</small></span></div>
+            <div className="muted"><Info size={16} /><span><b>{overview.unscored}</b><small>Chưa có điểm</small></span></div>
+          </div>
+        )}
 
         {summary?.mixed_grades && (
           <div className="ev-notice warn ev-summary-notice">
@@ -205,14 +356,15 @@ export default function EvaluationSummary() {
         {!visible ? (
           <div className="empty-state"><BarChart3 className="loading-icon" size={30} /><b>Đang tải...</b></div>
         ) : !periods.length ? (
-          <div className="empty-state"><BarChart3 size={30} /><b>Chưa có kỳ đánh giá nào trong năm học này</b></div>
+          <div className="empty-state"><BarChart3 size={30} /><b>Chưa có kỳ đánh giá nào trong khoảng này</b></div>
         ) : !visible.length ? (
           <div className="empty-state"><Search size={30} /><b>Không có giáo viên phù hợp</b></div>
         ) : (
-          <div className="ev-table-wrap ev-summary-wrap">
+          <div className={`ev-table-wrap ev-summary-wrap ${loading ? "loading" : ""}`}>
             <table className="ev-table ev-summary-grid">
               <thead>
                 <tr>
+                  {header("rank", "Hạng", "center rank-col")}
                   {header("name", "Giáo viên", "sticky")}
                   {header("team", "Tổ / nhóm")}
                   {periods.map((period) => (
@@ -224,17 +376,21 @@ export default function EvaluationSummary() {
                   {grades.map((grade) => header(grade.key, grade.short, "num stat", grade.name))}
                   {header("no_grade", "KXL", "num stat", "Số tháng không xếp loại")}
                   {header("violations", "Vi phạm", "num stat", "Số tháng có vi phạm QCCM / đạo đức nhà giáo")}
-                  {header("average", "TB", "num stat", "Điểm trung bình theo % điểm tối đa của khung (GVCN 100, không CN 80)")}
+                  {header("months", "Số tháng", "num stat", "Số tháng đã công bố có điểm")}
+                  {header("average", "Điểm TB", "num stat", "Trung bình tổng điểm các tháng được chấm")}
                 </tr>
               </thead>
               <tbody>
                 {pager.rows.map((row) => (
                   <tr key={row.id}>
+                    <td className="center rank-col">
+                      <RankBadge row={row} />
+                    </td>
                     <td className="sticky">
                       <span className="ev-person">
                         {row.avatar_url ? <img src={row.avatar_url} alt="" /> : <Avatar name={row.name} />}
                         <span>
-                          <b>{row.name}</b>
+                          <b>{row.name}{row.is_homeroom && <em className="ev-tag">GVCN</em>}</b>
                           <small>{row.code}</small>
                         </span>
                       </span>
@@ -245,13 +401,14 @@ export default function EvaluationSummary() {
                     </td>
                     {periods.map((period) => (
                       <td key={period.id} className="center">
-                        <MonthCell cell={row.cells[period.id]} grades={grades} onOpen={(id) => navigate(`/evaluations/${id}`)} />
+                        <MonthCell cell={row.cells[period.id]} grades={grades} frame={homeroom} onOpen={(id) => navigate(`/evaluations/${id}`)} />
                       </td>
                     ))}
                     {grades.map((grade) => <td key={grade.key} className="num stat">{row.stats.counts[grade.key] || <span className="ev-muted">0</span>}</td>)}
                     <td className="num stat">{row.stats.no_grade ? <b className="ev-text-red">{row.stats.no_grade}</b> : <span className="ev-muted">0</span>}</td>
                     <td className="num stat">{row.stats.violations ? <b className="ev-text-red">{row.stats.violations}</b> : <span className="ev-muted">0</span>}</td>
-                    <td className="num stat"><b>{formatPercent(row.stats.average_percent)}</b></td>
+                    <td className="num stat">{row.stats.months}<span className="ev-muted">/{officialCount}</span></td>
+                    <td className="num stat"><b>{formatScore(row.stats.average)}</b></td>
                   </tr>
                 ))}
               </tbody>
@@ -260,28 +417,40 @@ export default function EvaluationSummary() {
         )}
         <TablePagination pager={pager} noun="giáo viên" sizes={[20, 50, 100]} />
         <p className="ev-summary-legend">
-          <Info size={13} /> Chỉ tính các tháng đã công bố. “—”: không có phiếu tháng đó · KXL: không xếp loại · TB: trung bình % điểm tối đa của khung, có thể vượt 100% nhờ điểm cộng.
+          <Info size={13} /> Chỉ tính các tháng đã công bố{homeroom ? (homeroom === "yes" ? ", và chỉ các tháng chủ nhiệm" : ", và chỉ các tháng không chủ nhiệm") : ""}. Điểm TB là trung bình tổng điểm các tháng được chấm, không quy đổi giữa khung chủ nhiệm và không chủ nhiệm. Hạng xét Điểm TB, rồi số tháng xếp loại cao nhất, rồi ít vi phạm; bằng nhau thì đồng hạng. Hạng tính trong phạm vi tổ, nhóm và khung chủ nhiệm đang chọn.
         </p>
       </section>
 
-      {summary && visible && <SummaryPrint summary={summary} rows={visible} />}
+      {summary && visible && <SummaryPrint summary={summary} rows={visible} homeroom={homeroom} />}
     </div>
   );
 }
 
-function MonthCell({ cell, grades, onOpen }) {
+function RankBadge({ row }) {
+  if (row.rank == null) return <span className="ev-muted" title="Chưa có tháng được chấm">—</span>;
+  const warning = row.stats.violations > 0 || row.stats.no_grade > 0;
+  return (
+    <span className="ev-rank" title={warning ? "Có tháng vi phạm hoặc không xếp loại" : undefined}>
+      <b className={MEDALS[row.rank] ?? ""}>{row.rank}</b>
+      {warning && <TriangleAlert size={12} className="ev-text-red" />}
+    </span>
+  );
+}
+
+function MonthCell({ cell, grades, frame, onOpen }) {
   if (!cell) return <span className="ev-muted">—</span>;
+  const outside = frame && cell.is_homeroom !== (frame === "yes");
   if (!cell.official) {
-    return <button type="button" className="ev-month-cell pending" onClick={() => onOpen(cell.evaluation_id)}>{cell.pending_label}</button>;
+    return <button type="button" className={`ev-month-cell pending ${outside ? "outside" : ""}`} onClick={() => onOpen(cell.evaluation_id)}>{cell.pending_label}</button>;
   }
   const index = grades.findIndex((grade) => grade.key === cell.grade_key);
   const noGrade = cell.no_grade_reason || index < 0;
   return (
     <button
       type="button"
-      className="ev-month-cell"
+      className={`ev-month-cell ${outside ? "outside" : ""}`}
       onClick={() => onOpen(cell.evaluation_id)}
-      title={[noGrade ? `Không xếp loại${cell.no_grade_reason ? `: ${cell.no_grade_reason}` : ""}` : cell.grade_name, cell.has_violation ? "Có vi phạm" : null, cell.is_homeroom ? "GVCN" : null].filter(Boolean).join(" · ")}
+      title={[outside ? "Không tính: khác khung chủ nhiệm đang lọc" : null, noGrade ? `Không xếp loại${cell.no_grade_reason ? `: ${cell.no_grade_reason}` : ""}` : cell.grade_name, cell.has_violation ? "Có vi phạm" : null, cell.is_homeroom ? "GVCN" : null].filter(Boolean).join(" · ")}
     >
       <span className={`ev-chip ${noGrade ? "red" : GRADE_TONES[index]}`}>{noGrade ? "KXL" : grades[index].short}</span>
       <small>
@@ -292,8 +461,9 @@ function MonthCell({ cell, grades, onOpen }) {
   );
 }
 
-function SummaryPrint({ summary, rows }) {
+function SummaryPrint({ summary, rows, homeroom }) {
   const { periods, grades } = summary;
+  const officialCount = periods.filter((period) => period.official).length;
   const cellText = (cell) => {
     if (!cell) return "—";
     if (!cell.official) return cell.pending_label;
@@ -308,36 +478,40 @@ function SummaryPrint({ summary, rows }) {
         <b>HỘI ĐỒNG THI ĐUA KHEN THƯỞNG</b>
       </div>
       <h1>BẢNG TỔNG HỢP KẾT QUẢ THI ĐUA HẰNG THÁNG</h1>
-      <p className="center">{summary.range_label}</p>
+      <p className="center">{summary.range_label}{homeroom ? (homeroom === "yes" ? " · Giáo viên chủ nhiệm" : " · Giáo viên không chủ nhiệm") : ""}</p>
       <table>
         <thead>
           <tr>
             <th style={{ width: "4%" }}>STT</th>
-            <th style={{ width: "17%" }}>Họ và tên</th>
-            <th style={{ width: "13%" }}>Tổ / nhóm</th>
+            <th style={{ width: "4%" }}>Hạng</th>
+            <th style={{ width: "16%" }}>Họ và tên</th>
+            <th style={{ width: "12%" }}>Tổ / nhóm</th>
             {periods.map((period) => <th key={period.id}>{period.label}{!period.official && <><br />(chưa công bố)</>}</th>)}
             {grades.map((grade) => <th key={grade.key}>{grade.short}</th>)}
             <th>KXL</th>
             <th>Vi phạm</th>
-            <th>TB (%)</th>
+            <th>Số tháng</th>
+            <th>Điểm TB</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row, index) => (
             <tr key={row.id}>
               <td className="center">{index + 1}</td>
+              <td className="center">{row.rank ?? ""}</td>
               <td>{row.name}</td>
               <td>{[row.team?.name, row.group?.name].filter(Boolean).join(" / ")}</td>
               {periods.map((period) => <td key={period.id} className="center">{cellText(row.cells[period.id])}</td>)}
               {grades.map((grade) => <td key={grade.key} className="center">{row.stats.counts[grade.key] ?? 0}</td>)}
               <td className="center">{row.stats.no_grade}</td>
               <td className="center">{row.stats.violations}</td>
-              <td className="center">{row.stats.average_percent == null ? "" : formatScore(row.stats.average_percent)}</td>
+              <td className="center">{row.stats.months}/{officialCount}</td>
+              <td className="center">{row.stats.average == null ? "" : formatScore(row.stats.average)}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      <p className="ev-print-note">Chỉ tính các tháng đã công bố. KXL: không xếp loại; VP: có vi phạm; TB: trung bình % điểm tối đa của khung (GVCN 100, không CN 80).</p>
+      <p className="ev-print-note">Chỉ tính các tháng đã công bố. KXL: không xếp loại; VP: có vi phạm; Điểm TB: trung bình tổng điểm các tháng được chấm. Bảng xếp hạng chỉ để tham khảo.</p>
       <div className="ev-print-signs two">
         <div>
           <i aria-hidden="true">&nbsp;</i>

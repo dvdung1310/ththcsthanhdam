@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { apiJson } from "./api";
-import { GRADE_TONES, formatPercent, formatScore } from "./evaluationUtils";
+import { GRADE_TONES, formatScore } from "./evaluationUtils";
 import "./Evaluation.css";
 
 export default function EvaluationTeacherHistory({ teacherId }) {
@@ -34,7 +34,7 @@ export default function EvaluationTeacherHistory({ teacherId }) {
             {grades.filter((grade) => stats.counts[grade.key]).map((grade) => `${stats.counts[grade.key]} ${grade.short}`).join(" · ")}
             {stats.no_grade > 0 && ` · ${stats.no_grade} KXL`}
             {stats.violations > 0 && <b className="ev-text-red"> · {stats.violations} tháng vi phạm</b>}
-            {stats.average_percent != null && <> · TB <b>{formatPercent(stats.average_percent)}</b></>}
+            {stats.average != null && <> · Điểm TB <b>{formatScore(stats.average)}</b></>}
           </span>
         ) : (
           <span className="ev-muted">Chưa có tháng nào được công bố.</span>

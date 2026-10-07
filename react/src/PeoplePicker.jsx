@@ -32,7 +32,7 @@ export function useOutsideClose(open, onClose) {
   const ref = useRef(null);
   useEffect(() => {
     if (!open) return undefined;
-    const inPicker = (target) => target.closest?.(".people-picker") || target.parentElement?.closest(".people-picker");
+    const inPicker = (target) => target.closest?.(".people-picker, [data-picker-panel]") || target.parentElement?.closest(".people-picker, [data-picker-panel]");
     const onTrigger = (target) => ref.current?.contains(target) && (target.closest?.("[data-picker-trigger]") || target.parentElement?.closest("[data-picker-trigger]"));
     const inside = (target) => target instanceof Node && Boolean(inPicker(target) || onTrigger(target));
     const outside = (event) => !inside(event.target) && onClose();
