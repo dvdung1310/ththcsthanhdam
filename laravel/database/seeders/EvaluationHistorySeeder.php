@@ -2,18 +2,19 @@
 
 namespace Database\Seeders;
 
-use App\Models\Department;
 use App\Models\Evaluation;
 use App\Models\EvaluationComment;
 use App\Models\EvaluationCriterion;
 use App\Models\EvaluationPeriod;
 use App\Models\EvaluationScore;
 use App\Models\EvaluationTemplate;
+use App\Models\Role;
 use App\Models\StoredFile;
 use App\Models\Teacher;
 use App\Models\User;
 use App\Services\EvaluationScoring;
 use Carbon\CarbonImmutable;
+use Database\Seeders\Demo\DemoRoster;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -24,30 +25,19 @@ class EvaluationHistorySeeder extends Seeder
     private const MONTHS_BACK = 12;
     private const SUMMER = [6, 7];
 
-    // code => [average deduction per month, bonus chance, homeroom, absent when months ago <= n, joined months ago]
-    private const PROFILES = [
-        'GV002' => [1.0, 0.6, false, null, null],
-        'GV003' => [2.0, 0.4, false, null, null],
-        'GV004' => [1.5, 0.6, true, null, null],
-        'GV005' => [8.0, 0.1, false, 2, null],
-        'GV006' => [2.5, 0.5, false, null, null],
-        'GV007' => [16.0, 0.05, false, 4, null],
-        'GV008' => [0.5, 0.7, true, null, null],
-        'GV009' => [3.0, 0.3, true, null, null],
-        'GV010' => [6.0, 0.2, false, null, 8],
-        'GV011' => [2.0, 0.4, false, null, null],
-        'GV012' => [7.0, 0.15, true, 3, null],
-    ];
-
-    private const VIOLATIONS = [['GV005', 5], ['GV007', 9]];
-    private const NO_GRADE = [['GV007', 6, 'Không thực hiện nhiệm vụ chuyên đề được giao, không có lý do chính đáng.']];
-
     private const DEDUCTION_NOTES = [
         'I' => ['Đi muộn họp hội đồng ngày {d}/{m}.', 'Không mặc áo trắng thứ Hai ngày {d}/{m}.', 'Nghỉ việc riêng có phép 1 buổi ngày {d}/{m}.'],
         'II' => ['Nộp kế hoạch bài dạy tuần {w} muộn 1 ngày.', 'Cập nhật sổ điểm điện tử muộn.', 'Lịch báo giảng chưa khớp sổ đầu bài tuần {w}.'],
         'III' => ['Dự giờ chưa đủ số tiết quy định.', 'Chấm trả bài kiểm tra muộn.', 'Tiết dạy được góp ý chưa đạt yêu cầu.'],
         'IV' => ['Chưa nhận xét sổ đầu bài tuần {w}.', 'Lớp vi phạm nền nếp 2 lần trong tuần {w}.', 'Báo cáo sĩ số lớp muộn.'],
         'V' => ['Không tham gia trực ngày {d}/{m}.', 'Nộp báo cáo hoạt động ngoài giờ muộn.'],
+    ];
+
+    private const EXPLANATIONS = [
+        ['Em xin giải trình tiêu chí II: kế hoạch bài dạy tuần 2 em đã gửi qua nhóm Zalo đúng hạn, chỉ nộp bản in muộn. Mong tổ xem xét lại.', 'Tổ đã kiểm tra tin nhắn, sẽ điều chỉnh lại điểm tiêu chí II.'],
+        ['Buổi trực ngày 12 em đã đổi ca với đồng nghiệp và có báo tổ trưởng, em xin được xem xét lại.', 'Đã xác nhận việc đổi ca, tổ đồng ý điều chỉnh.'],
+        ['Em đi muộn họp hội đồng do đưa học sinh bị ốm đến trạm y tế, có báo trước với Ban giám hiệu.', 'Ban giám hiệu đã xác nhận, không trừ điểm nội dung này.'],
+        ['Em đã bổ sung minh chứng giải học sinh cấp phường, nhờ tổ xem giúp em.', 'Đã nhận minh chứng, điểm cộng được giữ nguyên.'],
     ];
 
     private const BONUS_NOTES = [
@@ -59,6 +49,9 @@ class EvaluationHistorySeeder extends Seeder
     ];
 
     private array $users = [];
+    private array $profiles = [];
+    private array $violations = [];
+    private array $noGrade = [];
     private Collection $criteria;
     private Collection $sections;
     private array $grades;
@@ -76,7 +69,8 @@ class EvaluationHistorySeeder extends Seeder
         $this->criteria = EvaluationCriterion::where('template_id', $template->id)->orderBy('position')->get();
         $this->sections = $this->criteria->whereNull('parent_id')->sortBy('position')->values();
         $this->grades = $template->grades ?? [];
-        $teachers = Teacher::with('user', 'departments')->whereIn('employee_code', array_keys(self::PROFILES))->get()->keyBy('employee_code');
+        $this->buildProfiles();
+        $teachers = Teacher::with('user', 'departments')->whereIn('employee_code', array_keys($this->profiles))->get()->keyBy('employee_code');
 
         $today = CarbonImmutable::now();
         for ($ago = self::MONTHS_BACK; $ago >= 0; $ago--) {
@@ -99,14 +93,14 @@ class EvaluationHistorySeeder extends Seeder
         $period = EvaluationPeriod::create([
             'template_id' => $template->id, 'year' => $month->year, 'month' => $month->month, 'status' => $status,
             'self_due_on' => $month->day(min(25, $lastDay))->toDateString(), 'unit_due_on' => $month->day(min(28, $lastDay))->toDateString(),
-            'opened_by' => $this->user('mai.nt')->id,
+            'opened_by' => $this->user(DemoRoster::principal())->id,
             'disclosed_at' => $status === EvaluationPeriod::OPEN ? null : $this->past($next->day(2)->setTime(9, 0)),
             'published_at' => $status === EvaluationPeriod::PUBLISHED ? $next->day(5)->setTime(16, 0) : null,
         ]);
         $this->stamp('evaluation_periods', $period->id, $month->setTime(8, 0));
 
         $position = 0;
-        foreach (self::PROFILES as $code => [$deduction, $bonusChance, $homeroom, $absentWithin, $joinedAgo]) {
+        foreach ($this->profiles as $code => [$deduction, $bonusChance, $homeroom, $absentWithin, $joinedAgo]) {
             $teacher = $teachers->get($code);
             if (! $teacher || ($absentWithin !== null && $ago <= $absentWithin) || ($joinedAgo !== null && $ago > $joinedAgo)) {
                 continue;
@@ -117,20 +111,22 @@ class EvaluationHistorySeeder extends Seeder
             $this->seedSheet($period, $teacher, $month, $ago, $stage, $deduction, $bonusChance, $homeroom);
         }
 
+        $explainers = array_keys(array_filter($this->profiles, fn ($profile) => $profile[0] >= 2.5 && $profile[3] === null));
         if ($ago === 1) {
-            $this->explain($period, 'GV009', 'Em xin giải trình tiêu chí II: kế hoạch bài dạy tuần 2 em đã gửi qua nhóm Zalo đúng hạn, chỉ nộp bản in muộn. Mong tổ xem xét lại.', 'ha.pt', 'Tổ đã kiểm tra tin nhắn, sẽ trình Hội đồng xem xét khi họp công bố.');
-            $this->explain($period, 'GV010', 'Buổi trực ngày 12 em đã đổi ca với cô Lan và có báo tổ trưởng, em xin được xem xét lại.', 'ha.pt', 'Đã xác nhận với cô Lan, tổ đồng ý điều chỉnh.');
+            foreach (array_slice($explainers, 0, 3) as $index => $code) {
+                $this->explain($period, $code, self::EXPLANATIONS[$index][0], self::EXPLANATIONS[$index][1]);
+            }
         }
-        if ($ago === 2) {
-            $this->explain($period, 'GV006', 'Em đã bổ sung minh chứng giải học sinh cấp phường, nhờ tổ xem giúp em.', 'nam.tv', 'Đã nhận minh chứng, điểm cộng được giữ nguyên.');
+        if ($ago === 2 && isset($explainers[3])) {
+            $this->explain($period, $explainers[3], self::EXPLANATIONS[3][0], self::EXPLANATIONS[3][1]);
         }
     }
 
     private function seedSheet(EvaluationPeriod $period, Teacher $teacher, CarbonImmutable $month, int $ago, string $stage, float $deduction, float $bonusChance, bool $homeroom): void
     {
         $code = $teacher->employee_code;
-        $violation = in_array([$code, $ago], self::VIOLATIONS, true);
-        $noGrade = collect(self::NO_GRADE)->first(fn ($row) => $row[0] === $code && $row[1] === $ago)[2] ?? null;
+        $violation = in_array([$code, $ago], $this->violations, true);
+        $noGrade = collect($this->noGrade)->first(fn ($row) => $row[0] === $code && $row[1] === $ago)[2] ?? null;
         $lastDay = $month->daysInMonth;
         $submittedAt = $this->past($month->day(min($lastDay, mt_rand(18, $deduction > 6 ? 27 : 25)))->setTime(mt_rand(7, 21), mt_rand(0, 59)));
         $unitScoredAt = $this->past($month->day(min($lastDay, mt_rand(27, 28)))->setTime(mt_rand(8, 17), mt_rand(0, 59)));
@@ -186,7 +182,7 @@ class EvaluationHistorySeeder extends Seeder
         $evaluation->update([
             'total_score' => $total,
             'grade' => $published ? $grade : null,
-            'reviewed_by' => $reviewed ? $this->user('mai.nt')->id : null,
+            'reviewed_by' => $reviewed ? $this->user(DemoRoster::principal())->id : null,
             'reviewed_at' => $reviewed ? $this->past($published ? $month->addMonth()->day(4)->setTime(10, 0) : $unitScoredAt->addDay()) : null,
         ]);
         $this->attachEvidence($evaluation, $ago);
@@ -265,15 +261,16 @@ class EvaluationHistorySeeder extends Seeder
         DB::table('file_attachments')->insert(['file_id' => $file->id, 'attachable_type' => EvaluationScore::class, 'attachable_id' => $score->id, 'purpose' => 'evidence', 'created_at' => now(), 'updated_at' => now()]);
     }
 
-    private function explain(EvaluationPeriod $period, string $code, string $question, string $replier, string $answer): void
+    private function explain(EvaluationPeriod $period, string $code, string $question, string $answer): void
     {
-        $evaluation = Evaluation::where('period_id', $period->id)->whereHas('teacher', fn ($q) => $q->where('employee_code', $code))->with('teacher')->first();
+        $evaluation = Evaluation::where('period_id', $period->id)->whereHas('teacher', fn ($q) => $q->where('employee_code', $code))->with('teacher.departments')->first();
         if (! $evaluation) {
             return;
         }
+        $replier = $this->leaderFor($evaluation->teacher);
         $asked = $this->past(CarbonImmutable::create($period->year, $period->month)->addMonth()->day(3)->setTime(9, 30));
         $first = EvaluationComment::create(['evaluation_id' => $evaluation->id, 'user_id' => $evaluation->teacher->user_id, 'content' => $question]);
-        $reply = EvaluationComment::create(['evaluation_id' => $evaluation->id, 'user_id' => $this->user($replier)->id, 'content' => $answer]);
+        $reply = EvaluationComment::create(['evaluation_id' => $evaluation->id, 'user_id' => $replier->id, 'content' => $answer]);
         $this->stamp('evaluation_comments', $first->id, $asked);
         $this->stamp('evaluation_comments', $reply->id, $this->past($asked->addHours(3)));
     }
@@ -308,13 +305,40 @@ class EvaluationHistorySeeder extends Seeder
 
     private function leaderFor(Teacher $teacher): User
     {
-        $units = Department::whereIn('id', Department::withAncestors($teacher->departments->pluck('id')))->pluck('name');
-        $leader = $units->contains('Tổ tự nhiên') ? 'nam.tv' : 'ha.pt';
-        if (in_array($teacher->employee_code, ['GV002', 'GV004'], true)) {
-            $leader = 'mai.nt';
+        $person = collect(DemoRoster::people())->firstWhere('code', $teacher->employee_code);
+        $leader = $person ? DemoRoster::holder(Role::TO_TRUONG, $person['tổ']) : null;
+        if (! $leader || $leader === $person['handle']) {
+            $leader = DemoRoster::principal();
         }
 
         return $this->user($leader);
+    }
+
+    private function buildProfiles(): void
+    {
+        foreach (DemoRoster::people() as $handle => $person) {
+            if ($handle === DemoRoster::principal()) {
+                continue;
+            }
+            mt_srand(crc32('profile'.$person['code']));
+            $roll = mt_rand(1, 100);
+            $deduction = match (true) {
+                $person['status'] === 'suspended' => 16.0,
+                $roll <= 60 => mt_rand(1, 6) / 2,
+                $roll <= 85 => mt_rand(6, 12) / 2,
+                default => mt_rand(12, 18) / 2,
+            };
+            $bonus = round(max(0.05, 0.75 - $deduction * 0.08), 2);
+            $absent = match ($person['status']) { 'on_leave' => mt_rand(1, 3), 'suspended' => 4, default => null };
+            $joined = in_array('new', $person['flags'], true) ? 5 : null;
+            $this->profiles[$person['code']] = [$deduction, $bonus, $person['homeroom'], $absent, $joined];
+        }
+        $ranked = collect($this->profiles)->filter(fn ($profile) => $profile[3] === null || $profile[3] < 5)->sortByDesc(fn ($profile) => $profile[0])->keys()->values();
+        $this->violations = [[$ranked[0], 5], [$ranked[1] ?? $ranked[0], 9]];
+        $suspended = collect(DemoRoster::people())->firstWhere('status', 'suspended');
+        if ($suspended) {
+            $this->noGrade = [[$suspended['code'], 6, 'Không thực hiện nhiệm vụ chuyên đề được giao, không có lý do chính đáng.']];
+        }
     }
 
     private function stamp(string $table, int $id, CarbonImmutable $at): void
@@ -329,7 +353,7 @@ class EvaluationHistorySeeder extends Seeder
 
     private function user(string $handle): User
     {
-        return $this->users[$handle] ??= User::where('email', $handle.'@thanhdam.edu.vn')->firstOrFail();
+        return $this->users[$handle] ??= User::where('email', DemoRoster::email($handle))->firstOrFail();
     }
 
     private function pdf(string $text): string
