@@ -738,14 +738,14 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
           >
             <Paperclip size={15} />
             <span>
-              File từ kho & file đính kèm
+              File từ Chia sẻ chung & file đính kèm
               {attachmentCount > 0 && <em>{attachmentCount}</em>}
             </span>
             <ChevronDown size={16} className={showSupport ? "open" : ""} />
           </button>
           {showSupport && (
             <div className="block-body">
-              <span className="field-label">File từ kho dữ liệu</span>
+              <span className="field-label">File từ Chia sẻ chung</span>
               <label className="document-search">
                 <Search size={16} />
                 <input
@@ -753,7 +753,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
                   onChange={(event) =>
                     setDocumentSearch(event.target.value)
                   }
-                  placeholder="Tìm file trong kho..."
+                  placeholder="Tìm file trong Chia sẻ chung..."
                 />
               </label>
               <div className="document-picker">
@@ -768,7 +768,10 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
                       />
                       <span>
                         <strong>{file.name}</strong>
-                        <small>{formatBytes(file.size)}</small>
+                        <small>
+                          {formatBytes(file.size)}
+                          {file.in_shared === false && <em className="outside-shared"> · ngoài Chia sẻ chung</em>}
+                        </small>
                       </span>
                       <FileText size={15} />
                     </label>
@@ -776,7 +779,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
               </div>
               {!libraryOptions.length && (
                 <div className="no-documents">
-                  Chưa có file nào trong kho dữ liệu mà bạn được xem.
+                  Chưa có file nào trong thư mục Chia sẻ chung. Quản lý kho có thể tải file lên tại Kho dữ liệu.
                 </div>
               )}
               <span className="field-label">File đính kèm</span>
@@ -1217,7 +1220,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
                 )}
                 {!!viewing.library_files?.length && (
                   <section className="drawer-section">
-                    <h4>File từ kho dữ liệu <em>{viewing.library_files.length}</em></h4>
+                    <h4>File từ Chia sẻ chung <em>{viewing.library_files.length}</em></h4>
                     <div className="drawer-files">
                       {viewing.library_files.map((file, index, all) => {
                         const url = file.download_url.replace(/^.*\/api\//, "/api/");
@@ -1226,6 +1229,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
                             key={file.id}
                             name={file.name}
                             size={file.size}
+                            note={file.in_shared === false ? "ngoài Chia sẻ chung" : null}
                             icon={FileText}
                             onOpen={() => openPreview(all.map((f) => ({ key: f.id, name: f.name, mime_type: f.mime_type, size: f.size, url: f.download_url.replace(/^.*\/api\//, "/api/") })), index)}
                             onDownload={() => downloadFile(url, file.name).catch((e) => setError(e.message))}
@@ -1581,7 +1585,7 @@ function formatFileSize(bytes) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function DrawerFile({ name, size, icon: Icon = Paperclip, onOpen, onDownload, onShare }) {
+function DrawerFile({ name, size, note, icon: Icon = Paperclip, onOpen, onDownload, onShare }) {
   return (
     <div className="drawer-file">
       <button type="button" className="drawer-file-main" onClick={onOpen} title="Xem file">
@@ -1590,7 +1594,10 @@ function DrawerFile({ name, size, icon: Icon = Paperclip, onOpen, onDownload, on
         </i>
         <span>
           <b>{name}</b>
-          <small>{formatFileSize(size)}</small>
+          <small>
+            {formatFileSize(size)}
+            {note && <em className="outside-shared"> · {note}</em>}
+          </small>
         </span>
       </button>
       <ActionMenu

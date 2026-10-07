@@ -665,3 +665,8 @@
 .submission-list .drawer-files {
   margin-top: 10px;
 }
+
+.outside-shared {
+  color: var(--c-warning);
+  font-style: normal;
+}
