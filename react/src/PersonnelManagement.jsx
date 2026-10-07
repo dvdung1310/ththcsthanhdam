@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
+  ArrowDown,
+  ArrowUp,
   Building2,
   CheckCircle2,
   ChevronLeft,
@@ -27,6 +29,17 @@ import Avatar from "./Avatar";
 
 const LEADER_ROLES = ["hieu_truong", "thu_ky", "to_truong", "to_pho", "nhom_truong"];
 
+const collator = new Intl.Collator("vi");
+const givenName = (name) => (name ?? "").trim().split(/\s+/).at(-1);
+const byName = (a, b) => collator.compare(givenName(a.name), givenName(b.name)) || collator.compare(a.name ?? "", b.name ?? "");
+const STATUS_ORDER = { working: 0, on_leave: 1, suspended: 2, locked: 3, terminated: 4 };
+const SORTERS = {
+  name: byName,
+  code: (a, b) => (a.is_teacher ? 0 : 1) - (b.is_teacher ? 0 : 1) || collator.compare(a.employee_code ?? "", b.employee_code ?? "", { numeric: true }),
+  unit: (a, b) => (a.units.length ? 0 : 1) - (b.units.length ? 0 : 1) || collator.compare(a.units[0]?.label ?? "", b.units[0]?.label ?? ""),
+  status: (a, b) => (STATUS_ORDER[statusOf(a)] ?? 9) - (STATUS_ORDER[statusOf(b)] ?? 9),
+};
+
 const statusOf = (person) => {
   if (!person.is_active) return person.employment_status === "terminated" ? "terminated" : "locked";
   return person.is_teacher ? person.employment_status : "working";
@@ -46,6 +59,11 @@ export default function PersonnelManagement({ view = "people" }) {
   const [roleFilter, setRoleFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useState({ key: "name", desc: false });
+  const sortBy = (key) => {
+    setSort((current) => ({ key, desc: current.key === key ? !current.desc : false }));
+    setPage(1);
+  };
   const [pageSize, setPageSize] = useState(10);
   const [editing, setEditing] = useState(null);
   const tableWrapRef = useRef(null);
@@ -97,7 +115,7 @@ export default function PersonnelManagement({ view = "people" }) {
     (unit) => unit.parent_id && !data.units.some((root) => root.id === unit.parent_id),
   );
 
-  const filtered = data.data.filter((person) => {
+  const matched = data.data.filter((person) => {
     const text = [person.name, person.email, person.employee_code, person.phone].join(" ").toLowerCase();
     return (
       text.includes(keyword.toLowerCase()) &&
@@ -107,6 +125,7 @@ export default function PersonnelManagement({ view = "people" }) {
       (statusFilter === "" || statusOf(person) === statusFilter)
     );
   });
+  const filtered = [...matched].sort((a, b) => (sort.desc ? -1 : 1) * SORTERS[sort.key](a, b) || byName(a, b));
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const visible = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
@@ -299,12 +318,21 @@ export default function PersonnelManagement({ view = "people" }) {
               <table className="personnel-table">
                 <thead>
                   <tr>
-                    <th>Nhân sự</th>
-                    <th>Mã GV</th>
-                    <th>Liên hệ</th>
-                    <th>Tổ / nhóm</th>
-                    <th>Vai trò</th>
-                    <th>Trạng thái</th>
+                    {[["name", "Nhân sự"], ["code", "Mã GV"], ["contact", "Liên hệ"], ["unit", "Tổ / nhóm"], ["roles", "Vai trò"], ["status", "Trạng thái"]].map(([key, label]) =>
+                      SORTERS[key] ? (
+                        <th
+                          key={key}
+                          className={`sortable ${sort.key === key ? "sorted" : ""}`}
+                          aria-sort={sort.key === key ? (sort.desc ? "descending" : "ascending") : "none"}
+                          onClick={() => sortBy(key)}
+                        >
+                          {label}
+                          {sort.key === key && (sort.desc ? <ArrowDown size={12} /> : <ArrowUp size={12} />)}
+                        </th>
+                      ) : (
+                        <th key={key}>{label}</th>
+                      ),
+                    )}
                     <th>Thao tác</th>
                   </tr>
                 </thead>

@@ -88,3 +88,18 @@
 .personnel-table-wrap.shadow-right td:last-child {
   box-shadow: -8px 0 10px -8px rgba(31, 42, 72, 0.22);
 }
+
+.personnel-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.personnel-table th.sortable:hover,
+.personnel-table th.sorted {
+  color: var(--c-primary);
+}
+
+.personnel-table th svg {
+  margin-left: 4px;
+  vertical-align: -1px;
+}
