@@ -1,9 +1,12 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { AlignJustify, ArrowDown, ArrowUp, BarChart3, Check, ChevronDown, Rows3, FileSpreadsheet, Info, Printer, Search, SlidersHorizontal, TriangleAlert, Users, X } from "lucide-react";
+import { AlignJustify, ArrowDown, ArrowUp, BarChart3, Rows3, FileSpreadsheet, Printer, Search, SlidersHorizontal, TriangleAlert, X } from "lucide-react";
 import { apiFetch, apiJson } from "./api";
 import TablePagination, { usePagination } from "./TablePagination";
-import { GRADE_TONES, formatScore } from "./evaluationUtils";
+import { GRADE_TONES, formatScore, gradeCode } from "./evaluationUtils";
+import UnitPicker from "./UnitPicker";
+import InfoPopover from "./InfoPopover";
+import useFitHeight from "./useFitHeight";
 import { useOutsideClose } from "./PeoplePicker";
 import "./Evaluation.css";
 import Avatar from "./Avatar";
@@ -21,13 +24,6 @@ const STATUS = [["", "Tất cả"], ["working", "Đang làm việc"], ["on_leave
 const TOPS = [["", "Tất cả"], ["3", "Top 3"], ["10", "Top 10"], ["20", "Top 20"]];
 const MEDALS = { 1: "gold", 2: "silver", 3: "bronze" };
 
-function gradeCode(label) {
-  const text = (label ?? "").trim();
-  if (/^xuất sắc$/i.test(text)) return "XS";
-  const level = /^loại\s+(.+)$/i.exec(text);
-  if (level) return level[1];
-  return text.split(/\s+/).map((word) => word.charAt(0).toUpperCase()).join("") || text;
-}
 
 function sortRows(rows, key, descending) {
   const sign = descending ? -1 : 1;
@@ -126,26 +122,7 @@ export default function EvaluationSummary() {
     localStorage.setItem("thanhdam_summary_density", value ? "compact" : "comfortable");
     setDense(value);
   };
-  const wrapRef = useRef(null);
-  const footRef = useRef(null);
-  const [tableHeight, setTableHeight] = useState(null);
-  useLayoutEffect(() => {
-    const measure = () => {
-      const wrap = wrapRef.current;
-      if (!wrap) return;
-      const top = wrap.getBoundingClientRect().top + window.scrollY;
-      const below = (footRef.current?.offsetHeight ?? 0) + 28;
-      setTableHeight(Math.max(360, Math.floor(window.innerHeight - top - below)));
-    };
-    measure();
-    window.addEventListener("resize", measure);
-    const observer = new ResizeObserver(measure);
-    if (wrapRef.current?.parentElement) observer.observe(wrapRef.current.parentElement);
-    return () => {
-      window.removeEventListener("resize", measure);
-      observer.disconnect();
-    };
-  }, [visible ? "ready" : "loading", dense]);
+  const [wrapRef, footRef, tableHeight] = useFitHeight([visible ? "ready" : "loading", dense]);
   const update = (values) => {
     pager.reset();
     setParam(values);
@@ -455,102 +432,8 @@ export default function EvaluationSummary() {
   );
 }
 
-const fold = (text) => (text ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase();
 
-function UnitPicker({ teams, groups, team, group, onChange }) {
-  const [open, setOpen] = useState(false);
-  const [term, setTerm] = useState("");
-  const ref = useRef(null);
-  useEffect(() => {
-    if (!open) return undefined;
-    const outside = (event) => !ref.current?.contains(event.target) && setOpen(false);
-    const escape = (event) => event.key === "Escape" && setOpen(false);
-    document.addEventListener("mousedown", outside);
-    document.addEventListener("keydown", escape);
-    return () => {
-      document.removeEventListener("mousedown", outside);
-      document.removeEventListener("keydown", escape);
-    };
-  }, [open]);
-  const query = fold(term.trim());
-  const tree = teams
-    .map((item) => {
-      const children = groups.filter((child) => child.team_id === item.id);
-      const selfHit = !query || fold(item.name).includes(query);
-      const hits = selfHit ? children : children.filter((child) => fold(child.name).includes(query));
-      return { ...item, children: hits, visible: selfHit || hits.length > 0 };
-    })
-    .filter((item) => item.visible);
-  const label = group ? groups.find((item) => item.id === group)?.name : team ? teams.find((item) => item.id === team)?.name : "Mọi tổ / nhóm";
-  const pick = (next) => {
-    onChange(next);
-    setOpen(false);
-    setTerm("");
-  };
-  return (
-    <div className="ev-unit-picker" ref={ref}>
-      <button type="button" className={`ev-more-btn ${team ? "active" : ""}`} aria-expanded={open} onClick={() => setOpen(!open)}>
-        <Users size={15} /> <span>{label}</span> <ChevronDown size={14} />
-      </button>
-      {open && (
-        <div className="ev-unit-panel" role="listbox" aria-label="Tổ / nhóm">
-          <label className="ev-search">
-            <Search size={15} />
-            <input autoFocus value={term} onChange={(e) => setTerm(e.target.value)} placeholder="Tìm tổ hoặc nhóm..." />
-          </label>
-          <div className="ev-unit-list">
-            {!query && (
-              <button type="button" className={!team ? "selected" : ""} onClick={() => pick({ team: "", group: "" })}>
-                <span>Mọi tổ / nhóm</span>
-                {!team && <Check size={14} />}
-              </button>
-            )}
-            {tree.map((item) => (
-              <div key={item.id}>
-                <button type="button" className={`unit ${team === item.id && !group ? "selected" : ""}`} onClick={() => pick({ team: String(item.id), group: "" })}>
-                  <span>{item.name}</span>
-                  {team === item.id && !group && <Check size={14} />}
-                </button>
-                {item.children.map((child) => (
-                  <button key={child.id} type="button" className={`child ${group === child.id ? "selected" : ""}`} onClick={() => pick({ team: String(item.id), group: String(child.id) })}>
-                    <span>{child.name}</span>
-                    {group === child.id && <Check size={14} />}
-                  </button>
-                ))}
-              </div>
-            ))}
-            {!tree.length && <p className="ev-muted">Không tìm thấy tổ hoặc nhóm.</p>}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
-function InfoPopover({ label, text, up = false, children }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-  useEffect(() => {
-    if (!open) return undefined;
-    const outside = (event) => !ref.current?.contains(event.target) && setOpen(false);
-    const escape = (event) => event.key === "Escape" && setOpen(false);
-    document.addEventListener("mousedown", outside);
-    document.addEventListener("keydown", escape);
-    return () => {
-      document.removeEventListener("mousedown", outside);
-      document.removeEventListener("keydown", escape);
-    };
-  }, [open]);
-  return (
-    <span className="ev-info-pop" ref={ref}>
-      <button type="button" className={`ev-info-btn ${open ? "active" : ""}`} aria-label={label} aria-expanded={open} title={label} onClick={() => setOpen(!open)}>
-        <Info size={15} />
-        {text && <span>{text}</span>}
-      </button>
-      {open && <div className={`ev-info-panel ${up ? "up" : ""}`} role="dialog" aria-label={label}>{children}</div>}
-    </span>
-  );
-}
 
 function YearCell({ value, onOpen }) {
   if (!value) return <span className="ev-muted">—</span>;
