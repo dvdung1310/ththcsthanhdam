@@ -29,7 +29,17 @@ class EvaluationSummaryController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        return response()->json($this->build($this->filters($request)));
+        $filters = $this->filters($request);
+        $summary = $this->build($filters);
+        $all = collect($summary['teachers']);
+        $rows = $this->rows($all, $filters);
+
+        return response()->json([
+            ...$summary,
+            'teachers' => $rows->all(),
+            'overview' => $this->overview($rows, $summary['grades']),
+            'facets' => ['teams' => $this->facet($all, 'team'), 'groups' => $this->facet($all, 'group', true)],
+        ]);
     }
 
     public function teacher(Request $request, Teacher $teacher): JsonResponse
@@ -43,39 +53,41 @@ class EvaluationSummaryController extends Controller
     {
         $filters = $this->filters($request);
         $summary = $this->build($filters);
-        $teachers = collect($summary['teachers'])->filter(fn (array $row) => $this->matches($row, $filters))->values();
+        $teachers = $this->rows(collect($summary['teachers']), $filters);
         $periods = collect($summary['periods']);
         $grades = $summary['grades'];
 
         $sheet = new XlsxWriter();
-        $columns = 3 + $periods->count() + count($grades) + 3;
-        $sheet->widths([5, 26, 20, ...array_fill(0, $periods->count(), 13), ...array_fill(0, count($grades), 8), 8, 8, 10]);
+        $columns = 4 + $periods->count() + count($grades) + 4;
+        $sheet->widths([5, 7, 26, 20, ...array_fill(0, $periods->count(), 13), ...array_fill(0, count($grades), 8), 8, 8, 9, 9]);
         $sheet->addRow(['TRƯỜNG TH & THCS THANH ĐÀM'], XlsxWriter::PLAIN);
         $sheet->addRow(['HỘI ĐỒNG THI ĐUA KHEN THƯỞNG'], XlsxWriter::PLAIN);
         $row = $sheet->addRow(['BẢNG TỔNG HỢP KẾT QUẢ THI ĐUA HẰNG THÁNG'], XlsxWriter::TITLE);
         $sheet->merge($row, 1, $columns);
         $row = $sheet->addRow([$summary['range_label']], XlsxWriter::CENTER);
         $sheet->merge($row, 1, $columns);
-        $sheet->addRow(['Chỉ tính các tháng đã công bố. Ô "—": không có phiếu tháng đó; KXL: không xếp loại; TB: điểm trung bình theo % điểm tối đa (GVCN 100, không CN 80).'], XlsxWriter::NOTE);
+        $sheet->addRow([$this->scopeNote($filters)], XlsxWriter::NOTE);
         $sheet->addRow([]);
 
         $sheet->addRow([
-            'STT', 'Họ và tên', 'Tổ / nhóm',
+            'STT', 'Hạng', 'Họ và tên', 'Tổ / nhóm',
             ...$periods->map(fn (array $p) => $p['label'].($p['official'] ? '' : ' (chưa công bố)')),
             ...array_map(fn (array $g) => $g['short'], $grades),
-            'KXL', 'Vi phạm', 'TB (%)',
+            'KXL', 'Vi phạm', 'Số tháng', 'Điểm TB',
         ], XlsxWriter::HEADER);
 
         foreach ($teachers as $index => $teacher) {
             $sheet->addRow([
                 ['value' => $index + 1, 'style' => XlsxWriter::CELL_CENTER],
+                ['value' => $teacher['rank'] ?? '', 'style' => XlsxWriter::CELL_CENTER],
                 $teacher['name'],
                 trim(($teacher['team']['name'] ?? '').($teacher['group'] ? ' / '.$teacher['group']['name'] : '')),
                 ...$periods->map(fn (array $p) => ['value' => $this->cellText($teacher['cells'][$p['id']] ?? null), 'style' => XlsxWriter::CELL_CENTER]),
                 ...array_map(fn (array $g) => ['value' => $teacher['stats']['counts'][$g['key']] ?? 0, 'style' => XlsxWriter::CELL_CENTER], $grades),
                 ['value' => $teacher['stats']['no_grade'], 'style' => XlsxWriter::CELL_CENTER],
                 ['value' => $teacher['stats']['violations'], 'style' => XlsxWriter::CELL_CENTER],
-                ['value' => $teacher['stats']['average_percent'] ?? '', 'style' => XlsxWriter::CELL_CENTER],
+                ['value' => $teacher['stats']['months'].'/'.$periods->where('official', true)->count(), 'style' => XlsxWriter::CELL_CENTER],
+                ['value' => $teacher['stats']['average'] ?? '', 'style' => XlsxWriter::CELL_CENTER],
             ]);
         }
 
@@ -106,7 +118,16 @@ class EvaluationSummaryController extends Controller
             'team' => ['nullable', 'integer'],
             'group' => ['nullable', 'integer'],
             'q' => ['nullable', 'string', 'max:100'],
+            'homeroom' => ['nullable', 'in:yes,no'],
+            'grades' => ['nullable', 'string', 'max:100'],
+            'grade_scope' => ['nullable', 'in:any,latest'],
+            'violation' => ['nullable', 'in:yes,no'],
+            'min' => ['nullable', 'numeric'],
+            'max' => ['nullable', 'numeric'],
+            'status' => ['nullable', 'in:working,on_leave,suspended'],
+            'top' => ['nullable', 'integer', 'in:3,10,20'],
         ]);
+        $data['grades'] = array_values(array_filter(explode(',', $data['grades'] ?? '')));
 
         return $data;
     }
@@ -133,18 +154,23 @@ class EvaluationSummaryController extends Controller
             ->get();
         $periodById = $periods->keyBy('id');
 
-        $teachers = $evaluations->groupBy('teacher_id')->map(function (Collection $sheets) use ($periodById, $gradeKeys, $maxBase, $grades) {
+        $homeroom = match ($filters['homeroom'] ?? null) { 'yes' => true, 'no' => false, default => null };
+        $teachers = $evaluations->groupBy('teacher_id')->map(function (Collection $sheets) use ($periodById, $gradeKeys, $maxBase, $grades, $homeroom) {
             $teacher = $sheets->first()->teacher;
             $cells = [];
             foreach ($sheets as $sheet) {
                 $cells[$sheet->period_id] = $this->cell($sheet, $periodById[$sheet->period_id], $gradeKeys, $maxBase);
             }
 
+            $latest = $sheets->sortByDesc(fn (Evaluation $sheet) => $this->key($periodById[$sheet->period_id]))->first();
+
             return [
                 'id' => $teacher->id, 'name' => $teacher->user?->name, 'code' => $teacher->employee_code, 'avatar_url' => $this->avatar($teacher->user),
+                'employment_status' => $teacher->employment_status, 'is_homeroom' => (bool) $latest->is_homeroom,
+                'in_frame' => $homeroom === null || $sheets->contains(fn (Evaluation $sheet) => (bool) $sheet->is_homeroom === $homeroom),
                 ...$this->directory->placement($teacher),
                 'cells' => $cells,
-                'stats' => $this->stats($cells, $grades),
+                'stats' => $this->stats($cells, $grades, $homeroom),
             ];
         })->sort(fn (array $a, array $b) => $this->directory->compareNames($a['name'], $b['name']))->values();
 
@@ -159,6 +185,7 @@ class EvaluationSummaryController extends Controller
             'year_periods' => $yearPeriods->map(fn (EvaluationPeriod $p) => ['key' => $this->key($p), 'label' => 'T'.$p->month.'/'.$p->year])->values(),
             'grades' => $grades,
             'mixed_grades' => $mixed,
+            'homeroom' => $filters['homeroom'] ?? null,
             'teachers' => $teachers->all(),
         ];
     }
@@ -166,7 +193,7 @@ class EvaluationSummaryController extends Controller
     private function cell(Evaluation $sheet, EvaluationPeriod $period, array $gradeKeys, array $maxBase): array
     {
         if ($period->status !== EvaluationPeriod::PUBLISHED) {
-            return ['evaluation_id' => $sheet->id, 'official' => false, 'pending_label' => self::PENDING_LABELS[$period->status] ?? $period->status];
+            return ['evaluation_id' => $sheet->id, 'official' => false, 'pending_label' => self::PENDING_LABELS[$period->status] ?? $period->status, 'is_homeroom' => (bool) $sheet->is_homeroom];
         }
         $max = $maxBase[$period->id][$sheet->is_homeroom ? 'homeroom' : 'regular'] ?: null;
         $total = $sheet->total_score === null ? null : (float) $sheet->total_score;
@@ -174,23 +201,23 @@ class EvaluationSummaryController extends Controller
 
         return [
             'evaluation_id' => $sheet->id, 'official' => true,
-            'total' => $total, 'max' => $max, 'percent' => $total !== null && $max ? round($total / $max * 100, 1) : null,
+            'total' => $total, 'max' => $max,
             'grade_key' => $gradeKey, 'grade_name' => $gradeKey ? $this->gradeName($period, $sheet->grade) : null,
             'no_grade_reason' => $sheet->no_grade_reason, 'has_violation' => (bool) $sheet->has_violation, 'is_homeroom' => (bool) $sheet->is_homeroom,
         ];
     }
 
-    private function stats(array $cells, array $grades): array
+    private function stats(array $cells, array $grades, ?bool $homeroom = null): array
     {
-        $official = collect($cells)->where('official', true);
-        $percents = $official->pluck('percent')->filter(fn ($v) => $v !== null);
+        $official = collect($cells)->where('official', true)->filter(fn (array $c) => $homeroom === null || $c['is_homeroom'] === $homeroom);
+        $totals = $official->pluck('total')->filter(fn ($v) => $v !== null);
 
         return [
             'months' => $official->count(),
             'counts' => collect($grades)->mapWithKeys(fn (array $g) => [$g['key'] => $official->where('grade_key', $g['key'])->count()])->all(),
             'no_grade' => $official->filter(fn (array $c) => $c['no_grade_reason'] || ! $c['grade_key'])->count(),
             'violations' => $official->where('has_violation', true)->count(),
-            'average_percent' => $percents->isEmpty() ? null : round($percents->avg(), 1),
+            'average' => $totals->isEmpty() ? null : round($totals->avg(), 2),
         ];
     }
 
@@ -236,13 +263,80 @@ class EvaluationSummaryController extends Controller
         })->all();
     }
 
-    private function matches(array $row, array $filters): bool
+    private function rows(Collection $teachers, array $filters): Collection
     {
         $keyword = mb_strtolower(trim($filters['q'] ?? ''));
+        $grades = $filters['grades'] ?? [];
+        $scope = $teachers->filter(fn (array $row) => $row['in_frame']
+            && (empty($filters['team']) || in_array((int) $filters['team'], $row['unit_ids'], true))
+            && (empty($filters['group']) || in_array((int) $filters['group'], $row['unit_ids'], true)));
+        $rows = $this->rank($scope->values())->filter(function (array $row) use ($filters, $keyword, $grades) {
+            $average = $row['stats']['average'];
+            $official = collect($row['cells'])->where('official', true)
+                ->filter(fn (array $c) => ($filters['homeroom'] ?? null) === null || $c['is_homeroom'] === ($filters['homeroom'] === 'yes'));
+            $gradeOf = fn (array $c) => $c['no_grade_reason'] || ! $c['grade_key'] ? 'kxl' : $c['grade_key'];
+            $gradeHit = ! $grades || (($filters['grade_scope'] ?? 'any') === 'latest'
+                ? ($official->last() && in_array($gradeOf($official->last()), $grades, true))
+                : $official->contains(fn (array $c) => in_array($gradeOf($c), $grades, true)));
 
-        return (empty($filters['team']) || in_array((int) $filters['team'], $row['unit_ids'], true))
-            && (empty($filters['group']) || in_array((int) $filters['group'], $row['unit_ids'], true))
-            && ($keyword === '' || str_contains(mb_strtolower($row['name'].' '.$row['code']), $keyword));
+            return ($keyword === '' || str_contains(mb_strtolower($row['name'].' '.$row['code']), $keyword))
+                && $gradeHit
+                && (empty($filters['violation']) || ($row['stats']['violations'] > 0) === ($filters['violation'] === 'yes'))
+                && (! isset($filters['min']) || ($average !== null && $average >= (float) $filters['min']))
+                && (! isset($filters['max']) || ($average !== null && $average <= (float) $filters['max']))
+                && (empty($filters['status']) || $row['employment_status'] === $filters['status']);
+        });
+
+        return $rows->filter(fn (array $row) => empty($filters['top']) || ($row['rank'] !== null && $row['rank'] <= (int) $filters['top']))->values();
+    }
+
+    private function rank(Collection $rows): Collection
+    {
+        $first = fn (array $row, int $index) => array_values($row['stats']['counts'])[$index] ?? 0;
+        $key = fn (array $row) => [-($row['stats']['average'] ?? 0), -$first($row, 0), -$first($row, 1), $row['stats']['violations']];
+        $scored = $rows->filter(fn (array $row) => $row['stats']['average'] !== null)
+            ->sort(fn (array $a, array $b) => $key($a) <=> $key($b) ?: $this->directory->compareNames($a['name'], $b['name']))->values();
+        $result = [];
+        $previous = null;
+        foreach ($scored as $index => $row) {
+            $rank = $previous && $key($previous['row']) === $key($row) ? $previous['rank'] : $index + 1;
+            $result[] = [...$row, 'rank' => $rank];
+            $previous = ['row' => $row, 'rank' => $rank];
+        }
+        foreach ($rows->filter(fn (array $row) => $row['stats']['average'] === null) as $row) {
+            $result[] = [...$row, 'rank' => null];
+        }
+
+        return collect($result);
+    }
+
+    private function overview(Collection $rows, array $grades): array
+    {
+        $averages = $rows->pluck('stats.average')->filter(fn ($v) => $v !== null);
+        $topKey = $grades[0]['key'] ?? null;
+
+        return [
+            'teachers' => $rows->count(),
+            'average' => $averages->isEmpty() ? null : round($averages->avg(), 2),
+            'top_grade' => $grades[0]['short'] ?? null,
+            'top_grade_teachers' => $topKey ? $rows->filter(fn (array $row) => ($row['stats']['counts'][$topKey] ?? 0) > 0)->count() : 0,
+            'violation_teachers' => $rows->filter(fn (array $row) => $row['stats']['violations'] > 0)->count(),
+            'unscored' => $rows->filter(fn (array $row) => $row['stats']['average'] === null)->count(),
+        ];
+    }
+
+    private function facet(Collection $rows, string $field, bool $withTeam = false): array
+    {
+        return $rows->filter(fn (array $row) => $row[$field])
+            ->map(fn (array $row) => [...$row[$field], ...($withTeam ? ['team_id' => $row['team']['id'] ?? null] : [])])
+            ->unique('id')->sortBy('name', SORT_LOCALE_STRING)->values()->all();
+    }
+
+    private function scopeNote(array $filters): string
+    {
+        $frame = match ($filters['homeroom'] ?? null) { 'yes' => ' Chỉ tính các tháng chủ nhiệm.', 'no' => ' Chỉ tính các tháng không chủ nhiệm.', default => '' };
+
+        return 'Chỉ tính các tháng đã công bố.'.$frame.' Ô "—": không có phiếu tháng đó; KXL: không xếp loại; Điểm TB: trung bình tổng điểm các tháng được chấm. Bảng xếp hạng chỉ để tham khảo, hệ thống không tự xếp danh hiệu.';
     }
 
     private function cellText(?array $cell): string
