@@ -83,5 +83,5 @@ export function daysPast(due, at = new Date()) {
 export const YEAR_START_MONTH = 8;
 export const schoolYearOf = (year, month) => (month >= YEAR_START_MONTH ? year : year - 1);
 export const schoolYearLabel = (year) => `${year}–${year + 1}`;
-export const GRADE_TONES = ["green", "blue", "purple", "orange", "muted", "muted"];
+export const GRADE_TONES = ["green", "blue", "violet", "orange", "muted", "muted"];
 export const formatPercent = (value) => (value == null ? "—" : `${formatScore(value)}%`);
