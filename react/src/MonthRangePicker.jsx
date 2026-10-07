@@ -25,6 +25,8 @@ function presetsFor(allYears, schoolYear, periods) {
 export default function MonthRangePicker({ periods, allYears, schoolYear, from, to, onChange }) {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(null);
+  const [mode, setMode] = useState("start");
+  const [hover, setHover] = useState(null);
   const ref = useRef(null);
   useEffect(() => {
     if (!open) return undefined;
@@ -38,7 +40,11 @@ export default function MonthRangePicker({ periods, allYears, schoolYear, from, 
     };
   }, [open]);
   useEffect(() => {
-    if (!open) setPending(null);
+    if (!open) {
+      setPending(null);
+      setMode("start");
+      setHover(null);
+    }
   }, [open]);
 
   const byKey = new Map(periods.map((period) => [period.key, period]));
@@ -55,14 +61,29 @@ export default function MonthRangePicker({ periods, allYears, schoolYear, from, 
     onChange(next);
     setOpen(false);
   };
+  const finish = (a, b) => {
+    const [low, high] = a <= b ? [a, b] : [b, a];
+    apply({ from: low === first ? "" : low, to: high === last ? "" : high });
+  };
   const pick = (key) => {
-    if (!pending) {
+    if (mode === "start") {
       setPending(key);
+      setMode("end");
       return;
     }
-    const [a, b] = pending <= key ? [pending, key] : [key, pending];
-    apply({ from: a === first ? "" : a, to: b === last ? "" : b });
+    finish(pending ?? start, key);
   };
+  const editEnd = () => {
+    setPending(start);
+    setMode("end");
+  };
+  const editStart = () => {
+    setPending(null);
+    setMode("start");
+  };
+  const previewStart = mode === "end" ? pending ?? start : start;
+  const previewEnd = mode === "end" ? hover ?? (pending ? null : end) : end;
+  const [low, high] = previewStart && previewEnd ? (previewStart <= previewEnd ? [previewStart, previewEnd] : [previewEnd, previewStart]) : [previewStart, previewStart];
 
   return (
     <div className="mrp" ref={ref}>
@@ -88,6 +109,17 @@ export default function MonthRangePicker({ periods, allYears, schoolYear, from, 
             ))}
           </ul>
           <div className="mrp-grids">
+            <div className="mrp-slots">
+              <button type="button" className={mode === "start" ? "waiting" : ""} onClick={editStart}>
+                <small>Từ</small>
+                <b>{labelOf(mode === "end" ? previewStart : start)}</b>
+              </button>
+              <span>→</span>
+              <button type="button" className={mode === "end" ? "waiting" : ""} onClick={editEnd}>
+                <small>Đến</small>
+                <b>{mode === "end" ? (hover ? labelOf(hover) : "Chọn tháng…") : labelOf(end)}</b>
+              </button>
+            </div>
             {years.map((year) => (
               <section key={year}>
                 <h5>Năm học {year}–{year + 1}</h5>
@@ -95,21 +127,23 @@ export default function MonthRangePicker({ periods, allYears, schoolYear, from, 
                   {MONTHS.map((month) => {
                     const key = keyOf(year, month);
                     const period = byKey.get(key);
-                    const low = pending ?? start;
-                    const high = pending ? pending : end;
-                    const inRange = !pending && key >= low && key <= high;
-                    const edge = pending ? key === pending : key === start || key === end;
+                    const inRange = low && key >= low && key <= high;
+                    const isStart = key === low;
+                    const isEnd = key === high && high !== low;
+                    const tag = isStart && isEnd ? null : isStart ? "Từ" : isEnd ? "Đến" : null;
                     return (
                       <button
                         key={key}
                         type="button"
                         disabled={!period}
-                        className={[inRange && "in-range", edge && "edge"].filter(Boolean).join(" ")}
+                        className={[inRange && "in-range", isStart && "edge start", isEnd && "edge end", mode === "end" && "choosing"].filter(Boolean).join(" ")}
                         title={period ? `${labelOf(key)} · ${period.official ? "đã công bố" : "chưa công bố"}` : `${labelOf(key)} · chưa có kỳ đánh giá`}
+                        onMouseEnter={() => mode === "end" && period && setHover(key)}
+                        onMouseLeave={() => setHover(null)}
                         onClick={() => pick(key)}
                       >
                         T{month}
-                        <i className={period?.official ? "official" : period ? "pending" : ""} />
+                        {tag ? <em>{tag}</em> : <i className={period?.official ? "official" : period ? "pending" : ""} />}
                       </button>
                     );
                   })}
@@ -117,7 +151,7 @@ export default function MonthRangePicker({ periods, allYears, schoolYear, from, 
               </section>
             ))}
             <p className="mrp-hint">
-              {pending ? `Từ ${labelOf(pending)} — chọn tháng kết thúc` : "Bấm tháng bắt đầu, rồi bấm tháng kết thúc"}
+              {mode === "end" ? "Bấm tháng kết thúc" : "Bấm tháng bắt đầu"}
               <span><i className="official" /> đã công bố <i className="pending" /> chưa công bố</span>
             </p>
           </div>

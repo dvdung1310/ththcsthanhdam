@@ -149,3 +149,62 @@
   align-items: center;
   gap: 5px;
 }
+
+.mrp-slots {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mrp-slots > span {
+  color: var(--c-muted);
+}
+
+.mrp-slots button {
+  min-width: 120px;
+  padding: 6px 10px;
+  display: grid;
+  gap: 1px;
+  border: 1px solid #dfe3ec;
+  border-radius: 8px;
+  color: #34405e;
+  background: #fff;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.mrp-slots button small {
+  color: var(--c-muted);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.mrp-slots button b {
+  font-size: 13px;
+}
+
+.mrp-slots button.waiting {
+  border-color: var(--c-primary);
+  box-shadow: 0 0 0 3px rgb(var(--c-primary-rgb) / 0.15);
+}
+
+.mrp-slots button.waiting b {
+  color: var(--c-primary);
+}
+
+.mrp-grid button em {
+  font-size: 9.5px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.2px;
+}
+
+.mrp-grid button.edge.start:not(.end) {
+  border-radius: 7px 2px 2px 7px;
+}
+
+.mrp-grid button.edge.end {
+  border-radius: 2px 7px 7px 2px;
+}
