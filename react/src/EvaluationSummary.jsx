@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router";
-import { ArrowDown, ArrowUp, Award, BarChart3, FileSpreadsheet, Info, Printer, Search, SlidersHorizontal, TriangleAlert, Users, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Award, BarChart3, Check, ChevronDown, FileSpreadsheet, Info, Printer, Search, SlidersHorizontal, TriangleAlert, Users, X } from "lucide-react";
 import { apiFetch, apiJson } from "./api";
 import TablePagination, { usePagination } from "./TablePagination";
 import { GRADE_TONES, formatScore } from "./evaluationUtils";
@@ -116,6 +116,8 @@ export default function EvaluationSummary() {
   const rows = summary?.teachers ?? null;
   const teams = summary?.facets?.teams ?? [];
   const groups = (summary?.facets?.groups ?? []).filter((item) => item.team_id === team);
+  const allYears = Boolean(summary?.all_years);
+  const yearColumns = summary?.year_columns ?? [];
   const visible = useMemo(() => (rows ? sortRows(rows, sortKey, descending) : null), [rows, sortKey, descending]);
 
   const pager = usePagination(visible ?? [], 20);
@@ -154,16 +156,20 @@ export default function EvaluationSummary() {
   const yearPeriods = summary?.year_periods ?? periods;
   const officialCount = periods.filter((period) => period.official).length;
   const schoolYear = summary?.school_year;
+  const yearStart = typeof schoolYear === "number" ? schoolYear : null;
   const activePreset = !from && !to ? "year" : ["hk1", "hk2", "latest"].find((preset) => {
-    const range = presetRange(preset, schoolYear, yearPeriods.map((period) => ({ ...period, official: periods.find((p) => p.key === period.key)?.official ?? true })));
+    const range = presetRange(preset, yearStart, yearPeriods.map((period) => ({ ...period, official: periods.find((p) => p.key === period.key)?.official ?? true })));
     return range.from === from && range.to === to;
   });
   const gradeOptions = [...grades.map((grade, index) => ({ key: grade.key, label: grade.short, tone: GRADE_TONES[index] })), { key: "kxl", label: "KXL", tone: "red" }];
   const moreCount = [gradeFilter.length > 0, violation, min || max, status].filter(Boolean).length;
 
   const chips = [
-    team && { key: "team", label: `Tổ: ${teams.find((item) => item.id === team)?.name ?? ""}`, clear: { team: "", group: "" } },
-    group && { key: "group", label: `Nhóm: ${groups.find((item) => item.id === group)?.name ?? ""}`, clear: { group: "" } },
+    team && {
+      key: "team",
+      label: [teams.find((item) => item.id === team)?.name, group && groups.find((item) => item.id === group)?.name].filter(Boolean).join(" › "),
+      clear: { team: "", group: "" },
+    },
     homeroom && { key: "homeroom", label: homeroom === "yes" ? "Chủ nhiệm" : "Không chủ nhiệm", clear: { homeroom: "" } },
     gradeFilter.length > 0 && {
       key: "grades",
@@ -214,20 +220,21 @@ export default function EvaluationSummary() {
           <label className="ev-period-select">
             <span>Năm học</span>
             <select value={schoolYear ?? ""} onChange={(e) => update({ year: e.target.value, from: "", to: "" })}>
+              <option value="all">Tất cả các năm</option>
               {summary?.school_years.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
             </select>
           </label>
-          <div className="ev-segmented" role="group" aria-label="Khoảng thời gian">
+          {!allYears && <div className="ev-segmented" role="group" aria-label="Khoảng thời gian">
             {[["year", "Cả năm"], ["hk1", "Học kỳ I"], ["hk2", "Học kỳ II"], ["latest", "Tháng gần nhất"]].map(([preset, label]) => (
-              <button key={preset} type="button" className={activePreset === preset ? "active" : ""} disabled={!summary} onClick={() => update(presetRange(preset, schoolYear, yearPeriods.map((period) => ({ ...period, official: periods.find((p) => p.key === period.key)?.official ?? true }))))}>
+              <button key={preset} type="button" className={activePreset === preset ? "active" : ""} disabled={!summary} onClick={() => update(presetRange(preset, yearStart, yearPeriods.map((period) => ({ ...period, official: periods.find((p) => p.key === period.key)?.official ?? true }))))}>
                 {label}
               </button>
             ))}
-          </div>
+          </div>}
           <label className="ev-period-select">
             <span>Từ</span>
             <select value={from} onChange={(e) => update({ from: e.target.value })}>
-              <option value="">Đầu năm học</option>
+              <option value="">{allYears ? "Tháng đầu tiên" : "Đầu năm học"}</option>
               {yearPeriods.map((period) => <option key={period.key} value={period.key} disabled={to && period.key > to}>{period.label}</option>)}
             </select>
           </label>
@@ -250,16 +257,7 @@ export default function EvaluationSummary() {
             <Search size={15} />
             <input value={keyword} onChange={(e) => typeSearch(e.target.value)} placeholder="Tìm tên hoặc mã giáo viên..." />
           </label>
-          <select value={team ?? ""} onChange={(e) => update({ team: e.target.value, group: "" })} aria-label="Tổ">
-            <option value="">Mọi tổ</option>
-            {teams.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-          </select>
-          {team && groups.length > 0 && (
-            <select value={group ?? ""} onChange={(e) => update({ group: e.target.value })} aria-label="Nhóm">
-              <option value="">Mọi nhóm</option>
-              {groups.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </select>
-          )}
+          <UnitPicker teams={teams} groups={summary?.facets?.groups ?? []} team={team} group={group} onChange={(next) => update(next)} />
           <div className="ev-segmented" role="group" aria-label="Chủ nhiệm">
             {HOMEROOM.map(([value, label]) => (
               <button key={value} type="button" className={homeroom === value ? "active" : ""} onClick={() => update({ homeroom: value })}>{label}</button>
@@ -354,6 +352,12 @@ export default function EvaluationSummary() {
           </div>
         )}
 
+        {allYears && summary?.mixed_scale && (
+          <div className="ev-notice warn ev-summary-notice">
+            <TriangleAlert size={14} /> Các năm học dùng thang điểm khác nhau, điểm trung bình giữa các năm chỉ nên so sánh tương đối.
+          </div>
+        )}
+
         {summary?.mixed_grades && (
           <div className="ev-notice warn ev-summary-notice">
             <TriangleAlert size={14} /> Các tháng trong phạm vi dùng khung xếp loại khác nhau; những bậc không khớp được tách thành cột riêng.
@@ -374,12 +378,19 @@ export default function EvaluationSummary() {
                   {header("rank", "Hạng", "center rank-col")}
                   {header("name", "Giáo viên", "sticky")}
                   {header("team", "Tổ / nhóm")}
-                  {periods.map((period) => (
-                    <th key={period.id} className={`center ${period.official ? "" : "pending"}`} title={period.official ? period.full_label : `${period.full_label} — chưa công bố, không tính vào thống kê`}>
-                      {period.label}
-                      {!period.official && <small>chưa công bố</small>}
-                    </th>
-                  ))}
+                  {allYears
+                    ? yearColumns.map((column) => (
+                        <th key={column.value} className="center" title={`${column.official}/${column.months} tháng đã công bố`}>
+                          {column.label}
+                          <small>{column.official} tháng công bố</small>
+                        </th>
+                      ))
+                    : periods.map((period) => (
+                        <th key={period.id} className={`center ${period.official ? "" : "pending"}`} title={period.official ? period.full_label : `${period.full_label} — chưa công bố, không tính vào thống kê`}>
+                          {period.label}
+                          {!period.official && <small>chưa công bố</small>}
+                        </th>
+                      ))}
                   {grades.map((grade) => header(grade.key, grade.short, "num stat", grade.name))}
                   {header("no_grade", "KXL", "num stat", "Số tháng không xếp loại")}
                   {header("violations", "Vi phạm", "num stat", "Số tháng có vi phạm QCCM / đạo đức nhà giáo")}
@@ -406,11 +417,17 @@ export default function EvaluationSummary() {
                       {row.team ? row.team.name : <span className="ev-muted">Chưa thuộc tổ</span>}
                       {row.group && <small className="ev-sub">{row.group.name}</small>}
                     </td>
-                    {periods.map((period) => (
-                      <td key={period.id} className="center">
-                        <MonthCell cell={row.cells[period.id]} grades={grades} frame={homeroom} onOpen={(id) => navigate(`/evaluations/${id}`)} />
-                      </td>
-                    ))}
+                    {allYears
+                      ? yearColumns.map((column) => (
+                          <td key={column.value} className="center">
+                            <YearCell value={row.years?.[column.value]} onOpen={() => update({ year: String(column.value), from: "", to: "" })} />
+                          </td>
+                        ))
+                      : periods.map((period) => (
+                          <td key={period.id} className="center">
+                            <MonthCell cell={row.cells[period.id]} grades={grades} frame={homeroom} onOpen={(id) => navigate(`/evaluations/${id}`)} />
+                          </td>
+                        ))}
                     {grades.map((grade) => <td key={grade.key} className="num stat">{row.stats.counts[grade.key] || <span className="ev-muted">0</span>}</td>)}
                     <td className="num stat">{row.stats.no_grade ? <b className="ev-text-red">{row.stats.no_grade}</b> : <span className="ev-muted">0</span>}</td>
                     <td className="num stat">{row.stats.violations ? <b className="ev-text-red">{row.stats.violations}</b> : <span className="ev-muted">0</span>}</td>
@@ -430,6 +447,88 @@ export default function EvaluationSummary() {
 
       {summary && visible && <SummaryPrint summary={summary} rows={visible} homeroom={homeroom} />}
     </div>
+  );
+}
+
+const fold = (text) => (text ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase();
+
+function UnitPicker({ teams, groups, team, group, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [term, setTerm] = useState("");
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const outside = (event) => !ref.current?.contains(event.target) && setOpen(false);
+    const escape = (event) => event.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("mousedown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open]);
+  const query = fold(term.trim());
+  const tree = teams
+    .map((item) => {
+      const children = groups.filter((child) => child.team_id === item.id);
+      const selfHit = !query || fold(item.name).includes(query);
+      const hits = selfHit ? children : children.filter((child) => fold(child.name).includes(query));
+      return { ...item, children: hits, visible: selfHit || hits.length > 0 };
+    })
+    .filter((item) => item.visible);
+  const label = group ? groups.find((item) => item.id === group)?.name : team ? teams.find((item) => item.id === team)?.name : "Mọi tổ / nhóm";
+  const pick = (next) => {
+    onChange(next);
+    setOpen(false);
+    setTerm("");
+  };
+  return (
+    <div className="ev-unit-picker" ref={ref}>
+      <button type="button" className={`ev-more-btn ${team ? "active" : ""}`} aria-expanded={open} onClick={() => setOpen(!open)}>
+        <Users size={15} /> <span>{label}</span> <ChevronDown size={14} />
+      </button>
+      {open && (
+        <div className="ev-unit-panel" role="listbox" aria-label="Tổ / nhóm">
+          <label className="ev-search">
+            <Search size={15} />
+            <input autoFocus value={term} onChange={(e) => setTerm(e.target.value)} placeholder="Tìm tổ hoặc nhóm..." />
+          </label>
+          <div className="ev-unit-list">
+            {!query && (
+              <button type="button" className={!team ? "selected" : ""} onClick={() => pick({ team: "", group: "" })}>
+                <span>Mọi tổ / nhóm</span>
+                {!team && <Check size={14} />}
+              </button>
+            )}
+            {tree.map((item) => (
+              <div key={item.id}>
+                <button type="button" className={`unit ${team === item.id && !group ? "selected" : ""}`} onClick={() => pick({ team: String(item.id), group: "" })}>
+                  <span>{item.name}</span>
+                  {team === item.id && !group && <Check size={14} />}
+                </button>
+                {item.children.map((child) => (
+                  <button key={child.id} type="button" className={`child ${group === child.id ? "selected" : ""}`} onClick={() => pick({ team: String(item.id), group: String(child.id) })}>
+                    <span>{child.name}</span>
+                    {group === child.id && <Check size={14} />}
+                  </button>
+                ))}
+              </div>
+            ))}
+            {!tree.length && <p className="ev-muted">Không tìm thấy tổ hoặc nhóm.</p>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function YearCell({ value, onOpen }) {
+  if (!value) return <span className="ev-muted">—</span>;
+  return (
+    <button type="button" className="ev-month-cell" onClick={onOpen} title="Xem bảng của năm học này">
+      <b className="ev-year-score">{formatScore(value.average)}</b>
+      <small>{value.months} tháng</small>
+    </button>
   );
 }
 
@@ -493,7 +592,9 @@ function SummaryPrint({ summary, rows, homeroom }) {
             <th style={{ width: "4%" }}>Hạng</th>
             <th style={{ width: "16%" }}>Họ và tên</th>
             <th style={{ width: "12%" }}>Tổ / nhóm</th>
-            {periods.map((period) => <th key={period.id}>{period.label}{!period.official && <><br />(chưa công bố)</>}</th>)}
+            {summary.all_years
+              ? summary.year_columns.map((column) => <th key={column.value}>Năm học {column.label}</th>)
+              : periods.map((period) => <th key={period.id}>{period.label}{!period.official && <><br />(chưa công bố)</>}</th>)}
             {grades.map((grade) => <th key={grade.key}>{grade.short}</th>)}
             <th>KXL</th>
             <th>Vi phạm</th>
@@ -508,7 +609,9 @@ function SummaryPrint({ summary, rows, homeroom }) {
               <td className="center">{row.rank ?? ""}</td>
               <td>{row.name}</td>
               <td>{[row.team?.name, row.group?.name].filter(Boolean).join(" / ")}</td>
-              {periods.map((period) => <td key={period.id} className="center">{cellText(row.cells[period.id])}</td>)}
+              {summary.all_years
+                ? summary.year_columns.map((column) => <td key={column.value} className="center">{row.years?.[column.value] ? `${formatScore(row.years[column.value].average)} (${row.years[column.value].months} th)` : "—"}</td>)
+                : periods.map((period) => <td key={period.id} className="center">{cellText(row.cells[period.id])}</td>)}
               {grades.map((grade) => <td key={grade.key} className="center">{row.stats.counts[grade.key] ?? 0}</td>)}
               <td className="center">{row.stats.no_grade}</td>
               <td className="center">{row.stats.violations}</td>
