@@ -21,14 +21,16 @@ export function usePagination(items, initialSize = 10) {
   };
 }
 
-export default function TablePagination({ pager, noun, sizes = [10, 20, 50] }) {
+export default function TablePagination({ pager, noun, sizes = [10, 20, 50], showRange = true }) {
   const { page, pageSize, totalPages, total, setPage, setPageSize } = pager;
   if (!total) return null;
   return (
     <div className="pagination">
-      <span>
-        Hiển thị <b>{(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)}</b> trong {total} {noun}
-      </span>
+      {showRange && (
+        <span>
+          Hiển thị <b>{(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)}</b> trong {total} {noun}
+        </span>
+      )}
       <div>
         <label>
           Số dòng{" "}
