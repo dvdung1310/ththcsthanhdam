@@ -3652,10 +3652,9 @@
 
 .ev-progress.thin {
   position: absolute;
-  right: 18px;
   bottom: 6px;
   left: 18px;
-  width: auto;
+  width: 50%;
   height: 3px;
   margin: 0;
 }
