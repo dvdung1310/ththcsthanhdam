@@ -3051,8 +3051,7 @@
   margin-left: 0;
 }
 
-.ev-summary-toolbar > select,
-.ev-top-select {
+.ev-summary-toolbar > select {
   height: 36px;
   padding: 0 10px;
   border: 1px solid #dfe3ec;

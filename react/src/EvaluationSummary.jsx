@@ -7,6 +7,8 @@ import { GRADE_TONES, formatScore } from "./evaluationUtils";
 import { useOutsideClose } from "./PeoplePicker";
 import "./Evaluation.css";
 import Avatar from "./Avatar";
+import Dropdown from "./Dropdown";
+import MonthRangePicker from "./MonthRangePicker";
 
 const collator = new Intl.Collator("vi");
 const givenName = (name) => (name ?? "").trim().split(/\s+/).at(-1);
@@ -47,16 +49,6 @@ function sortRows(rows, key, descending) {
     }
     return sign * byName(a, b);
   });
-}
-
-function presetRange(preset, year, periods) {
-  if (preset === "hk1") return { from: `${year}-08`, to: `${year}-12` };
-  if (preset === "hk2") return { from: `${year + 1}-01`, to: `${year + 1}-05` };
-  if (preset === "latest") {
-    const last = periods.filter((period) => period.official).at(-1) ?? periods.at(-1);
-    return last ? { from: last.key, to: last.key } : { from: "", to: "" };
-  }
-  return { from: "", to: "" };
 }
 
 export default function EvaluationSummary() {
@@ -190,10 +182,6 @@ export default function EvaluationSummary() {
   const officialCount = periods.filter((period) => period.official).length;
   const schoolYear = summary?.school_year;
   const yearStart = typeof schoolYear === "number" ? schoolYear : null;
-  const activePreset = !from && !to ? "year" : ["hk1", "hk2", "latest"].find((preset) => {
-    const range = presetRange(preset, yearStart, yearPeriods.map((period) => ({ ...period, official: periods.find((p) => p.key === period.key)?.official ?? true })));
-    return range.from === from && range.to === to;
-  });
   const gradeOptions = [...grades.map((grade, index) => ({ key: grade.key, label: grade.short, tone: GRADE_TONES[index] })), { key: "kxl", label: "KXL", tone: "red" }];
   const moreCount = [gradeFilter.length > 0, violation, min || max, status].filter(Boolean).length;
 
@@ -238,34 +226,17 @@ export default function EvaluationSummary() {
 
       <section className="ev-card">
         <div className="ev-filters ev-summary-range">
-          <label className="ev-period-select">
-            <span>Năm học</span>
-            <select value={schoolYear ?? ""} onChange={(e) => update({ year: e.target.value, from: "", to: "" })}>
-              <option value="all">Tất cả các năm</option>
-              {summary?.school_years.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-            </select>
-          </label>
-          {!allYears && <div className="ev-segmented" role="group" aria-label="Khoảng thời gian">
-            {[["year", "Cả năm"], ["hk1", "Học kỳ I"], ["hk2", "Học kỳ II"], ["latest", "Tháng gần nhất"]].map(([preset, label]) => (
-              <button key={preset} type="button" className={activePreset === preset ? "active" : ""} disabled={!summary} onClick={() => update(presetRange(preset, yearStart, yearPeriods.map((period) => ({ ...period, official: periods.find((p) => p.key === period.key)?.official ?? true }))))}>
-                {label}
-              </button>
-            ))}
-          </div>}
-          <label className="ev-period-select">
-            <span>Từ</span>
-            <select value={from} onChange={(e) => update({ from: e.target.value })}>
-              <option value="">{allYears ? "Tháng đầu tiên" : "Đầu năm học"}</option>
-              {yearPeriods.map((period) => <option key={period.key} value={period.key} disabled={to && period.key > to}>{period.label}</option>)}
-            </select>
-          </label>
-          <label className="ev-period-select">
-            <span>Đến</span>
-            <select value={to} onChange={(e) => update({ to: e.target.value })}>
-              <option value="">Mới nhất</option>
-              {yearPeriods.map((period) => <option key={period.key} value={period.key} disabled={from && period.key < from}>{period.label}</option>)}
-            </select>
-          </label>
+          <Dropdown
+            label="Năm học"
+            value={schoolYear ?? ""}
+            onChange={(value) => update({ year: String(value), from: "", to: "" })}
+            options={[
+              { value: "all", label: "Tất cả các năm" },
+              { divider: true },
+              ...(summary?.school_years ?? []).map((item) => ({ value: item.value, label: `Năm học ${item.label}` })),
+            ]}
+          />
+          <MonthRangePicker periods={yearPeriods} allYears={allYears} schoolYear={yearStart} from={from} to={to} onChange={(range) => update(range)} />
           <div className="ev-summary-actions">
             <InfoPopover label="Giới thiệu bảng tổng hợp">
               Tổng hợp và xếp hạng kết quả các tháng <b>đã công bố</b> để Hội đồng thi đua tham khảo khi bình xét theo đợt và cuối năm. Hệ thống không tự xếp danh hiệu.
@@ -340,9 +311,7 @@ export default function EvaluationSummary() {
               </div>
             )}
           </div>
-          <select value={top} onChange={(e) => update({ top: e.target.value })} aria-label="Giới hạn" className="ev-top-select">
-            {TOPS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
+          <Dropdown className="ev-top-select" label="Giới hạn" align="right" value={top} onChange={(value) => update({ top: String(value) })} options={TOPS.map(([value, label]) => ({ value, label }))} />
         </div>
 
         {chips.length > 0 && (
