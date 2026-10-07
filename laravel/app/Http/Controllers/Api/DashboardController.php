@@ -47,9 +47,19 @@ class DashboardController extends Controller
         };
         $current = $metrics($currentTasks);
         $previous = $metrics($previousTasks);
-        $assignees = function ($task) use ($teachers) {
-            return $teachers->filter(fn ($teacher) => $task->teachers->contains('id', $teacher->id) || $task->departments->pluck('id')->intersect($teacher->unitIds())->isNotEmpty())->pluck('id');
-        };
+        $teacherUnits = $teachers->mapWithKeys(fn ($teacher) => [$teacher->id => $teacher->unitIds()]);
+        $unitMembers = [];
+        foreach ($teacherUnits as $teacherId => $ids) {
+            foreach ($ids as $id) {
+                $unitMembers[$id][] = $teacherId;
+            }
+        }
+        $inView = $teacherIds->flip();
+        $assigneeIds = $tasks->mapWithKeys(fn ($task) => [$task->id => collect([
+            ...$task->teachers->pluck('id')->filter(fn ($id) => $inView->has($id)),
+            ...$task->departments->flatMap(fn ($department) => $unitMembers[$department->id] ?? []),
+        ])->unique()->values()]);
+        $assignees = fn ($task) => $assigneeIds->get($task->id, collect());
         $working = $teachers->where('employment_status', 'working')->pluck('id');
         $activeTeachers = $currentTasks->flatMap($assignees)->unique()->intersect($working)->count();
         $pending = $tasks->whereIn('status', Task::OPEN);
@@ -59,16 +69,19 @@ class DashboardController extends Controller
         $overdue = $pending->filter(fn ($t) => $t->status !== Task::WAITING_APPROVAL && $t->due_at?->isPast());
         $soon = $pending->filter(fn ($t) => $t->status !== Task::WAITING_APPROVAL && $t->due_at && $t->due_at->gt(now()) && $t->due_at->lte(now()->addDay()));
         $attentionTasks = $waiting->merge($overdue)->merge($soon)->unique('id')->sortBy('due_at')->map(fn ($t) => ['id' => $t->id, 'title' => $t->title, 'code' => $t->code, 'reason' => $t->status === Task::WAITING_APPROVAL ? 'Chờ duyệt' : ($t->due_at?->isPast() ? 'Quá hạn' : 'Còn dưới 24 giờ')])->values();
-        $unitIdsInView = $teachers->flatMap(fn ($t) => $t->unitIds())->unique()
+        $unitIdsInView = $teacherUnits->flatten()->unique()
             ->when($scope === 'department', fn ($ids) => $ids->intersect($unitIds))->values()->all();
+        $assignedCount = $currentTasks->flatMap($assignees)->countBy();
+        $completedCount = $currentTasks->where('status', Task::COMPLETED)->flatMap($assignees)->countBy();
         $memberStats = fn ($teacher) => [
             'id' => $teacher->id, 'name' => $teacher->user?->name,
-            'assigned' => $currentTasks->filter(fn ($t) => $assignees($t)->contains($teacher->id))->count(),
-            'completed' => $currentTasks->where('status', Task::COMPLETED)->filter(fn ($t) => $assignees($t)->contains($teacher->id))->count(),
+            'assigned' => $assignedCount->get($teacher->id, 0),
+            'completed' => $completedCount->get($teacher->id, 0),
         ];
-        $departments = Department::ordered($unitIdsInView)->map(function ($department) use ($teachers, $currentTasks, $assignees, $memberStats) {
-            $members = $teachers->filter(fn ($t) => in_array($department['id'], $t->unitIds(), true));
-            $unitTasks = $currentTasks->filter(fn ($t) => $assignees($t)->intersect($members->pluck('id'))->isNotEmpty());
+        $departments = Department::ordered($unitIdsInView)->map(function ($department) use ($teachers, $currentTasks, $assignees, $memberStats, $unitMembers) {
+            $memberIds = $unitMembers[$department['id']] ?? [];
+            $members = $teachers->whereIn('id', $memberIds);
+            $unitTasks = $currentTasks->filter(fn ($t) => $assignees($t)->intersect($memberIds)->isNotEmpty());
             $completed = $unitTasks->where('status', Task::COMPLETED)->count();
 
             return ['id' => $department['id'], 'name' => $department['label'], 'assigned' => $unitTasks->count(), 'completed' => $completed, 'completion' => $unitTasks->count() ? round($completed / $unitTasks->count() * 100, 1) : null, 'teachers' => $members->map($memberStats)->values()];
