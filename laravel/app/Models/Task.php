@@ -18,6 +18,8 @@ class Task extends Model
     public const OPEN = [self::NOT_STARTED, self::IN_PROGRESS, self::WAITING_APPROVAL];
     public const CLOSED = [self::COMPLETED, self::CANCELLED];
 
+    public const TITLE_MAX = 2000;
+
     protected $fillable = ['category_id', 'created_by', 'code', 'title', 'description', 'requirements', 'priority', 'share_submissions', 'status', 'starts_at', 'due_at', 'completed_at'];
 
     protected function casts(): array

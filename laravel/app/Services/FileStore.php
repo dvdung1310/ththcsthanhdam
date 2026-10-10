@@ -35,7 +35,8 @@ class FileStore
             return;
         }
         $inUse = LibraryNode::where('file_id', $file->id)->exists()
-            || DB::table('file_attachments')->where('file_id', $file->id)->exists();
+            || DB::table('file_attachments')->where('file_id', $file->id)->exists()
+            || DB::table('task_draft_sources')->where('file_id', $file->id)->exists();
         if ($inUse) {
             return;
         }

@@ -102,6 +102,18 @@
   font-size: 13px;
 }
 
+.task-compose-body .task-title-field textarea {
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid #dfe3ec;
+  border-radius: 8px;
+  outline: 0;
+  color: #34405e;
+  background: #fff;
+  font-size: 13px;
+}
+
+.task-compose-body .task-title-field textarea:focus,
 .task-compose-body .field input:focus,
 .task-compose-body .field select:focus,
 .task-compose-body .rich-editor:focus-within {

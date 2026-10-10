@@ -14,8 +14,10 @@ use App\Models\TaskCategory;
 use App\Models\TaskSubmission;
 use App\Models\TaskUpdate;
 use App\Models\Employee;
+use App\Models\TaskDraft;
 use App\Models\User;
 use App\Services\FileStore;
+use App\Services\LibraryAccess;
 use App\Notifications\TaskAssignedNotification;
 use App\Notifications\TaskReminderNotification;
 use App\Notifications\TaskWorkflowNotification;
@@ -93,20 +95,24 @@ class TaskController extends Controller
             'current_employee' => $user->employee ? ['id' => $user->employee->id, 'user_id' => $user->id, 'name' => $user->name, 'avatar_url' => $avatar($user)] : null,
             'current_user_id' => $user->id,
             'can_assign' => $canAssign,
-            'library_files' => $this->readableLibraryFiles($user),
+            'can_browse_library' => $user->hasPermission('library.view'),
         ]);
     }
 
     public function store(Request $request): JsonResponse
     {
         $data = $this->validateTask($request);
+        $draft = $this->ownedDraft($request);
         $this->ensureAssignmentScope($request, $data);
-        $task = DB::transaction(function () use ($request, $data) {
+        $task = DB::transaction(function () use ($request, $data, $draft) {
             $task = Task::create([...$this->taskAttributes($data), 'code' => $this->nextCode(), 'created_by' => $request->user()->id, 'status' => Task::NOT_STARTED]);
             $this->syncAssignees($task, $data, $request->user());
             $this->syncReviewers($task, $data);
             $this->syncLibraryFiles($request, $task, $data);
             $this->storeAttachments($request, $task);
+            if ($draft) {
+                $this->consumeDraft($task, $draft);
+            }
             $this->recordStatus($task, null, Task::NOT_STARTED, 'Khởi tạo và giao công việc', $request->user());
             $task->updates()->create(['created_by' => $request->user()->id, 'status' => Task::NOT_STARTED, 'content' => 'Đã tạo công việc.']);
 
@@ -484,7 +490,7 @@ class TaskController extends Controller
     private function validateTask(Request $request): array
     {
         $data = $request->validate([
-            'title' => ['required', 'string', 'max:255'],
+            'title' => ['required', 'string', 'max:'.Task::TITLE_MAX],
             'description' => ['nullable', 'string'],
             'category_id' => ['nullable', Rule::exists('task_categories', 'id')->where('is_active', true)],
             'reviewer_ids' => ['nullable', 'array', 'max:10'],
@@ -503,7 +509,7 @@ class TaskController extends Controller
             'attachments.*' => ['file', 'max:20480', 'mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png,zip'],
             'remove_attachment_ids' => ['nullable', 'array'],
             'remove_attachment_ids.*' => ['integer', 'exists:files,id'],
-        ]);
+        ], ['title.max' => 'Tên công việc tối đa '.Task::TITLE_MAX.' ký tự.']);
         $reviewerIds = collect($data['reviewer_ids'] ?? [])->map(fn ($id) => (int) $id);
         abort_if($reviewerIds->contains($request->user()->id) && in_array($request->user()->employee?->id, array_map('intval', $data['employee_ids'] ?? []), true), 422, 'Bạn không thể tự duyệt công việc của chính mình.');
         abort_if($reviewerIds->isNotEmpty() && Employee::whereIn('id', $data['employee_ids'] ?? [])->whereIn('user_id', $reviewerIds)->exists(), 422, 'Người duyệt không được đồng thời là người thực hiện được chọn.');
@@ -901,33 +907,46 @@ class TaskController extends Controller
         return app(FileStore::class)->store($uploaded, $folder, $actor);
     }
 
-    private ?int $sharedFolder = null;
-
-    private function sharedFolderId(): ?int
-    {
-        return $this->sharedFolder ??= LibraryNode::where('is_system', true)->whereNull('parent_id')->where('type', LibraryNode::FOLDER)->value('id');
-    }
-
-    private function readableLibraryFiles(User $user): Collection
-    {
-        $shared = $this->sharedFolderId();
-        if (! $user->hasPermission('library.view') || ! $shared) {
-            return collect();
-        }
-
-        return LibraryNode::with('file:id,size,mime_type')->where('type', LibraryNode::FILE)->where('parent_id', $shared)
-            ->orderBy('name')->get()
-            ->map(fn (LibraryNode $node) => ['id' => $node->id, 'name' => $node->name, 'size' => $node->file?->size, 'mime_type' => $node->file?->mime_type])->values();
-    }
-
     private function syncLibraryFiles(Request $request, Task $task, array $data): void
     {
         $ids = collect($data['library_file_ids'] ?? [])->map(fn ($id) => (int) $id)->unique();
         $existing = $task->exists ? $task->libraryFiles()->pluck('library_nodes.id') : collect();
         $added = $ids->diff($existing);
-        $allowed = $added->isEmpty() ? collect() : LibraryNode::whereIn('id', $added)->where('type', LibraryNode::FILE)->where('parent_id', $this->sharedFolderId() ?? 0)->pluck('id');
-        abort_if($added->diff($allowed)->isNotEmpty(), 422, 'Chỉ gắn được file trong thư mục Chia sẻ chung.');
+        $access = new LibraryAccess($request->user());
+        $allowed = $added->isEmpty() ? collect() : LibraryNode::whereIn('id', $added)->where('type', LibraryNode::FILE)->get()->filter(fn (LibraryNode $node) => $access->can($node, LibraryAccess::READ))->pluck('id');
+        abort_if($added->diff($allowed)->isNotEmpty(), 422, 'Chỉ gắn được file trong Kho dữ liệu mà bạn có quyền xem.');
         $task->libraryFiles()->sync($ids->all());
+    }
+
+    private function ownedDraft(Request $request): ?TaskDraft
+    {
+        $id = $request->validate(['draft_id' => ['nullable', 'integer']])['draft_id'] ?? null;
+        if (! $id) {
+            return null;
+        }
+        $draft = TaskDraft::with('batch.sources.node')->find($id);
+        abort_unless($draft && $draft->batch->created_by === $request->user()->id, 404, 'Bản nháp không còn tồn tại.');
+
+        return $draft;
+    }
+
+    private function consumeDraft(Task $task, TaskDraft $draft): void
+    {
+        $batch = $draft->batch;
+        $wanted = collect($draft->payload['source_ids'] ?? null);
+        $sources = $batch->sources->when(array_key_exists('source_ids', $draft->payload), fn ($all) => $all->whereIn('id', $wanted));
+        foreach ($sources as $source) {
+            if ($source->file_id && ! DB::table('file_attachments')->where('attachable_type', Task::class)->where('attachable_id', $task->id)->where('file_id', $source->file_id)->exists()) {
+                DB::table('file_attachments')->insert(['file_id' => $source->file_id, 'attachable_type' => Task::class, 'attachable_id' => $task->id, 'purpose' => 'attachment', 'created_at' => now(), 'updated_at' => now()]);
+            }
+            if ($source->node) {
+                $task->libraryFiles()->syncWithoutDetaching([$source->node->id]);
+            }
+        }
+        $draft->delete();
+        if (! $batch->drafts()->exists()) {
+            $batch->delete();
+        }
     }
 
     private function storeAttachments(Request $request, Task $task): void
@@ -986,7 +1005,7 @@ class TaskController extends Controller
             'created_by' => $task->created_by, 'creator' => $task->creator?->name,
             'employee_ids' => $task->employees->pluck('id'), 'department_ids' => $task->departments->pluck('id'),
             'library_file_ids' => $task->libraryFiles->pluck('id'),
-            'library_files' => $task->libraryFiles->map(fn (LibraryNode $node) => ['id' => $node->id, 'name' => $node->name, 'size' => $node->file?->size, 'mime_type' => $node->file?->mime_type, 'in_shared' => $node->parent_id === $this->sharedFolderId(), 'download_url' => route('tasks.library-file', ['task' => $task->id, 'node' => $node->id])])->values(),
+            'library_files' => $task->libraryFiles->map(fn (LibraryNode $node) => ['id' => $node->id, 'name' => $node->name, 'size' => $node->file?->size, 'mime_type' => $node->file?->mime_type, 'download_url' => route('tasks.library-file', ['task' => $task->id, 'node' => $node->id])])->values(),
             'assignees' => $assignees->map(fn (Employee $t) => ['id' => $t->id, 'name' => $t->user->name, 'avatar_url' => $t->user->avatar_path ? route('avatars.show', ['filename' => basename($t->user->avatar_path)]) : null, 'direct' => $task->employees->contains('id', $t->id), 'reminder_count' => (int) ($reminders->get($t->id)?->reminder_count ?? 0), 'last_reminded_at' => $reminders->get($t->id)?->last_reminded_at])->values(),
             'departments' => $task->departments->map(fn ($d) => Department::pathLabel($d->id))->values(),
             'units' => $task->departments->map(fn ($d) => [

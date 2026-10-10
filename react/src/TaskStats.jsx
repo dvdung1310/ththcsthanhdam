@@ -383,7 +383,7 @@ export default function TaskStats({ onTask }) {
                 <article key={t.id}>
                   <div className="kpi-task-main">
                     <code>{t.code}</code>
-                    <b>{t.title}</b>
+                    <b title={t.title}>{t.title}</b>
                     <small>{t.category || "Chưa có loại nhiệm vụ"}</small>
                     <small>
                       {statusLabels[t.status] || t.status} · Hạn:{" "}
