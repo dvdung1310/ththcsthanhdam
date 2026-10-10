@@ -41,8 +41,27 @@ class TaskStatsController extends Controller
         $inProgress = $now->gte($start) && $now->lt($start->copy()->addMonth());
         $cutoff = $inProgress ? $now : null;
         $previousEnd = $inProgress ? Carbon::createFromTimestamp(min($previous->copy()->addSeconds($start->diffInSeconds($now))->timestamp, $previous->copy()->addMonth()->timestamp)) : null;
-        $inMonth = fn (Task $task, Carbon $from, ?Carbon $to = null) => $task->due_at && $task->due_at->gte($from) && $task->due_at->lt($to ?? $from->copy()->addMonth());
-        $belongsTo = fn (Task $task, Employee $employee) => $task->employees->contains('id', $employee->id) || $task->departments->pluck('id')->intersect($employee->unitIds())->isNotEmpty();
+        $unitsOf = $employees->mapWithKeys(fn (Employee $e) => [$e->id => $e->unitIds()])->all();
+        $membersOf = [];
+        foreach ($unitsOf as $employeeId => $units) {
+            foreach ($units as $unit) {
+                $membersOf[$unit][$employeeId] = true;
+            }
+        }
+        $assignees = $tasks->mapWithKeys(function (Task $task) use ($unitsOf, $membersOf) {
+            $set = [];
+            foreach ($task->employees as $employee) {
+                if (isset($unitsOf[$employee->id])) {
+                    $set[$employee->id] = true;
+                }
+            }
+            foreach ($task->departments as $department) {
+                $set += $membersOf[$department->id] ?? [];
+            }
+
+            return [$task->id => $set];
+        })->all();
+        $belongsTo = fn (Task $task, Employee $employee) => isset($assignees[$task->id][$employee->id]);
         $revisions = DB::table('task_submissions')->whereIn('task_id', $tasks->pluck('id'))->where('status', 'revision_required')->selectRaw('task_id, COUNT(*) as total')->groupBy('task_id')->pluck('total', 'task_id');
 
         $metrics = function (Collection $cohort, ?Carbon $cutoff = null) use ($finishedAt) {
@@ -64,7 +83,15 @@ class TaskStatsController extends Controller
                 'on_time_rate' => $completed->count() ? round($onTime->count() / $completed->count() * 100, 1) : null,
             ];
         };
-        $cohort = fn (Carbon $from, ?callable $filter = null, ?Carbon $to = null) => $tasks->filter(fn (Task $t) => $inMonth($t, $from, $to) && (! $filter || $filter($t)))->values();
+        $due = $tasks->mapWithKeys(fn (Task $t) => [$t->id => $t->due_at?->timestamp])->all();
+        $windows = [];
+        $cohort = function (Carbon $from, ?callable $filter = null, ?Carbon $to = null) use ($tasks, $due, &$windows) {
+            $start = $from->timestamp;
+            $end = ($to ?? $from->copy()->addMonth())->timestamp;
+            $window = $windows["{$start}-{$end}"] ??= $tasks->filter(fn (Task $t) => $due[$t->id] !== null && $due[$t->id] >= $start && $due[$t->id] < $end)->values();
+
+            return $filter ? $window->filter($filter)->values() : $window;
+        };
         $current = fn (?callable $filter = null) => $metrics($cohort($start, $filter), $cutoff);
         $before = fn (?callable $filter = null) => $compare === 'none' ? null : $metrics($cohort($previous, $filter, $previousEnd));
 
@@ -85,14 +112,14 @@ class TaskStatsController extends Controller
             ];
         })->sortByDesc('assigned')->values();
 
-        $departments = Department::ordered($unitIds->all())->map(function ($unit) use ($employees, $current, $before, $belongsTo, $unitIds) {
-            $members = $employees->filter(fn (Employee $t) => in_array($unit['id'], $t->unitIds(), true));
-            $ofMembers = fn (Task $t) => $members->contains(fn (Employee $m) => $belongsTo($t, $m));
+        $departments = Department::ordered($unitIds->all())->map(function ($unit) use ($current, $before, $assignees, $membersOf, $unitIds) {
+            $memberSet = $membersOf[$unit['id']] ?? [];
+            $ofMembers = fn (Task $t) => array_intersect_key($assignees[$t->id] ?? [], $memberSet) !== [];
 
             return [
                 'id' => $unit['id'], 'name' => $unit['label'], 'short_name' => $unit['name'], 'type' => $unit['type'],
                 'parent_id' => $unit['parent_id'] && $unitIds->contains($unit['parent_id']) ? $unit['parent_id'] : null,
-                'employees' => $members->count(), ...$current($ofMembers),
+                'employees' => count($memberSet), ...$current($ofMembers),
                 'previous' => $before($ofMembers),
             ];
         })->values();
