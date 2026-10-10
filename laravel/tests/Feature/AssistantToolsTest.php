@@ -2,10 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Models\AiConversation;
+use App\Models\AiMessage;
 use App\Models\Employee;
 use App\Models\Evaluation;
 use App\Models\EvaluationPeriod;
 use App\Models\LibraryNode;
+use App\Models\Permission;
 use App\Models\Task;
 use App\Models\User;
 use App\Services\AssistantTools;
@@ -148,10 +151,11 @@ class AssistantToolsTest extends TestCase
         Http::fake(['api.openai.com/*' => Http::sequence()
             ->push(['output' => [['type' => 'function_call', 'call_id' => 'call_1', 'name' => 'school_snapshot', 'arguments' => '{}']]])
             ->push(['output' => [['type' => 'message', 'content' => [['type' => 'output_text', 'text' => 'Có 13 việc quá hạn.']]]]])]);
-        $token = $this->postJson('/api/auth/login', ['email' => 'mai.nt@thanhdam.edu.vn', 'password' => 'Teacher@123'])->json('token');
-
-        $this->withToken($token)->postJson('/api/ai-assistant/ask', ['question' => 'Có bao nhiêu việc quá hạn?'])
-            ->assertOk()->assertJson(['answer' => 'Có 13 việc quá hạn.']);
+        $response = $this->withToken($this->token('mai.nt'))->postJson('/api/ai-assistant/ask', ['question' => 'Có bao nhiêu việc quá hạn?'])
+            ->assertOk()->assertJson(['answer' => 'Có 13 việc quá hạn.', 'conversation' => ['title' => 'Có bao nhiêu việc quá hạn?']]);
+        $conversation = AiConversation::findOrFail($response->json('conversation.id'));
+        $this->assertSame($this->user('mai.nt')->id, $conversation->user_id);
+        $this->assertSame([AiMessage::USER, AiMessage::ASSISTANT], $conversation->messages()->pluck('role')->all());
 
         $requests = Http::recorded()->map(fn ($pair) => $pair[0]->data());
         $this->assertCount(2, $requests);
@@ -159,6 +163,61 @@ class AssistantToolsTest extends TestCase
         $output = collect($requests[1]['input'])->firstWhere('type', 'function_call_output');
         $this->assertSame('call_1', $output['call_id']);
         $this->assertSame('toàn trường', json_decode($output['output'], true)['scope']);
+    }
+
+    public function test_follow_up_questions_reuse_the_saved_conversation_as_context(): void
+    {
+        config(['services.openai.key' => 'test-key']);
+        $conversation = AiConversation::create(['user_id' => $this->user('mai.nt')->id, 'title' => 'Cũ', 'last_message_at' => now()]);
+        foreach (range(1, 15) as $turn) {
+            $conversation->messages()->createMany([['role' => AiMessage::USER, 'content' => "Câu hỏi {$turn}"], ['role' => AiMessage::ASSISTANT, 'content' => str_repeat("Trả lời {$turn} ", 200)]]);
+        }
+        Http::fake(['api.openai.com/*' => Http::response(['output' => [['type' => 'message', 'content' => [['type' => 'output_text', 'text' => 'Đáp']]]]])]);
+
+        $this->withToken($this->token('mai.nt'))->postJson('/api/ai-assistant/ask', ['question' => 'Còn tổ kia?', 'conversation_id' => $conversation->id])
+            ->assertOk()->assertJsonPath('conversation.id', $conversation->id);
+
+        $input = collect(Http::recorded()->first()[0]->data()['input']);
+        $history = $input->slice(0, -1);
+        $this->assertSame('Còn tổ kia?', $input->last()['content']);
+        $this->assertLessThanOrEqual(20, $history->count());
+        $this->assertLessThanOrEqual(12000 + 1500, $history->sum(fn ($message) => mb_strlen($message['content'])));
+        $this->assertTrue($history->where('role', 'assistant')->every(fn ($message) => mb_strlen($message['content']) <= 1503));
+        $this->assertStringContainsString('Trả lời 15', $history->last()['content']);
+        $this->assertSame(32, $conversation->messages()->count());
+    }
+
+    public function test_conversations_are_private_to_their_owner(): void
+    {
+        $conversation = AiConversation::create(['user_id' => $this->user('mai.nt')->id, 'title' => 'Riêng tư', 'last_message_at' => now()]);
+        $this->user('khai.dq')->roles()->first()->permissions()->syncWithoutDetaching([Permission::where('code', 'ai.assistant')->value('id')]);
+        $token = $this->token('khai.dq');
+
+        $this->withToken($token)->getJson("/api/ai-assistant/conversations/{$conversation->id}")->assertNotFound();
+        $this->withToken($token)->patchJson("/api/ai-assistant/conversations/{$conversation->id}", ['title' => 'x'])->assertNotFound();
+        $this->withToken($token)->deleteJson("/api/ai-assistant/conversations/{$conversation->id}")->assertNotFound();
+        $this->withToken($token)->postJson('/api/ai-assistant/ask', ['question' => 'Hi', 'conversation_id' => $conversation->id])->assertNotFound();
+        $this->assertNotContains($conversation->id, $this->withToken($token)->getJson('/api/ai-assistant/conversations')->json('data.*.id'));
+
+        $owner = $this->token('mai.nt');
+        $this->withToken($owner)->patchJson("/api/ai-assistant/conversations/{$conversation->id}", ['title' => 'Đổi tên'])->assertOk()->assertJsonPath('conversation.title', 'Đổi tên');
+        $this->withToken($owner)->deleteJson("/api/ai-assistant/conversations/{$conversation->id}")->assertOk();
+        $this->assertDatabaseMissing('ai_conversations', ['id' => $conversation->id]);
+    }
+
+    public function test_failed_questions_are_not_saved(): void
+    {
+        config(['services.openai.key' => 'test-key']);
+        Http::fake(['api.openai.com/*' => Http::response(['error' => 'boom'], 500)]);
+        $before = AiConversation::count();
+
+        $this->withToken($this->token('mai.nt'))->postJson('/api/ai-assistant/ask', ['question' => 'Lỗi?'])->assertStatus(502);
+        $this->assertSame($before, AiConversation::count());
+    }
+
+    private function token(string $login): string
+    {
+        return $this->postJson('/api/auth/login', ['email' => "{$login}@thanhdam.edu.vn", 'password' => 'Teacher@123'])->json('token');
     }
 
     private function user(string $login): User
