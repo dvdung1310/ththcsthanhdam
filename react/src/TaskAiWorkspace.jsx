@@ -27,8 +27,8 @@ import FilePreview from "./FilePreview";
 import ActionMenu from "./ActionMenu";
 import TitleInput from "./TitleInput";
 import { CompactAssignees, ReviewerPicker, RichTextEditor } from "./TaskManagement";
-import { SharedFilePicker } from "./TaskDocuments";
-import { formatBytes } from "./fileUtils";
+import LibraryFilePicker from "./LibraryFilePicker";
+import { fileIcon, fileTone, formatBytes } from "./fileUtils";
 import "./TaskAiWorkspace.css";
 
 const PRIORITIES = [
@@ -51,6 +51,7 @@ const fromNow = (value) => {
   if (hours < 24) return `${hours} giờ trước`;
   return `${Math.round(hours / 24)} ngày trước`;
 };
+const unsupported = (node) => (/\.(pdf|docx|txt|jpe?g|png|webp)$/i.test(node.name) ? null : "AI chưa đọc được định dạng này.");
 const shortDate = (value) => (value ? value.slice(0, 10).split("-").reverse().join("/") : "");
 
 export default function TaskAiWorkspace() {
@@ -129,7 +130,7 @@ export default function TaskAiWorkspace() {
         <StartView
           refs={refs}
           batches={batches}
-          initialNodeId={location.state?.nodeId ?? null}
+          initialNodes={location.state?.nodes ?? []}
           onAnalyzed={(batch, message) => {
             setBatches((current) => [batch, ...current]);
             setActiveId(batch.id);
@@ -154,11 +155,8 @@ export default function TaskAiWorkspace() {
   );
 }
 
-function StartView({ refs, batches, initialNodeId, onAnalyzed, onOpen, onError, onDeleteBatch }) {
-  const [sources, setSources] = useState(() => {
-    const node = initialNodeId && refs.library_files.find((file) => file.id === initialNodeId);
-    return node ? [{ key: `n${node.id}`, kind: "library", node }] : [];
-  });
+function StartView({ refs, batches, initialNodes, onAnalyzed, onOpen, onError, onDeleteBatch }) {
+  const [sources, setSources] = useState(() => initialNodes.filter((node) => !unsupported(node)).slice(0, MAX_DOCUMENTS).map((node) => ({ key: `n${node.id}`, kind: "library", node })));
   const [picking, setPicking] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [running, setRunning] = useState(false);
@@ -193,10 +191,10 @@ function StartView({ refs, batches, initialNodeId, onAnalyzed, onOpen, onError, 
     });
   };
   const addFiles = (fileList) => addItems([...fileList].map((file) => ({ key: `u${file.name}-${file.size}-${file.lastModified}`, kind: "upload", file })));
-  const toggleNode = (id) => {
-    const key = `n${id}`;
+  const toggleNode = (node) => {
+    const key = `n${node.id}`;
     if (sources.some((item) => item.key === key)) setSources((current) => current.filter((item) => item.key !== key));
-    else addItems([{ key, kind: "library", node: refs.library_files.find((file) => file.id === id) }]);
+    else addItems([{ key, kind: "library", node }]);
   };
   const remove = (key) => {
     setWarning("");
@@ -256,7 +254,7 @@ function StartView({ refs, batches, initialNodeId, onAnalyzed, onOpen, onError, 
                   <span className="ai-file-icon small"><FileText size={16} /></span>
                   <span className="ai-picked-name">
                     <b title={nameOf(item)}>{nameOf(item)}</b>
-                    <small>{item.kind === "library" ? "Chia sẻ chung" : "Tải lên từ máy"} · {formatBytes(sizeOf(item))}</small>
+                    <small>{item.kind === "library" ? "Kho dữ liệu" : "Tải lên từ máy"} · {formatBytes(sizeOf(item))}</small>
                   </span>
                   <button type="button" className="ai-icon-btn" onClick={() => remove(item.key)} aria-label={`Bỏ ${nameOf(item)}`}><X size={15} /></button>
                 </li>
@@ -265,7 +263,7 @@ function StartView({ refs, batches, initialNodeId, onAnalyzed, onOpen, onError, 
             <div className="ai-picked-actions">
               {sources.length < MAX_DOCUMENTS && (
                 <>
-                  <button type="button" className="secondary-btn" onClick={() => setPicking(true)}><FolderOpen size={15} /> Thêm từ Chia sẻ chung</button>
+                  {refs.can_browse_library && <button type="button" className="secondary-btn" onClick={() => setPicking(true)}><FolderOpen size={15} /> Thêm từ Kho dữ liệu</button>}
                   <button type="button" className="secondary-btn" onClick={() => inputRef.current?.click()}><Upload size={15} /> Tải thêm file</button>
                 </>
               )}
@@ -279,7 +277,7 @@ function StartView({ refs, batches, initialNodeId, onAnalyzed, onOpen, onError, 
             <b>Chọn công văn, kế hoạch hoặc yêu cầu báo cáo</b>
             <small>Chọn được tối đa {MAX_DOCUMENTS} tài liệu liên quan (công văn kèm phụ lục, mẫu biểu…) · PDF, Word (.docx), ảnh chụp · hoặc kéo thả vào đây</small>
             <div className="ai-source-actions">
-              <button type="button" className="secondary-btn" onClick={() => setPicking(true)}><FolderOpen size={16} /> Chọn từ Chia sẻ chung</button>
+              {refs.can_browse_library && <button type="button" className="secondary-btn" onClick={() => setPicking(true)}><FolderOpen size={16} /> Chọn từ Kho dữ liệu</button>}
               <button type="button" className="secondary-btn" onClick={() => inputRef.current?.click()}><Upload size={16} /> Tải file lên</button>
             </div>
           </div>
@@ -308,10 +306,12 @@ function StartView({ refs, batches, initialNodeId, onAnalyzed, onOpen, onError, 
       </section>
 
       {picking && (
-        <SharedFilePicker
-          files={refs.library_files}
+        <LibraryFilePicker
+          title="Chọn tài liệu để AI phân tích"
+          note={`AI đọc được PDF, Word (.docx), ảnh và văn bản thuần · tối đa ${MAX_DOCUMENTS} tài liệu.`}
           selected={sources.filter((item) => item.kind === "library").map((item) => item.node.id)}
           onToggle={toggleNode}
+          blockedReason={(node) => unsupported(node) || (sources.length >= MAX_DOCUMENTS ? `Mỗi lần phân tích tối đa ${MAX_DOCUMENTS} tài liệu.` : null)}
           onClose={() => setPicking(false)}
         />
       )}
@@ -327,6 +327,8 @@ function BatchView({ batch, refs, confirm, onChange, onDeleted, onError, onSucce
   const [preview, setPreview] = useState(null);
   const timers = useRef({});
   const pending = useRef({});
+  const latestBatch = useRef(batch);
+  latestBatch.current = batch;
 
   const setState = (id, value) => setStates((current) => ({ ...current, [id]: { ...current[id], ...value } }));
   const persist = useCallback(async (id) => {
@@ -351,6 +353,21 @@ function BatchView({ batch, refs, confirm, onChange, onDeleted, onError, onSucce
     pending.current[draft.id] = { ...pending.current[draft.id], ...change };
     clearTimeout(timers.current[draft.id]);
     timers.current[draft.id] = setTimeout(() => persist(draft.id), SAVE_DELAY);
+  };
+
+  const uploadSources = async (draftId, files) => {
+    const body = new FormData();
+    files.forEach((file) => body.append("files[]", file));
+    try {
+      const response = await apiFetch(`/api/task-draft-batches/${batch.id}/sources`, { method: "POST", headers: { Accept: "application/json" }, body });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(Object.values(result.errors ?? {}).flat()[0] ?? result.message ?? "Không tải được file lên.");
+      onChange((current) => ({ ...current, sources: [...current.sources, ...result.data] }));
+      const latest = latestBatch.current.drafts.find((item) => item.id === draftId);
+      if (latest) edit(latest, { source_ids: [...(latest.payload.source_ids ?? []), ...result.data.map((source) => source.id)] });
+    } catch (e) {
+      onError(e.message);
+    }
   };
 
   const addDraft = async (payload = {}) => {
@@ -399,6 +416,7 @@ function BatchView({ batch, refs, confirm, onChange, onDeleted, onError, onSucce
     payload.employee_ids.forEach((id) => body.append("employee_ids[]", id));
     payload.department_ids.forEach((id) => body.append("department_ids[]", id));
     payload.reviewer_ids.forEach((id) => body.append("reviewer_ids[]", id));
+    (payload.library_file_ids ?? []).forEach((id) => body.append("library_file_ids[]", id));
     try {
       const response = await apiFetch("/api/tasks", { method: "POST", headers: { Accept: "application/json" }, body });
       const result = await response.json().catch(() => ({}));
@@ -483,7 +501,7 @@ function BatchView({ batch, refs, confirm, onChange, onDeleted, onError, onSucce
                 <span className="ai-index">{index + 1}</span>
                 <span>
                   <b title={source.name}>{source.name}</b>
-                  <small>{[source.kind, source.origin === "library" ? "Chia sẻ chung" : "Tải lên"].filter(Boolean).join(" · ")}</small>
+                  <small>{[source.kind, source.origin === "library" ? "Kho dữ liệu" : "Tải lên"].filter(Boolean).join(" · ")}</small>
                 </span>
                 {source.available && (
                   <button type="button" className="ai-icon-btn" onClick={() => setPreview(index)} title="Xem tài liệu" aria-label={`Xem ${source.name}`}><ExternalLink size={14} /></button>
@@ -533,6 +551,7 @@ function BatchView({ batch, refs, confirm, onChange, onDeleted, onError, onSucce
             })}
             sources={batch.sources}
             onEdit={(change) => edit(draft, change)}
+            onUpload={(files) => uploadSources(draft.id, files)}
             onDuplicate={() => addDraft({ ...draft.payload, title: `${draft.payload.title} (bản sao)` })}
             onRemove={() => removeDraft(draft)}
             onOpenForm={() => onOpenForm(draft)}
@@ -553,7 +572,7 @@ function BatchView({ batch, refs, confirm, onChange, onDeleted, onError, onSucce
   );
 }
 
-function DraftCard({ index, draft, refs, sources, state, problems, selected, publishing, onSelect, onEdit, onDuplicate, onRemove, onOpenForm, onPublish }) {
+function DraftCard({ index, draft, refs, sources, state, problems, selected, publishing, onSelect, onEdit, onUpload, onDuplicate, onRemove, onOpenForm, onPublish }) {
   const payload = draft.payload;
   const [showDescription, setShowDescription] = useState(false);
   const editing = useMemo(() => ({ employee_ids: payload.employee_ids, department_ids: payload.department_ids }), [payload.employee_ids, payload.department_ids]);
@@ -608,26 +627,7 @@ function DraftCard({ index, draft, refs, sources, state, problems, selected, pub
           />
         </div>
       </div>
-      {sources.length > 0 && (
-        <div className="ai-attach">
-          <span>Đính kèm</span>
-          {sources.map((source, position) => {
-            const active = (payload.source_ids ?? []).includes(source.id);
-            return (
-              <button
-                key={source.id}
-                type="button"
-                className={active ? "active" : ""}
-                aria-pressed={active}
-                title={active ? "Bấm để bỏ đính kèm" : "Bấm để đính kèm vào công việc"}
-                onClick={() => onEdit({ source_ids: active ? payload.source_ids.filter((id) => id !== source.id) : [...(payload.source_ids ?? []), source.id] })}
-              >
-                <FileText size={12} /> {position + 1}. {source.name}
-              </button>
-            );
-          })}
-        </div>
-      )}
+      <DraftAttachments payload={payload} sources={sources} canBrowseLibrary={refs.can_browse_library} onEdit={onEdit} onUpload={onUpload} />
       <div className="ai-description">
         <button type="button" className={`ai-desc-toggle ${showDescription ? "open" : ""}`} onClick={() => setShowDescription(!showDescription)}>
           <span>Mô tả & yêu cầu</span> <ChevronDown size={14} />
@@ -650,5 +650,101 @@ function DraftCard({ index, draft, refs, sources, state, problems, selected, pub
         </button>
       </footer>
     </article>
+  );
+}
+
+function DraftAttachments({ payload, sources, canBrowseLibrary, onEdit, onUpload }) {
+  const [menu, setMenu] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const menuRef = useRef(null);
+  const inputRef = useRef(null);
+  const sourceIds = payload.source_ids ?? [];
+  const libraryIds = payload.library_file_ids ?? [];
+  const libraryFiles = payload.library_files ?? [];
+  const attached = sources.filter((source) => sourceIds.includes(source.id));
+
+  useEffect(() => {
+    if (!menu) return undefined;
+    const outside = (event) => !menuRef.current?.contains(event.target) && setMenu(false);
+    const escape = (event) => event.key === "Escape" && setMenu(false);
+    document.addEventListener("mousedown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("mousedown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [menu]);
+
+  const toggleSource = (id) => onEdit({ source_ids: sourceIds.includes(id) ? sourceIds.filter((item) => item !== id) : [...sourceIds, id] });
+  const toggleLibrary = (file) => {
+    const picked = libraryIds.includes(file.id);
+    onEdit({
+      library_file_ids: picked ? libraryIds.filter((id) => id !== file.id) : [...libraryIds, file.id],
+      library_files: picked ? libraryFiles.filter((item) => item.id !== file.id) : [...libraryFiles, { id: file.id, name: file.name, size: file.size, mime_type: file.mime_type }],
+    });
+  };
+  const upload = async (fileList) => {
+    const files = [...fileList];
+    if (!files.length) return;
+    setUploading(true);
+    await onUpload(files);
+    setUploading(false);
+  };
+
+  return (
+    <div className="ai-attach">
+      <span className="ai-attach-label">Đính kèm</span>
+      {attached.map((source) => (
+        <AttachmentChip key={`s${source.id}`} name={source.name} mime={source.mime_type} missing={!source.available} onRemove={() => toggleSource(source.id)} />
+      ))}
+      {libraryFiles.map((file) => (
+        <AttachmentChip key={`l${file.id}`} name={file.name} mime={file.mime_type} note="Kho dữ liệu" onRemove={() => toggleLibrary(file)} />
+      ))}
+      {!attached.length && !libraryFiles.length && <small className="ai-attach-empty">Chưa đính kèm file nào</small>}
+      <div className="ai-attach-add" ref={menuRef}>
+        <button type="button" className="ai-attach-btn" disabled={uploading} aria-expanded={menu} onClick={() => setMenu(!menu)}>
+          {uploading ? <LoaderCircle size={13} className="spin" /> : <Plus size={13} />} {uploading ? "Đang tải lên..." : "Thêm file"}
+        </button>
+        {menu && (
+          <div className="ai-attach-menu" role="menu">
+            {sources.length > 0 && (
+              <>
+                <p>Tài liệu ban đầu</p>
+                {sources.map((source, position) => {
+                  const checked = sourceIds.includes(source.id);
+                  return (
+                    <label key={source.id} className={checked ? "checked" : ""}>
+                      <input type="checkbox" checked={checked} onChange={() => toggleSource(source.id)} />
+                      <span className="ai-attach-check">{checked && <CheckCircle2 size={14} />}</span>
+                      <span className="ai-attach-name" title={source.name}>{position + 1}. {source.name}</span>
+                      {source.extra && <em>Bổ sung</em>}
+                    </label>
+                  );
+                })}
+                <hr />
+              </>
+            )}
+            {canBrowseLibrary && (
+              <button type="button" onClick={() => { setMenu(false); setPicking(true); }}><FolderOpen size={14} /> Chọn từ Kho dữ liệu…</button>
+            )}
+            <button type="button" onClick={() => { setMenu(false); inputRef.current?.click(); }}><Upload size={14} /> Tải file lên…</button>
+          </div>
+        )}
+      </div>
+      <input ref={inputRef} type="file" hidden multiple onChange={(event) => { upload(event.target.files); event.target.value = ""; }} />
+      {picking && <LibraryFilePicker selected={libraryIds} onToggle={toggleLibrary} onClose={() => setPicking(false)} />}
+    </div>
+  );
+}
+
+function AttachmentChip({ name, mime, note, missing, onRemove }) {
+  const Icon = fileIcon(mime || "");
+  return (
+    <span className={`ai-attach-chip ${missing ? "missing" : ""}`} title={missing ? `${name} — file không còn tồn tại` : note ? `${name} · ${note}` : name}>
+      <i className={fileTone(mime || "")}><Icon size={13} /></i>
+      <span>{name}</span>
+      <button type="button" onClick={onRemove} aria-label={`Bỏ ${name}`}><X size={12} /></button>
+    </span>
   );
 }

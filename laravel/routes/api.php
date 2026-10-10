@@ -26,7 +26,7 @@ Route::middleware('api.token')->group(function(){
  Route::post('ai-assistant/ask',[AiAssistantController::class,'ask']);
  Route::middleware(['permission:tasks.assign', 'permission:ai.tasks'])->group(function(){
   Route::get('task-drafts',[TaskDraftController::class,'index']);Route::post('task-drafts/analyze',[TaskDraftController::class,'analyze']);Route::put('task-drafts/{draft}',[TaskDraftController::class,'update']);Route::delete('task-drafts/{draft}',[TaskDraftController::class,'destroy']);
-  Route::post('task-draft-batches/{batch}/drafts',[TaskDraftController::class,'storeDraft']);Route::delete('task-draft-batches/{batch}',[TaskDraftController::class,'destroyBatch']);Route::get('task-draft-sources/{source}/file',[TaskDraftController::class,'source']);
+  Route::post('task-draft-batches/{batch}/drafts',[TaskDraftController::class,'storeDraft']);Route::post('task-draft-batches/{batch}/sources',[TaskDraftController::class,'storeSources']);Route::delete('task-draft-batches/{batch}',[TaskDraftController::class,'destroyBatch']);Route::get('task-draft-sources/{source}/file',[TaskDraftController::class,'source']);
  });
  Route::get('leave-records',[LeaveRecordController::class,'index']);Route::post('leave-records',[LeaveRecordController::class,'store']);Route::put('leave-records/{leaveRecord}',[LeaveRecordController::class,'update']);Route::delete('leave-records/{leaveRecord}',[LeaveRecordController::class,'destroy']);
  Route::middleware('permission:library.view')->group(function(){

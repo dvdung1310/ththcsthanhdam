@@ -15,6 +15,7 @@ use App\Services\LibraryAccess;
 use App\Services\TaskDraftAnalyzer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -23,6 +24,8 @@ use RuntimeException;
 class TaskDraftController extends Controller
 {
     private const MAX_TOTAL_BYTES = 30 * 1024 * 1024;
+
+    private const EXTRA_KIND = 'Bổ sung';
 
     public function __construct(private TaskDraftAnalyzer $analyzer, private FileStore $store) {}
 
@@ -112,6 +115,24 @@ class TaskDraftController extends Controller
         return response()->json(['message' => 'Đã thêm bản nháp.', 'data' => $this->draft($draft)], 201);
     }
 
+    public function storeSources(Request $request, TaskDraftBatch $batch): JsonResponse
+    {
+        $user = $request->user();
+        $this->own($user, $batch);
+        $request->validate([
+            'files' => ['required', 'array', 'max:10'],
+            'files.*' => ['file', 'max:20480', 'mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png,zip'],
+        ], ['files.*.mimes' => 'Định dạng file không được hỗ trợ.', 'files.*.max' => 'Mỗi file tối đa 20MB.']);
+        $position = (int) $batch->sources()->max('position');
+        $sources = collect($request->file('files'))->map(fn ($upload) => $batch->sources()->create([
+            'position' => ++$position, 'file_id' => $this->store->store($upload, 'task-drafts', $user)->id,
+            'name' => $upload->getClientOriginalName(), 'kind' => self::EXTRA_KIND,
+        ]));
+        $batch->touch();
+
+        return response()->json(['message' => 'Đã tải file lên.', 'data' => $sources->map(fn (TaskDraftSource $source) => $this->sourceData($source))->values()], 201);
+    }
+
     public function update(Request $request, TaskDraft $draft): JsonResponse
     {
         $this->own($request->user(), $draft->batch);
@@ -176,6 +197,8 @@ class TaskDraftController extends Controller
             'share_submissions' => ['sometimes', 'boolean'],
             'source_ids' => ['sometimes', 'array'],
             'source_ids.*' => ['integer'],
+            'library_file_ids' => ['sometimes', 'array'],
+            'library_file_ids.*' => ['integer'],
         ], ['title.max' => 'Tên công việc tối đa '.Task::TITLE_MAX.' ký tự.']);
     }
 
@@ -184,7 +207,7 @@ class TaskDraftController extends Controller
         return [
             'title' => '', 'description' => '', 'employee_ids' => [], 'department_ids' => [], 'reviewer_ids' => [],
             'starts_at' => now()->format('Y-m-d').'T07:30', 'due_at' => null, 'priority' => 'normal', 'category_id' => null,
-            'share_submissions' => true, 'ai_reason' => null,
+            'share_submissions' => true, 'ai_reason' => null, 'library_file_ids' => [],
         ];
     }
 
@@ -193,33 +216,47 @@ class TaskDraftController extends Controller
         abort_unless($batch && $batch->created_by === $user->id, 404, 'Không tìm thấy bản nháp.');
     }
 
-    private function draft(TaskDraft $draft, ?array $allSources = null): array
+    private function draft(TaskDraft $draft, ?array $allSources = null, ?Collection $nodes = null): array
     {
         $payload = [...$this->blank(), ...$draft->payload];
         if (! array_key_exists('source_ids', $draft->payload)) {
             $payload['source_ids'] = $allSources ?? $draft->batch?->sources()->pluck('id')->all() ?? [];
         }
+        $nodes ??= $this->libraryNodes($payload['library_file_ids']);
+        $payload['library_files'] = collect($payload['library_file_ids'])->map(fn ($id) => $nodes->get($id))->filter()
+            ->map(fn (LibraryNode $node) => ['id' => $node->id, 'name' => $node->name, 'size' => $node->file?->size, 'mime_type' => $node->file?->mime_type])->values()->all();
 
         return ['id' => $draft->id, 'position' => $draft->position, 'payload' => $payload, 'updated_at' => $draft->updated_at?->toIso8601String()];
     }
 
+    private function libraryNodes(array $ids): Collection
+    {
+        return $ids ? LibraryNode::with('file:id,size,mime_type')->where('type', LibraryNode::FILE)->whereIn('id', $ids)->get()->keyBy('id') : collect();
+    }
+
+    private function sourceData(TaskDraftSource $source): array
+    {
+        $file = $source->storedFile();
+
+        return [
+            'id' => $source->id, 'name' => $source->name, 'kind' => $source->kind,
+            'origin' => $source->node_id ? 'library' : 'upload', 'extra' => $source->kind === self::EXTRA_KIND,
+            'available' => (bool) $file, 'mime_type' => $file?->mime_type, 'size' => $file?->size,
+            'url' => "/api/task-draft-sources/{$source->id}/file",
+        ];
+    }
+
     private function serialize(TaskDraftBatch $batch): array
     {
+        $sourceIds = $batch->sources->pluck('id')->all();
+        $nodes = $this->libraryNodes($batch->drafts->flatMap(fn (TaskDraft $draft) => $draft->payload['library_file_ids'] ?? [])->unique()->values()->all());
+
         return [
             'id' => $batch->id,
             'document_name' => $batch->document_name,
             'analysis' => $batch->analysis ?? [],
-            'sources' => $batch->sources->map(function (TaskDraftSource $source) {
-                $file = $source->storedFile();
-
-                return [
-                    'id' => $source->id, 'name' => $source->name, 'kind' => $source->kind,
-                    'origin' => $source->node_id ? 'library' : 'upload',
-                    'available' => (bool) $file, 'mime_type' => $file?->mime_type, 'size' => $file?->size,
-                    'url' => "/api/task-draft-sources/{$source->id}/file",
-                ];
-            })->values(),
-            'drafts' => $batch->drafts->map(fn (TaskDraft $draft) => $this->draft($draft, $batch->sources->pluck('id')->all()))->values(),
+            'sources' => $batch->sources->map(fn (TaskDraftSource $source) => $this->sourceData($source))->values(),
+            'drafts' => $batch->drafts->map(fn (TaskDraft $draft) => $this->draft($draft, $sourceIds, $nodes))->values(),
             'created_at' => $batch->created_at?->toIso8601String(),
             'updated_at' => $batch->updated_at?->toIso8601String(),
         ];
