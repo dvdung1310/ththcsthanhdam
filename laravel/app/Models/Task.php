@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -35,6 +36,22 @@ class Task extends Model
     public function libraryFiles() { return $this->belongsToMany(LibraryNode::class, 'task_library_files', 'task_id', 'node_id'); }
     public function updates() { return $this->hasMany(TaskUpdate::class); }
     public function submissions() { return $this->hasMany(TaskSubmission::class); }
+
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        if ($user->isSchoolWide()) {
+            return $query;
+        }
+        $managed = $user->managedUnitIds() ?? [];
+        $units = array_values(array_unique([...$user->memberUnitIds(), ...$managed]));
+
+        return $query->where(fn ($q) => $q
+            ->whereHas('employees', fn ($t) => $t->where('employees.id', $user->employee?->id ?? 0))
+            ->orWhereHas('departments', fn ($d) => $d->whereIn('departments.id', $units ?: [0]))
+            ->when($managed, fn ($b) => $b->orWhereHas('employees', fn ($t) => $t->inUnits($managed)))
+            ->orWhere('created_by', $user->id)
+            ->orWhereHas('reviewers', fn ($r) => $r->where('users.id', $user->id)));
+    }
 
     public function resolveRouteBinding($value, $field = null)
     {

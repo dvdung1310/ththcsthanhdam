@@ -529,19 +529,7 @@ class TaskController extends Controller
 
     private function limitToAccessible($query, Request $request)
     {
-        $user = $request->user();
-        if ($user->isSchoolWide()) {
-            return $query;
-        }
-        $managed = $user->managedUnitIds() ?? [];
-        $units = array_values(array_unique([...$user->memberUnitIds(), ...$managed]));
-
-        return $query->where(fn ($q) => $q
-            ->whereHas('employees', fn ($t) => $t->where('employees.id', $user->employee?->id ?? 0))
-            ->orWhereHas('departments', fn ($d) => $d->whereIn('departments.id', $units ?: [0]))
-            ->when($managed, fn ($b) => $b->orWhereHas('employees', fn ($t) => $t->inUnits($managed)))
-            ->orWhere('created_by', $user->id)
-            ->orWhereHas('reviewers', fn ($r) => $r->where('users.id', $user->id)));
+        return $query->visibleTo($request->user());
     }
 
     private function ensureAssignmentScope(Request $request, array $data): void
