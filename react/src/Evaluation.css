@@ -4092,3 +4092,15 @@
   padding: 0;
   justify-content: center;
 }
+
+.ev-cell.readonly .ev-cell-fallback {
+  color: #a3abbd;
+  font-weight: 500;
+}
+
+.ev-summary-note {
+  margin: 8px 0 0;
+  color: var(--c-muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
