@@ -2,6 +2,8 @@ import { apiFetch, apiJson } from "./api";
 
 const OFF_KEY = "thanhdam_device_notifications_off";
 const DISMISS_KEY = "thanhdam_device_notifications_dismissed";
+const SNOOZE_KEY = "thanhdam_device_notifications_snooze";
+const SNOOZE_DAYS = 7;
 
 export const notificationsSupported = () => typeof window !== "undefined" && "Notification" in window;
 export const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window;
@@ -11,6 +13,9 @@ export const permission = () => (notificationsSupported() ? Notification.permiss
 export const turnedOff = () => localStorage.getItem(OFF_KEY) === "1";
 export const inviteDismissed = () => localStorage.getItem(DISMISS_KEY) === "1";
 export const dismissInvite = () => localStorage.setItem(DISMISS_KEY, "1");
+export const promptSnoozed = () => Number(localStorage.getItem(SNOOZE_KEY) || 0) > Date.now();
+export const snoozePrompt = () => localStorage.setItem(SNOOZE_KEY, String(Date.now() + SNOOZE_DAYS * 86400000));
+export const shouldPrompt = () => notificationsSupported() && permission() === "default" && !inviteDismissed() && !promptSnoozed();
 export const notificationsActive = () => permission() === "granted" && !turnedOff();
 
 const registration = async () => (pushSupported() ? (await navigator.serviceWorker.getRegistration()) ?? null : null);

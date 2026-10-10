@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Bell, BellRing, CheckCheck, ClipboardCheck, Smartphone, X } from 'lucide-react'
 import { apiFetch } from './api'
 import { createRealtimeConnection } from './realtime'
-import { dismissInvite, enableNotifications, inviteDismissed, isIos, isStandalone, notificationsSupported, permission, showDeviceNotification } from './deviceNotifications'
+import { enableNotifications, isIos, isStandalone, notificationsSupported, permission, showDeviceNotification } from './deviceNotifications'
 import './NotificationCenter.css'
 
 function relativeTime(value) {
@@ -22,7 +22,7 @@ export default function NotificationCenter({ user, onOpenTask, onOpenLink, onUnr
   const toastTimer = useRef(null)
   const latestNotificationId = useRef(null)
   const centerRef = useRef(null)
-  const [invite, setInvite] = useState(() => notificationsSupported() && permission() === 'default' && !inviteDismissed())
+  const [invite, setInvite] = useState(() => notificationsSupported() && permission() === 'default')
   const iosHint = isIos() && !isStandalone()
 
   useEffect(() => {
@@ -105,10 +105,7 @@ export default function NotificationCenter({ user, onOpenTask, onOpenLink, onUnr
     await enableNotifications()
     setInvite(false)
   }
-  const declineInvite = () => {
-    dismissInvite()
-    setInvite(false)
-  }
+  const declineInvite = () => setInvite(false)
 
   const markAllRead = async () => {
     await apiFetch('/api/notifications/read-all', { method: 'POST', headers: { Accept: 'application/json' } }).catch(() => null)

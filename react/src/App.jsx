@@ -63,6 +63,7 @@ import LeaveTracking from "./LeaveTracking";
 import TaskAiWorkspace from "./TaskAiWorkspace";
 import Avatar from "./Avatar";
 import { releaseDevice, syncPushSubscription } from "./deviceNotifications";
+import NotificationPrompt from "./NotificationPrompt";
 
 const navTree = [
   { key: "dashboard", label: "Tổng quan", icon: LayoutDashboard, path: "/", permission: "dashboard.view" },
@@ -529,6 +530,7 @@ function App() {
 
   return (
     <div className="app-shell">
+      <NotificationPrompt key={authUser.id} />
       {apiLoadingCount > 0 && (
         <div className="global-api-loading" role="status">
           <span />
