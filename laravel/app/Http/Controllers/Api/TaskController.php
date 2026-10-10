@@ -14,6 +14,7 @@ use App\Models\TaskCategory;
 use App\Models\TaskSubmission;
 use App\Models\TaskUpdate;
 use App\Models\Employee;
+use App\Models\TaskDraft;
 use App\Models\User;
 use App\Services\FileStore;
 use App\Notifications\TaskAssignedNotification;
@@ -100,13 +101,17 @@ class TaskController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $this->validateTask($request);
+        $draft = $this->ownedDraft($request);
         $this->ensureAssignmentScope($request, $data);
-        $task = DB::transaction(function () use ($request, $data) {
+        $task = DB::transaction(function () use ($request, $data, $draft) {
             $task = Task::create([...$this->taskAttributes($data), 'code' => $this->nextCode(), 'created_by' => $request->user()->id, 'status' => Task::NOT_STARTED]);
             $this->syncAssignees($task, $data, $request->user());
             $this->syncReviewers($task, $data);
             $this->syncLibraryFiles($request, $task, $data);
             $this->storeAttachments($request, $task);
+            if ($draft) {
+                $this->consumeDraft($task, $draft);
+            }
             $this->recordStatus($task, null, Task::NOT_STARTED, 'Khởi tạo và giao công việc', $request->user());
             $task->updates()->create(['created_by' => $request->user()->id, 'status' => Task::NOT_STARTED, 'content' => 'Đã tạo công việc.']);
 
@@ -928,6 +933,33 @@ class TaskController extends Controller
         $allowed = $added->isEmpty() ? collect() : LibraryNode::whereIn('id', $added)->where('type', LibraryNode::FILE)->where('parent_id', $this->sharedFolderId() ?? 0)->pluck('id');
         abort_if($added->diff($allowed)->isNotEmpty(), 422, 'Chỉ gắn được file trong thư mục Chia sẻ chung.');
         $task->libraryFiles()->sync($ids->all());
+    }
+
+    private function ownedDraft(Request $request): ?TaskDraft
+    {
+        $id = $request->validate(['draft_id' => ['nullable', 'integer']])['draft_id'] ?? null;
+        if (! $id) {
+            return null;
+        }
+        $draft = TaskDraft::with('batch.sourceNode')->find($id);
+        abort_unless($draft && $draft->batch->created_by === $request->user()->id, 404, 'Bản nháp không còn tồn tại.');
+
+        return $draft;
+    }
+
+    private function consumeDraft(Task $task, TaskDraft $draft): void
+    {
+        $batch = $draft->batch;
+        if ($batch->source_file_id && ! DB::table('file_attachments')->where('attachable_type', Task::class)->where('attachable_id', $task->id)->where('file_id', $batch->source_file_id)->exists()) {
+            DB::table('file_attachments')->insert(['file_id' => $batch->source_file_id, 'attachable_type' => Task::class, 'attachable_id' => $task->id, 'purpose' => 'attachment', 'created_at' => now(), 'updated_at' => now()]);
+        }
+        if ($batch->sourceNode && $batch->sourceNode->parent_id === $this->sharedFolderId()) {
+            $task->libraryFiles()->syncWithoutDetaching([$batch->sourceNode->id]);
+        }
+        $draft->delete();
+        if (! $batch->drafts()->exists()) {
+            $batch->delete();
+        }
     }
 
     private function storeAttachments(Request $request, Task $task): void
