@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
 import {
   Activity,
@@ -29,6 +29,7 @@ import {
   UserRoundCog,
   Users,
   X,
+  WifiOff,
 } from "lucide-react";
 import "./App.css";
 import "./TeacherManagement.css";
@@ -364,6 +365,8 @@ function App() {
   const [query, setQuery] = useState("");
   const [authUser, setAuthUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [authOffline, setAuthOffline] = useState(false);
+  const retryAuth = useRef(null);
   const [selectedTask, setSelectedTask] = useState(null);
   const [pendingTaskCount, setPendingTaskCount] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -430,6 +433,7 @@ function App() {
         setAuthLoading(false);
         return;
       }
+      setAuthLoading(true);
       try {
         const response = await apiFetch("/api/auth/me", {
           headers: { Accept: "application/json" },
@@ -437,14 +441,23 @@ function App() {
         const payload = await response.json();
         if (response.ok) setAuthUser(payload.user);
         else setToken(null);
+        setAuthOffline(false);
+      } catch {
+        setAuthOffline(true);
       } finally {
         setAuthLoading(false);
       }
     };
     verify();
     const expired = () => setAuthUser(null);
+    const online = () => verify();
     window.addEventListener("auth:expired", expired);
-    return () => window.removeEventListener("auth:expired", expired);
+    window.addEventListener("online", online);
+    retryAuth.current = verify;
+    return () => {
+      window.removeEventListener("auth:expired", expired);
+      window.removeEventListener("online", online);
+    };
   }, []);
 
   const logout = async () => {
@@ -461,6 +474,15 @@ function App() {
       <div className="auth-loading">
         <ShieldCheck size={34} />
         <span>Đang xác thực tài khoản...</span>
+      </div>
+    );
+  if (!authUser && authOffline)
+    return (
+      <div className="auth-loading auth-offline">
+        <WifiOff size={34} />
+        <b>Không kết nối được máy chủ</b>
+        <span>Kiểm tra mạng rồi thử lại. Ứng dụng sẽ tự kết nối lại khi có mạng.</span>
+        <button type="button" className="primary-btn" onClick={() => retryAuth.current?.()}>Thử lại</button>
       </div>
     );
   if (!authUser)
