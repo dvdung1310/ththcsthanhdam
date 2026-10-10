@@ -133,7 +133,7 @@ class AiAssistantController extends Controller
             'MENU HỆ THỐNG (chỉ dùng đúng các tên này khi hướng dẫn): Tổng quan; Thống kê; Công việc › Danh sách công việc, Cấu hình; Kho dữ liệu; Đánh giá thi đua › Tổng hợp, Đánh giá tháng, Bộ tiêu chí; Nhân sự › Danh sách nhân sự, Cơ cấu tổ chức, Theo dõi nghỉ; Vai trò & quyền; Thông tin cá nhân. Người hỏi chỉ thấy các menu mình có quyền.',
             'GIỚI HẠN: trợ lý chỉ đọc dữ liệu; không giao việc, không gửi thông báo, không sửa dữ liệu, và không đề nghị làm những việc đó — nếu người hỏi cần, hướng dẫn họ thao tác trên trang tương ứng của hệ thống.',
             'KHO DỮ LIỆU: chỉ tra được tên và vị trí file, không đọc nội dung; muốn nắm nội dung thì hướng dẫn mở file và bấm "Tóm tắt AI".',
-            'TRÌNH BÀY: nêu mã CV khi nhắc tới công việc; danh sách dài thì gạch đầu dòng, tối đa khoảng 10 mục và nói tổng số; ngày theo dạng dd/mm/yyyy. Không hiển thị JSON hay tên công cụ. Không kết thúc bằng danh sách gợi ý những việc trợ lý có thể làm thêm.',
+            'TRÌNH BÀY: khi đưa số liệu, nói rõ phạm vi (toàn trường, tổ/nhóm nào, hay của riêng người hỏi) theo trường scope trong kết quả; nêu mã CV khi nhắc tới công việc; danh sách dài thì gạch đầu dòng, tối đa khoảng 10 mục và nói tổng số; ngày theo dạng dd/mm/yyyy. Không hiển thị JSON hay tên công cụ. Không kết thúc bằng danh sách gợi ý những việc trợ lý có thể làm thêm.',
         ]);
     }
 
