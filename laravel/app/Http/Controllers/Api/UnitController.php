@@ -68,7 +68,7 @@ class UnitController extends Controller
             'replace_user_id' => ['nullable', 'integer', 'exists:users,id'],
         ], ['role_code.in' => 'Chức vụ này không áp dụng cho đơn vị đã chọn.']);
         $user = User::with('employee')->findOrFail($data['user_id']);
-        abort_unless($user->employee, 422, 'Chỉ giáo viên mới giữ được chức vụ trong tổ, nhóm.');
+        abort_unless($user->employee, 422, 'Chỉ giáo viên hoặc nhân viên mới giữ được chức vụ trong tổ, nhóm.');
         abort_if($user->employee->employment_status !== 'working' || $user->status !== 'active', 422, "{$user->name} hiện không làm việc hoặc tài khoản bị khóa.");
         $role = Role::where('code', $data['role_code'])->firstOrFail();
         $unitRoleIds = Role::whereIn('code', $slots->keys())->pluck('id');
@@ -199,7 +199,7 @@ class UnitController extends Controller
     {
         $this->ensureSchoolManager($request);
         abort_if($unit->children()->exists(), 422, 'Không thể xóa tổ đang có nhóm. Hãy xóa hoặc chuyển các nhóm trước.');
-        abort_if(DB::table('department_employee')->where('department_id', $unit->id)->whereNull('ends_on')->exists(), 422, 'Không thể xóa đơn vị đang có giáo viên.');
+        abort_if(DB::table('department_employee')->where('department_id', $unit->id)->whereNull('ends_on')->exists(), 422, 'Không thể xóa đơn vị đang có thành viên.');
         abort_if(DB::table('task_department_assignees')->where('department_id', $unit->id)->exists(), 422, 'Đơn vị đã được giao công việc. Hãy ngưng hoạt động thay vì xóa.');
         abort_if(DB::table('role_user')->where('department_id', $unit->id)->exists(), 422, 'Đơn vị đang được dùng trong phân quyền. Hãy gỡ vai trò trước.');
         $unit->delete();

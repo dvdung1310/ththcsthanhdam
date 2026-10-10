@@ -30,7 +30,7 @@ class PersonnelController extends Controller
 
         return response()->json([
             'data' => $users->map(fn (User $user) => $this->serialize($user))->values(),
-            'roles' => Role::all()->sortBy(fn (Role $role) => $this->roleOrder($role->code))->map(fn (Role $role) => $role->only(['id', 'code', 'name', 'scope', 'unit_type']))->values(),
+            'roles' => Role::all()->sortBy(fn (Role $role) => Role::rank($role->code))->map(fn (Role $role) => $role->only(['id', 'code', 'name', 'scope', 'unit_type']))->values(),
             'units' => Department::ordered($unitIds)->values(),
             'can_manage' => $actor->hasPermission('personnel.manage'),
             'can_assign_roles' => $this->canAssignRoles($actor),
@@ -177,13 +177,13 @@ class PersonnelController extends Controller
         ]);
         $data['unit_ids'] = collect($data['unit_ids'] ?? [])->map(fn ($id) => (int) $id)->unique()->values()->all();
         $data['is_employee'] = array_key_exists('roles', $data)
-            ? collect($data['roles'])->pluck('role_id')->map(fn ($id) => (int) $id)->contains((int) Role::where('code', Role::GIAO_VIEN)->value('id'))
+            ? Role::whereIn('id', collect($data['roles'])->pluck('role_id'))->whereIn('code', Role::PROFILE_ROLES)->exists()
             : ($user ? (bool) $user->employee : true);
         if ($data['is_employee'] && blank($data['employment_status'] ?? null)) {
             throw ValidationException::withMessages(['employment_status' => 'Vui lòng chọn trạng thái công tác.']);
         }
-        abort_if($user?->employee && ! $data['is_employee'], 422, 'Không thể bỏ vai trò Giáo viên của nhân sự đã có dữ liệu công việc. Hãy cho nghỉ việc thay vì vậy.');
-        abort_if(! $data['is_employee'] && $data['unit_ids'] !== [], 422, 'Chỉ giáo viên mới thuộc tổ, nhóm.');
+        abort_if($user?->employee && ! $data['is_employee'], 422, 'Nhân sự đã có hồ sơ phải giữ vai trò Giáo viên hoặc Nhân viên. Hãy cho nghỉ việc thay vì bỏ cả hai.');
+        abort_if(! $data['is_employee'] && $data['unit_ids'] !== [], 422, 'Chỉ giáo viên và nhân viên mới thuộc tổ, nhóm.');
 
         return $data;
     }
@@ -207,8 +207,8 @@ class PersonnelController extends Controller
         if ($managed === null) {
             return;
         }
-        abort_unless($data['is_employee'], 403, 'Bạn chỉ được quản lý giáo viên trong đơn vị của mình.');
-        abort_if($data['unit_ids'] === [] || array_diff($data['unit_ids'], $managed) !== [], 403, 'Bạn chỉ được phân giáo viên vào đơn vị mình quản lý.');
+        abort_unless($data['is_employee'], 403, 'Bạn chỉ được quản lý nhân sự trong đơn vị của mình.');
+        abort_if($data['unit_ids'] === [] || array_diff($data['unit_ids'], $managed) !== [], 403, 'Bạn chỉ được phân nhân sự vào đơn vị mình quản lý.');
     }
 
     private function ensureTargetInScope(User $actor, User $target): void
@@ -218,7 +218,7 @@ class PersonnelController extends Controller
             return;
         }
         $employee = $target->employee;
-        abort_unless($employee && array_intersect($employee->directUnitIds(), $managed) !== [], 403, 'Bạn chỉ được quản lý giáo viên trong đơn vị của mình.');
+        abort_unless($employee && array_intersect($employee->directUnitIds(), $managed) !== [], 403, 'Bạn chỉ được quản lý nhân sự trong đơn vị của mình.');
     }
 
     private function canAssignRoles(User $actor): bool
@@ -260,13 +260,14 @@ class PersonnelController extends Controller
             'is_active' => $user->status === 'active',
             'avatar_url' => $user->avatar_path ? route('avatars.show', ['filename' => basename($user->avatar_path)]) : null,
             'is_employee' => (bool) $employee,
+            'kind' => $employee ? ($user->roles->contains('code', Role::NHAN_VIEN) ? 'staff' : 'teacher') : null,
             'employee_id' => $employee?->id,
             'employee_code' => $employee?->employee_code,
             'employment_status' => $employee?->employment_status,
             'units' => $units,
             'unit_ids' => $units->pluck('id'),
             'unit_path_ids' => $employee ? $employee->unitIds() : [],
-            'roles' => $user->roles->sortBy(fn (Role $role) => $this->roleOrder($role->code))->map(fn (Role $role) => [
+            'roles' => $user->roles->sortBy(fn (Role $role) => Role::rank($role->code))->map(fn (Role $role) => [
                 'role_id' => $role->id, 'code' => $role->code, 'name' => $role->name,
                 'department_id' => $role->pivot->department_id,
                 'label' => $role->pivot->department_id ? $role->name.' — '.Department::pathLabel((int) $role->pivot->department_id) : $role->name,
@@ -277,10 +278,5 @@ class PersonnelController extends Controller
     private function savedMessage(string $message, array $added): string
     {
         return $added ? $message.' Đã tự thêm vào: '.implode(', ', $added).'.' : $message;
-    }
-
-    private function roleOrder(string $code): int
-    {
-        return (int) array_search($code, [Role::ADMIN, Role::HIEU_TRUONG, Role::THU_KY, Role::TO_TRUONG, Role::TO_PHO, Role::NHOM_TRUONG, Role::GIAO_VIEN], true);
     }
 }
