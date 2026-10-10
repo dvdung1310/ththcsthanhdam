@@ -5,7 +5,7 @@ import Avatar from "./Avatar";
 
 const fold = (text) => String(text ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").toLowerCase();
 
-export default function EvaluationScorerPicker({ title, subject, candidates, selected, defaultScorers, saving, onSave, onClose }) {
+export default function EvaluationScorerPicker({ title, subject, candidates, selected, defaultScorers, saving, onSave, onClose, bulk = false }) {
   const [picked, setPicked] = useState(() => new Set(selected));
   const [search, setSearch] = useState("");
   useEffect(() => {
@@ -38,7 +38,11 @@ export default function EvaluationScorerPicker({ title, subject, candidates, sel
         <p className="ev-scorer-default">
           <UserCheck size={14} />
           <span>
-            Mặc định theo kỳ: {defaultScorers?.length ? <b>{defaultScorers.join(", ")}</b> : <em>chưa có người chấm</em>}. Chọn người dưới đây để chỉ định riêng cho phiếu này — khi đó chỉ những người được chọn mới chấm được.
+            {bulk ? (
+              <>Chọn người dưới đây để chỉ định riêng cho các phiếu đã chọn — khi đó chỉ những người được chọn mới chấm được. Phiếu của chính người được chọn sẽ tự bỏ qua.</>
+            ) : (
+              <>Mặc định theo kỳ: {defaultScorers?.length ? <b>{defaultScorers.join(", ")}</b> : <em>chưa có người chấm</em>}. Chọn người dưới đây để chỉ định riêng cho phiếu này — khi đó chỉ những người được chọn mới chấm được.</>
+            )}
           </span>
         </p>
         <label className="ev-scorer-search">
@@ -62,8 +66,8 @@ export default function EvaluationScorerPicker({ title, subject, candidates, sel
           {!shown.length && <p className="ev-muted">Không có người phù hợp.</p>}
         </div>
         <footer>
-          <button type="button" className="secondary-btn" disabled={saving || (!picked.size && !selected.length)} onClick={() => onSave([])}>
-            Dùng mặc định
+          <button type="button" className="secondary-btn" disabled={saving || (!bulk && !picked.size && !selected.length)} onClick={() => onSave([])}>
+            {bulk ? "Trả về mặc định" : "Dùng mặc định"}
           </button>
           <span>{picked.size ? `Đã chọn ${picked.size} người` : "Chưa chỉ định riêng"}</span>
           <button type="button" className="primary-btn" disabled={saving || !picked.size} onClick={() => onSave([...picked])}>

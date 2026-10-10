@@ -10,6 +10,8 @@ import EvaluationScorerPicker from "./EvaluationScorerPicker";
 
 const pad = (n) => String(n).padStart(2, "0");
 const AUDIENCE_SHORT = { teacher: "GV", staff: "NV", leadership: "BGH" };
+const SLOT_LABELS = { unit: "Tổ", board: "BGH" };
+const columnOf = (row, slot) => (slot === "unit" ? (row.audience === "teacher" ? "unit" : null) : row.audience === "teacher" ? "leader" : "unit");
 
 function nextOpenMonth(periods) {
   const now = new Date();
@@ -47,6 +49,7 @@ export default function EvaluationPeriodEditor() {
   const [collapsed, setCollapsed] = useState(new Set());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     const load = async () => {
@@ -55,7 +58,7 @@ export default function EvaluationPeriodEditor() {
         setRoster(result);
         setSelected(new Set(result.data.filter((row) => (editing ? row.evaluation : row.eligible)).map((row) => row.teacher_id)));
         setScorers(new Set(editing ? result.scorer_ids : result.scorer_candidates.filter((candidate) => candidate.suggested).map((candidate) => candidate.id)));
-        setSheetScorers(Object.fromEntries(result.data.filter((row) => row.evaluation?.scorer_ids?.length).map((row) => [row.teacher_id, row.evaluation.scorer_ids])));
+        setSheetScorers(Object.fromEntries(result.data.filter((row) => row.evaluation).map((row) => [row.teacher_id, { unit: row.evaluation.scorer_ids ?? [], leader: row.evaluation.leader_scorer_ids ?? [] }])));
         if (editing) {
           setForm({ self_due_on: result.period.self_due_on ?? "", unit_due_on: result.period.unit_due_on ?? "" });
         } else {
@@ -110,7 +113,7 @@ export default function EvaluationPeriodEditor() {
   const scopeLabel = scope === "excluded" ? "Không thuộc diện đánh giá" : scopeNode?.name ?? "Toàn trường";
   const keyword = search.trim().toLowerCase();
   const audiencesPresent = ["teacher", "staff", "leadership"].filter((value) => members.some((row) => row.audience === value));
-  const needsBoard = rows.some((row) => selected.has(row.teacher_id) && row.audience !== "teacher");
+  const needsBoard = selected.size > 0;
   const toggleScorer = (id) =>
     setScorers((current) => {
       const next = new Set(current);
@@ -156,7 +159,7 @@ export default function EvaluationPeriodEditor() {
       return;
     }
     if (needsBoard && !scorers.size) {
-      setError("Kỳ có phiếu Nhân viên hoặc Ban giám hiệu: chọn ít nhất một người chấm cột “BGH đánh giá”.");
+      setError("Chọn ít nhất một người chấm cột “BGH đánh giá”.");
       return;
     }
     const losing = removed.filter((row) => row.evaluation.has_data);
@@ -178,8 +181,12 @@ export default function EvaluationPeriodEditor() {
         teacher_ids: [...selected],
         scorer_ids: [...scorers],
         sheet_scorers: rows
-          .filter((row) => selected.has(row.teacher_id) && (sheetScorers[row.teacher_id]?.length || row.evaluation?.scorer_ids?.length))
-          .map((row) => ({ teacher_id: row.teacher_id, user_ids: sheetScorers[row.teacher_id] ?? [] })),
+          .filter((row) => selected.has(row.teacher_id))
+          .flatMap((row) =>
+            (row.audience === "teacher" ? ["unit", "leader"] : ["unit"])
+              .filter((column) => sheetScorers[row.teacher_id]?.[column]?.length || (column === "unit" ? row.evaluation?.scorer_ids : row.evaluation?.leader_scorer_ids)?.length)
+              .map((column) => ({ teacher_id: row.teacher_id, column, user_ids: sheetScorers[row.teacher_id]?.[column] ?? [] })),
+          ),
       };
       const result = editing
         ? await apiJson(`/api/evaluation-periods/${periodId}`, { method: "PUT", body })
@@ -205,10 +212,78 @@ export default function EvaluationPeriodEditor() {
 
   const head = groupState(visible);
   const candidateById = Object.fromEntries((roster.assignable_scorers ?? []).map((candidate) => [candidate.id, candidate]));
-  const defaultFor = (row) =>
-    row.audience === "teacher"
+  const defaultFor = (row, slot) =>
+    slot === "unit"
       ? ["Tổ trưởng, tổ phó, nhóm trưởng của đơn vị"]
       : roster.scorer_candidates.filter((candidate) => scorers.has(candidate.id) && candidate.employee_id !== row.teacher_id).map((candidate) => candidate.name);
+  const assignedOf = (row, slot) => {
+    const column = columnOf(row, slot);
+    return column ? sheetScorers[row.teacher_id]?.[column] ?? [] : [];
+  };
+  const bulkTargets = (slot) => visible.filter((row) => selected.has(row.teacher_id) && columnOf(row, slot));
+  const applyScorers = async (ids) => {
+    const { slot, rows: targets, bulk } = assigning;
+    const names = ids.map((id) => candidateById[id]?.name ?? "?").join(", ");
+    if (bulk) {
+      const ok = await confirm({
+        title: `Đổi người chấm · ${SLOT_LABELS[slot]} cho ${targets.length} phiếu?`,
+        message: ids.length ? `Chỉ định ${names} chấm cột ${slot === "unit" ? "tổ" : "BGH đánh giá"} của các phiếu đã chọn đang hiển thị.` : "Các phiếu đã chọn đang hiển thị sẽ dùng lại người chấm mặc định.",
+        confirmText: "Đổi người chấm",
+      });
+      if (!ok) return;
+    }
+    const updates = {};
+    const skipped = [];
+    targets.forEach((row) => {
+      const column = columnOf(row, slot);
+      const own = ids.filter((id) => candidateById[id]?.employee_id !== row.teacher_id);
+      if (ids.length && !own.length) {
+        skipped.push(row.name);
+        return;
+      }
+      updates[row.teacher_id] = { ...(updates[row.teacher_id] ?? {}), [column]: own };
+    });
+    setSheetScorers((current) => {
+      const next = { ...current };
+      Object.entries(updates).forEach(([id, change]) => (next[id] = { ...(next[id] ?? {}), ...change }));
+      return next;
+    });
+    if (bulk) setNotice(`Đã đổi người chấm · ${SLOT_LABELS[slot]} cho ${Object.keys(updates).length} phiếu${skipped.length ? `; bỏ qua phiếu của ${skipped.join(", ")} vì không ai chấm phiếu của chính mình` : ""}. Bấm “${editing ? "Lưu thay đổi" : "Mở kỳ"}” để áp dụng.`);
+    setAssigning(null);
+  };
+  const scorerCell = (row, slot) => {
+    if (!selected.has(row.teacher_id) || !columnOf(row, slot)) return <span className="ev-muted">—</span>;
+    const ids = assignedOf(row, slot);
+    return (
+      <span className="ev-assign-line">
+        {ids.length ? (
+          <span className="ev-chip purple" title="Chỉ định riêng">{ids.map((id) => candidateById[id]?.name ?? "?").join(", ")}</span>
+        ) : (
+          <span className="ev-muted">Mặc định</span>
+        )}
+        <button type="button" className="ev-assign-btn" disabled={locked} onClick={() => setAssigning({ slot, rows: [row], bulk: false })}>Đổi</button>
+      </span>
+    );
+  };
+  const scorerHeader = (slot) => {
+    const targets = bulkTargets(slot);
+    return (
+      <th className="ev-scorer-col">
+        <span className="ev-th-assign">
+          Người chấm · {SLOT_LABELS[slot]}
+          <button
+            type="button"
+            className="ev-assign-btn"
+            disabled={locked || !targets.length}
+            title={targets.length ? `Đổi cho ${targets.length} phiếu đã chọn đang hiển thị` : "Chọn phiếu trong danh sách bên dưới để đổi hàng loạt"}
+            onClick={() => setAssigning({ slot, rows: targets, bulk: true })}
+          >
+            Đổi{targets.length ? ` (${targets.length})` : ""}
+          </button>
+        </span>
+      </th>
+    );
+  };
 
   return (
     <div className="ev-page ev-period-page">
@@ -234,6 +309,12 @@ export default function EvaluationPeriodEditor() {
         </div>
       )}
       {locked && <div className="ev-notice warn"><Lock size={14} /> Kỳ đã công bố nên không sửa được. Mở lại kỳ trước khi thay đổi.</div>}
+      {notice && (
+        <div className="ev-notice">
+          <Check size={14} /> {notice}
+          <button type="button" className="ev-link-btn" onClick={() => setNotice("")}>Đóng</button>
+        </div>
+      )}
 
       <section className="ev-card ev-period-setup">
         {!editing && (
@@ -279,7 +360,7 @@ export default function EvaluationPeriodEditor() {
             <ShieldCheck size={16} />
             <span>
               <b>Người chấm cột “BGH đánh giá”</b>
-              <small>Áp dụng cho phiếu Nhân viên và Ban giám hiệu. Không ai chấm phiếu của chính mình — người khác trong danh sách sẽ chấm.</small>
+              <small>Mặc định cho cột “BGH đánh giá” của mọi phiếu: phiếu Giáo viên chấm sau khi tổ chấm xong, phiếu Nhân viên và Ban giám hiệu chấm trực tiếp. Không ai chấm phiếu của chính mình — người khác trong danh sách sẽ chấm.</small>
             </span>
           </header>
           <div className="ev-scorer-list">
@@ -356,10 +437,10 @@ export default function EvaluationPeriodEditor() {
                     <TriCheckbox checked={head.all} indeterminate={head.some} disabled={!head.pickable.length} onChange={() => setMany(visible, !head.all)} label="Chọn tất cả đang hiển thị" />
                   </th>
                   <th>Nhân sự</th>
-                  <th>Mã</th>
                   <th>Đơn vị</th>
                   <th>Vai trò</th>
-                  <th>Người chấm</th>
+                  {scorerHeader("unit")}
+                  {scorerHeader("board")}
                   <th>{editing ? "Phiếu" : "Ghi chú"}</th>
                 </tr>
               </thead>
@@ -376,11 +457,10 @@ export default function EvaluationPeriodEditor() {
                           {row.avatar_url ? <img src={row.avatar_url} alt="" /> : <Avatar name={row.name} />}
                           <span>
                             <b>{row.name}{row.audience !== "teacher" && <em className="ev-tag audience">{AUDIENCE_SHORT[row.audience]}</em>}</b>
-                            {row.other_units?.length > 0 && <small>Cũng thuộc: {row.other_units.join(", ")}</small>}
+                            <small>{[row.code, row.other_units?.length > 0 && `Cũng thuộc: ${row.other_units.join(", ")}`].filter(Boolean).join(" · ")}</small>
                           </span>
                         </span>
                       </td>
-                      <td className="ev-muted">{row.code ?? "—"}</td>
                       <td>{unitName(row.unit_id) ?? <span className="ev-muted">—</span>}</td>
                       <td>
                         <span className="ev-role-list">
@@ -396,28 +476,18 @@ export default function EvaluationPeriodEditor() {
                           )}
                         </span>
                       </td>
-                      <td onClick={(e) => e.stopPropagation()}>
-                        {selected.has(row.teacher_id) ? (
-                          <span className="ev-assign-line">
-                            {sheetScorers[row.teacher_id]?.length ? (
-                              <span className="ev-chip purple" title="Chỉ định riêng">{sheetScorers[row.teacher_id].map((id) => candidateById[id]?.name ?? "?").join(", ")}</span>
-                            ) : (
-                              <span className="ev-muted">Mặc định</span>
-                            )}
-                            <button type="button" className="ev-assign-btn" disabled={locked} onClick={() => setAssigning(row)}>Đổi</button>
-                          </span>
-                        ) : (
-                          <span className="ev-muted">—</span>
-                        )}
-                      </td>
+                      <td onClick={(e) => e.stopPropagation()}>{scorerCell(row, "unit")}</td>
+                      <td onClick={(e) => e.stopPropagation()}>{scorerCell(row, "board")}</td>
                       <td>
                         {row.evaluation ? (
                           <span className="ev-roster-tags">
-                            <span className={`ev-chip ${STATUS_TONES[row.evaluation.status]}`}>{row.evaluation.status_label}</span>
+                            <span className={`ev-chip ${STATUS_TONES[row.evaluation.status]}`} title={row.lock_reason ?? undefined}>
+                              {row.lock_reason && <Lock size={11} />} {row.evaluation.status_label}
+                            </span>
                             {row.evaluation.has_data && row.evaluation.status === "draft" && <span className="ev-chip orange">Có dữ liệu</span>}
                           </span>
                         ) : null}
-                        {(row.lock_reason || row.reason) && <small className="ev-sub">{row.lock_reason ?? row.reason}</small>}
+                        {row.reason && !row.evaluation && <small className="ev-sub">{row.reason}</small>}
                       </td>
                     </tr>
                   );
@@ -430,15 +500,13 @@ export default function EvaluationPeriodEditor() {
       </div>
       {assigning && (
         <EvaluationScorerPicker
-          title="Người chấm riêng cho phiếu"
-          subject={`${assigning.name}${editing ? "" : " · áp dụng khi mở kỳ"}`}
-          candidates={(roster.assignable_scorers ?? []).filter((candidate) => candidate.employee_id !== assigning.teacher_id)}
-          selected={sheetScorers[assigning.teacher_id] ?? []}
-          defaultScorers={defaultFor(assigning)}
-          onSave={(ids) => {
-            setSheetScorers((current) => ({ ...current, [assigning.teacher_id]: ids }));
-            setAssigning(null);
-          }}
+          bulk={assigning.bulk}
+          title={assigning.bulk ? `Đổi người chấm · ${SLOT_LABELS[assigning.slot]} cho ${assigning.rows.length} phiếu` : `Người chấm · ${SLOT_LABELS[assigning.slot]} riêng cho phiếu`}
+          subject={assigning.bulk ? `Các phiếu đã chọn đang hiển thị${editing ? "" : " · áp dụng khi mở kỳ"}` : `${assigning.rows[0].name}${editing ? "" : " · áp dụng khi mở kỳ"}`}
+          candidates={(roster.assignable_scorers ?? []).filter((candidate) => assigning.bulk || candidate.employee_id !== assigning.rows[0].teacher_id)}
+          selected={assigning.bulk ? [] : assignedOf(assigning.rows[0], assigning.slot)}
+          defaultScorers={assigning.bulk ? [] : defaultFor(assigning.rows[0], assigning.slot)}
+          onSave={applyScorers}
           onClose={() => setAssigning(null)}
         />
       )}
