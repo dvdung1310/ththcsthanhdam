@@ -90,7 +90,7 @@ class TaskSeeder extends Seeder
                 $pool = match ($scope) { 'school-primary' => DemoRoster::PRIMARY, 'school-secondary' => DemoRoster::SECONDARY, default => array_keys(DemoRoster::UNITS) };
                 shuffle($pool);
                 $plan['units'] = $scope === 'school' && $this->chance(40) ? array_keys(DemoRoster::UNITS) : array_slice($pool, 0, min(count($pool), mt_rand(2, 4)));
-                $plan['creator'] = $this->chance(60) ? $principal : 'trang.tt';
+                $plan['creator'] = $this->chance(45) ? $principal : ($this->chance(45) ? $this->pick(DemoRoster::vicePrincipals()) : 'trang.tt');
                 if ($plan['creator'] === 'trang.tt' && $this->chance(40)) {
                     $plan['reviewers'] = [$principal];
                 }
@@ -110,6 +110,20 @@ class TaskSeeder extends Seeder
                 $plan['units'] = [$group];
                 $plan['vars']['{subject}'] = DemoRoster::people()[DemoRoster::membersOf($group)[0]]['subject'];
                 $plan['creator'] = $this->chance(60) ? DemoRoster::leaderOf($group) : DemoRoster::leaderOf(DemoRoster::rootOf($group));
+                break;
+            case 'office':
+                $leader = DemoRoster::leaderOf(DemoRoster::OFFICE);
+                $plan['creator'] = $this->pick([$principal, ...DemoRoster::vicePrincipals(), 'trang.tt']);
+                if ($this->chance(25)) {
+                    $plan['units'] = [DemoRoster::OFFICE];
+                } else {
+                    $members = DemoRoster::membersOf(DemoRoster::OFFICE);
+                    shuffle($members);
+                    $plan['employees'] = array_slice($members, 0, $this->chance(75) ? 1 : 2);
+                }
+                if ($this->chance(50) && ! in_array($leader, $plan['employees'], true)) {
+                    $plan['reviewers'] = [$leader];
+                }
                 break;
             case 'person':
                 $to = $this->pick(array_keys(DemoRoster::UNITS));

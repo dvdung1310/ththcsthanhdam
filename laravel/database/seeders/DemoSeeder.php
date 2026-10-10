@@ -56,6 +56,26 @@ class DemoSeeder extends Seeder
                 );
 
                 $this->assignRole($user, $roles[Role::GIAO_VIEN], null, $admin);
+                if ($person['homeroom']) {
+                    $this->assignRole($user, $roles[Role::GVCN], null, $admin);
+                }
+                foreach ($person['roles'] as [$roleCode, $roleUnit]) {
+                    $this->assignRole($user, $roles[$roleCode], $roleUnit ? $units[$roleUnit] : null, $admin);
+                }
+            }
+
+            foreach (DemoRoster::staff() as $handle => $person) {
+                $user = $this->account($person['name'], $handle, $person['phone'], true);
+                if (in_array('avatar', $person['flags'], true) && ! $user->avatar_path) {
+                    $user->update(['avatar_path' => DemoFiles::avatar($handle, $index)]);
+                }
+                $index++;
+                $employee = Employee::firstOrCreate(['user_id' => $user->id], ['employee_code' => $person['code'], 'employment_status' => $person['status']]);
+                DB::table('department_employee')->updateOrInsert(
+                    ['employee_id' => $employee->id, 'department_id' => $units[DemoRoster::OFFICE], 'starts_on' => self::JOINED_ON],
+                    ['is_primary' => true, 'ends_on' => null, 'created_at' => now(), 'updated_at' => now()],
+                );
+                $this->assignRole($user, $roles[Role::NHAN_VIEN], null, $admin);
                 foreach ($person['roles'] as [$roleCode, $roleUnit]) {
                     $this->assignRole($user, $roles[$roleCode], $roleUnit ? $units[$roleUnit] : null, $admin);
                 }
@@ -76,7 +96,7 @@ class DemoSeeder extends Seeder
     private function seedUnits(): array
     {
         $ids = [];
-        foreach (DemoRoster::UNITS as $toName => $groups) {
+        foreach ([...DemoRoster::UNITS, DemoRoster::OFFICE => []] as $toName => $groups) {
             $to = Department::firstOrCreate(['name' => $toName, 'parent_id' => null], ['code' => strtoupper(Str::slug($toName, '_')), 'type' => Department::TYPE_TO, 'is_active' => true]);
             $ids[$toName] = $to->id;
             foreach ($groups as $groupName) {

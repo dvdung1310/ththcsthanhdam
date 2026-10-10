@@ -317,7 +317,7 @@ class EvaluationHistorySeeder extends Seeder
     private function buildProfiles(): void
     {
         foreach (DemoRoster::people() as $handle => $person) {
-            if ($handle === DemoRoster::principal()) {
+            if (array_intersect(array_column($person['roles'], 0), Role::NOT_EVALUATED)) {
                 continue;
             }
             mt_srand(crc32('profile'.$person['code']));
