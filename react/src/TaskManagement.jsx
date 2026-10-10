@@ -620,6 +620,31 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
             />
           </label>
         </section>
+        <section className="form-block">
+          <button
+            type="button"
+            className="block-toggle"
+            aria-expanded={showSupport}
+            onClick={() => setShowSupport(!showSupport)}
+          >
+            <Paperclip size={15} />
+            <span>
+              Tài liệu
+              {attachmentCount > 0 && <em>{attachmentCount}</em>}
+            </span>
+            <ChevronDown size={16} className={showSupport ? "open" : ""} />
+          </button>
+          {showSupport && (
+            <div className="block-body">
+              <TaskDocuments
+                editing={editing}
+                setEditing={setEditing}
+                libraryOptions={libraryOptions}
+                onToggleLibrary={(id) => toggle("library_file_ids", id)}
+              />
+            </div>
+          )}
+        </section>
         <section
           className={`form-block ${editing.assignment_mode === "self" ? "personal-assignment" : ""}`}
         >
@@ -726,31 +751,6 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
               value={editing.description || ""}
             />
           </div>
-        </section>
-        <section className="form-block">
-          <button
-            type="button"
-            className="block-toggle"
-            aria-expanded={showSupport}
-            onClick={() => setShowSupport(!showSupport)}
-          >
-            <Paperclip size={15} />
-            <span>
-              Tài liệu
-              {attachmentCount > 0 && <em>{attachmentCount}</em>}
-            </span>
-            <ChevronDown size={16} className={showSupport ? "open" : ""} />
-          </button>
-          {showSupport && (
-            <div className="block-body">
-              <TaskDocuments
-                editing={editing}
-                setEditing={setEditing}
-                libraryOptions={libraryOptions}
-                onToggleLibrary={(id) => toggle("library_file_ids", id)}
-              />
-            </div>
-          )}
         </section>
         {editing.assignment_mode !== "self" && (
           <details className="task-form-more" open={editing.share_submissions === false}>
