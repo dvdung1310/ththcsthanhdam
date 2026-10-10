@@ -1,19 +1,14 @@
 import { useEffect, useState } from "react";
-import { X, ArrowRight } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { apiFetch } from "./api";
 import "./KpiReport.css";
 import "./KpiTaskDetails.css";
 import "./KpiAnalytics.css";
+import TaskStatsPeople, { PersonTasksDialog } from "./TaskStatsPeople";
 const n = (v) =>
   v == null
     ? "—"
     : Number(v).toLocaleString("vi-VN", { maximumFractionDigits: 1 });
-const statusLabels = {
-  not_started: "Chưa thực hiện",
-  in_progress: "Đang thực hiện",
-  waiting_approval: "Chờ duyệt",
-  completed: "Hoàn thành",
-};
 export default function TaskStats({ onTask }) {
   const now = new Date();
   const [filters, setFilters] = useState({
@@ -293,63 +288,7 @@ export default function TaskStats({ onTask }) {
                 )}
               </div>
             </article>
-            <section className="kpi-table-card">
-              <div className="kpi-filters">
-                <h3>Theo nhân sự</h3>
-                <span className="kpi-result-count">
-                  {report.data.length} nhân sự
-                </span>
-              </div>
-              <div className="kpi-table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Giáo viên</th>
-                      <th>Tổ / nhóm</th>
-                      <th>Công việc</th>
-                      <th>Hoàn thành</th>
-                      <th>Chờ duyệt</th>
-                      <th>Quá hạn</th>
-                      <th>Tỷ lệ hoàn thành</th>
-                      <th>Đúng hạn</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {report.data.map((r) => (
-                      <tr key={r.employee_id}>
-                        <td>
-                          <button
-                            className="kpi-teacher-link"
-                            onClick={() => setSelected(r)}
-                          >
-                            <b>{r.employee}</b>
-                            <small>{r.employee_code} · Xem công việc</small>
-                          </button>
-                        </td>
-                        <td>{r.department || "Chưa thuộc đơn vị"}</td>
-                        <td>{r.assigned}</td>
-                        <td>{r.completed}</td>
-                        <td>{r.waiting}</td>
-                        <td className={r.overdue > 0 ? "delta-bad" : ""}>{r.overdue}</td>
-                        <td>
-                          <strong className="kpi-total">
-                            {r.completion_rate == null ? "—" : n(r.completion_rate) + "%"}
-                          </strong>
-                        </td>
-                        <td>{r.on_time_rate == null ? "—" : n(r.on_time_rate) + "%"}</td>
-                      </tr>
-                    ))}
-                    {!report.data.length && (
-                      <tr>
-                        <td colSpan="8" className="kpi-empty">
-                          Không có nhân sự phù hợp.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
+            <TaskStatsPeople rows={report.data} period={report.period} onUnit={(id) => change("department_id", String(id))} onOpen={setSelected} />
             <p className="kpi-methodology">
               Thống kê theo công việc có hạn trong tháng, không tính công việc
               đã hủy. Công việc giao cho tổ / nhóm được tính cho mọi thành viên
@@ -359,66 +298,7 @@ export default function TaskStats({ onTask }) {
           </>
         )
       )}
-      {selected && (
-        <div className="modal-backdrop">
-          <div
-            className="kpi-task-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label={"Công việc của " + selected.employee}
-          >
-            <header>
-              <div>
-                <h3>Công việc của {selected.employee}</h3>
-                <p>
-                  Tháng {report.period} · {selected.tasks.length} công việc
-                </p>
-              </div>
-              <button aria-label="Đóng" onClick={() => setSelected(null)}>
-                <X size={20} />
-              </button>
-            </header>
-            <div className="kpi-task-list">
-              {selected.tasks.map((t) => (
-                <article key={t.id}>
-                  <div className="kpi-task-main">
-                    <code>{t.code}</code>
-                    <b title={t.title}>{t.title}</b>
-                    <small>{t.category || "Chưa có loại nhiệm vụ"}</small>
-                    <small>
-                      {statusLabels[t.status] || t.status} · Hạn:{" "}
-                      {t.due_at
-                        ? new Date(t.due_at).toLocaleString("vi-VN")
-                        : "Không thời hạn"}
-                    </small>
-                    {t.revision_count > 0 && (
-                      <small>Yêu cầu làm lại: {t.revision_count} lần</small>
-                    )}
-                  </div>
-                  <div className="kpi-task-score">
-                    {t.status === "completed" && (
-                      <b>{t.is_late ? "Hoàn thành trễ hạn" : "Hoàn thành đúng hạn"}</b>
-                    )}
-                    {onTask && (
-                      <button
-                        className="kpi-open-task"
-                        onClick={() => onTask(t.code)}
-                      >
-                        Chi tiết công việc <ArrowRight size={14} />
-                      </button>
-                    )}
-                  </div>
-                </article>
-              ))}
-              {!selected.tasks.length && (
-                <p className="kpi-task-empty">
-                  Không có công việc trong kỳ này.
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {selected && <PersonTasksDialog person={selected} period={report.period} onClose={() => setSelected(null)} onTask={onTask} />}
     </div>
   );
 }
