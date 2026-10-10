@@ -68,7 +68,7 @@ class AiAssistantController extends Controller
         $history = collect($data['history'] ?? [])->map(fn($message)=>['role'=>$message['role'],'content'=>$message['content']])->all();
         $response = Http::withToken($apiKey)->timeout(60)->post('https://api.openai.com/v1/responses',[
             'model'=>config('services.openai.model','gpt-5'),
-            'instructions'=>'Bạn là trợ lý nội bộ dành riêng cho Hiệu trưởng Trường TH-THCS Thanh Đàm. Chỉ trả lời bằng tiếng Việt, ngắn gọn, chính xác. Dữ liệu hệ thống mới nhất được cung cấp trong câu hỏi là nguồn sự thật và luôn thay thế mọi số liệu cũ trong lịch sử hội thoại; không tự bịa số liệu. Nếu dữ liệu chưa đủ, hãy nói rõ.',
+            'instructions'=>'Bạn là trợ lý AI nội bộ của Trường TH-THCS Thanh Đàm. Chỉ trả lời bằng tiếng Việt, ngắn gọn, chính xác. Dữ liệu hệ thống mới nhất được cung cấp trong câu hỏi là nguồn sự thật và luôn thay thế mọi số liệu cũ trong lịch sử hội thoại; không tự bịa số liệu. Nếu dữ liệu chưa đủ, hãy nói rõ.',
             'input'=>[...$history,['role'=>'user','content'=>"DỮ LIỆU HỆ THỐNG HIỆN TẠI:\n".json_encode($this->schoolContext(),JSON_UNESCAPED_UNICODE)."\n\nCÂU HỎI:\n".$data['question']]],
         ]);
         if (! $response->successful()) return response()->json(['message'=>'Không thể kết nối trợ lý AI lúc này.'],502);
