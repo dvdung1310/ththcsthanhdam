@@ -46,13 +46,23 @@ class LibraryController extends Controller
             $scope->whereIn('id', $access->accessibleRootIds() ?: [0]);
         }
 
-        $folders = (clone $scope)->where('type', LibraryNode::FOLDER)->withCount('children')->orderByDesc('is_system')->orderBy('name')->get();
+        $sort = $request->string('sort')->toString();
+        $folders = (clone $scope)->where('type', LibraryNode::FOLDER)->withCount('children')->orderByDesc('is_system')
+            ->when($sort === 'name_desc', fn ($q) => $q->orderByDesc('name'))
+            ->when($sort === 'updated_desc', fn ($q) => $q->latest('updated_at'))
+            ->when($sort === 'updated_asc', fn ($q) => $q->oldest('updated_at'))
+            ->orderBy('name')->get();
         $files = (clone $scope)->where('type', LibraryNode::FILE)
             ->when($request->string('file_type')->toString(), fn ($q, $type) => $q->whereHas('file', fn ($f) => $this->filterMime($f, $type)));
-        match ($request->string('sort')->toString()) {
+        $size = StoredFile::select('size')->whereColumn('files.id', 'library_nodes.file_id');
+        match ($sort) {
             'oldest' => $files->oldest('created_at'),
             'name_asc' => $files->orderBy('name'),
             'name_desc' => $files->orderByDesc('name'),
+            'size_asc' => $files->orderBy($size),
+            'size_desc' => $files->orderByDesc($size),
+            'updated_asc' => $files->oldest('updated_at'),
+            'updated_desc' => $files->latest('updated_at'),
             default => $files->latest('created_at'),
         };
         $paginator = $files->latest('id')->paginate(min(max($request->integer('per_page', 20), 5), 100));
