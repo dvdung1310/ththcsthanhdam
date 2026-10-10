@@ -471,6 +471,7 @@ const SORTERS = {
 const SCORE_KEYS = {
   self: (row) => row.self_total,
   unit: (row) => row.unit_total,
+  final: (row) => (row.has_leader_column && !row.leader_done ? null : row.final_total),
   gap: (row) => (scoreGap(row) == null ? null : Math.abs(scoreGap(row))),
 };
 
@@ -559,6 +560,8 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
   const submitted = scoped?.filter((row) => row.status !== "draft").length ?? 0;
   const scored = scoped?.filter((row) => row.status === "unit_scored" || row.status === "published").length ?? 0;
   const late = scoped?.filter((row) => deadlineNote(row, period)?.tone === "late").length ?? 0;
+  const awaitingLeader = scoped?.filter((row) => row.has_leader_column && row.status === "unit_scored" && !row.leader_done).length ?? 0;
+  const hasLeaderRows = scoped?.some((row) => row.has_leader_column) ?? false;
   const filtered = Boolean(team || group || flag || homeroom || audience || search);
   const [dense, setDense] = useState(() => localStorage.getItem("thanhdam_board_density") !== "comfortable");
   const setDensity = (value) => {
@@ -642,6 +645,7 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
                 {header("self", "Tự chấm", "num")}
                 {header("unit", scorerLabel, "num")}
                 {header("gap", "Chênh lệch", "num")}
+                {hasLeaderRows && header("final", "Điểm chốt", "num")}
                 <th>Xếp loại</th>
                 <th aria-label="Giải trình" />
                 <th aria-label="Mở" />
@@ -668,11 +672,13 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
                     <td>
                       <span className={`ev-chip ${STATUS_TONES[row.status]}`}>{row.status_label}</span>
                       {note && <small className={note.tone === "late" ? "ev-late" : "ev-warn"}>{note.text}</small>}
-                      {!dense && row.assigned_scorers?.length > 0 && <small className="ev-sub" title="Người chấm được chỉ định riêng">Chấm: {row.assigned_scorers.join(", ")}</small>}
+                      {!dense && row.assigned_scorers?.length > 0 && <small className="ev-sub" title="Người chấm được chỉ định riêng">{row.has_leader_column ? "Tổ chấm" : "Chấm"}: {row.assigned_scorers.join(", ")}</small>}
+                      {!dense && row.assigned_leader_scorers?.length > 0 && <small className="ev-sub" title="Người chấm BGH được chỉ định riêng">BGH chấm: {row.assigned_leader_scorers.join(", ")}</small>}
                     </td>
                     <td className="num">{formatScore(row.self_total)}</td>
                     <td className="num">{row.unit_in_progress ? <span className="ev-muted">Đang chấm</span> : formatScore(row.unit_total)}</td>
                     <td className="num"><ScoreDiff self={row.self_total} unit={row.unit_total} /></td>
+                    {hasLeaderRows && <td className="num"><FinalScore row={row} /></td>}
                     <td>
                       {dense ? (
                         <GradeTag row={row} />
@@ -701,6 +707,7 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
         <span className="ev-summary-stats" title={`Đã nộp ${submitted}/${total} · Đã chấm ${scored}/${total}`}>
           <b>{visible?.length ?? 0}</b> phiếu · Đã nộp <b>{submitted}/{total}</b> · Đã chấm <b>{scored}/{total}</b>
           {late > 0 && <> · <b className="ev-text-red">{late}</b> trễ hạn</>}
+          {awaitingLeader > 0 && <> · <b>{awaitingLeader}</b> chờ BGH chấm</>}
           {board?.not_included?.length > 0 && <span className="ev-muted" title={board.not_included.join(", ")}> · {board.not_included.length} người không tham gia kỳ này</span>}
         </span>
         <div className="ev-summary-foot-tools">
@@ -713,6 +720,12 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
       </div>
     </>
   );
+}
+
+function FinalScore({ row }) {
+  if (row.has_leader_column && row.leader_in_progress) return <span className="ev-muted">BGH đang chấm</span>;
+  if (row.has_leader_column && !row.leader_done) return row.final_total == null ? <span className="ev-muted">—</span> : <span className="ev-muted" title="Chờ Ban giám hiệu chấm">Chờ BGH</span>;
+  return row.final_total == null ? <span className="ev-muted">—</span> : <b title={row.has_leader_column && row.leader_total != null && row.final_total !== row.unit_total ? `BGH điều chỉnh từ ${formatScore(row.unit_total)}` : undefined}>{formatScore(row.final_total)}</b>;
 }
 
 function GradeTag({ row }) {
