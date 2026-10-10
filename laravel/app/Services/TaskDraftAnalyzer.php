@@ -82,6 +82,7 @@ class TaskDraftAnalyzer
             .'Mỗi công việc phải cụ thể, giao được cho người/tổ cụ thể, có hạn hoàn thành bám theo mốc trong văn bản (hạn nội bộ nên sớm hơn hạn nộp lên cấp trên 1–3 ngày làm việc). '
             .'Chỉ chọn người thực hiện, tổ/nhóm, người duyệt và loại nhiệm vụ từ danh sách id được cung cấp; không bịa id. '
             .'Ưu tiên giao cho tổ/nhóm khi việc áp dụng cho cả tổ; dùng all_homeroom=true khi việc dành cho tất cả giáo viên chủ nhiệm. '
+            .'Dựa vào mô tả của tổ/nhóm (môn, mảng việc phụ trách) để chọn đúng đơn vị và người thực hiện. '
             .'Cân nhắc số việc đang mở của từng người để tránh dồn việc. Người duyệt thường là người phụ trách mảng (Ban giám hiệu hoặc tổ trưởng), không trùng người thực hiện. '
             .'Ngày dùng định dạng YYYY-MM-DD; nếu văn bản không nêu thì để null. Không gộp quá nhiều việc vào một; tối đa '.self::MAX_TASKS.' việc. '
             .'Viết tiếng Việt, ngắn gọn, đúng nội dung văn bản; không thêm yêu cầu không có trong văn bản.';
@@ -188,6 +189,7 @@ class TaskDraftAnalyzer
         $reviewers = User::with('roles')->where('status', 'active')
             ->whereHas('roles', fn ($q) => $q->whereIn('code', self::REVIEWER_ROLES))->orderBy('name')->get();
         $categories = TaskCategory::where('is_active', true)->orderBy('name')->get(['id', 'name', 'description']);
+        $descriptions = Department::whereIn('id', $units->pluck('id'))->whereNotNull('description')->pluck('description', 'id');
         $today = CarbonImmutable::today();
 
         return [
@@ -200,7 +202,7 @@ class TaskDraftAnalyzer
                 'today' => $today->toDateString(),
                 'weekday_today' => $today->locale('vi')->dayName,
                 'school_year' => ($today->month >= 8 ? $today->year : $today->year - 1).'-'.($today->month >= 8 ? $today->year + 1 : $today->year),
-                'units' => $units->map(fn ($u) => ['id' => $u['id'], 'name' => $u['label'], 'type' => $u['type']])->values(),
+                'units' => $units->map(fn ($u) => array_filter(['id' => $u['id'], 'name' => $u['label'], 'type' => $u['type'], 'description' => $descriptions[$u['id']] ?? null]))->values(),
                 'employees' => $employees->map(fn (Employee $e) => [
                     'id' => $e->id, 'name' => $e->user->name,
                     'roles' => $e->user->roleLabels(),
