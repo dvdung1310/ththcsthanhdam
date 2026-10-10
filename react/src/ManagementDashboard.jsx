@@ -4,6 +4,7 @@ import { Award, ChevronRight, ClipboardCheck, Database, RefreshCw, TriangleAlert
 import { apiFetch } from "./api";
 import { formatBytes } from "./fileUtils";
 import "./ManagementDashboard.css";
+import "./Skeleton.css";
 
 const WEEKDAYS = ["Chủ nhật", "Thứ hai", "Thứ ba", "Thứ tư", "Thứ năm", "Thứ sáu", "Thứ bảy"];
 const number = (value) => (value == null ? "—" : Number(value).toLocaleString("vi-VN", { maximumFractionDigits: 1 }));

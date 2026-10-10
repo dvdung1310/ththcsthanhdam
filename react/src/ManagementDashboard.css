@@ -507,13 +507,7 @@
   }
 }
 
-.home-skeleton .sk {
-  display: block;
-  border-radius: 6px;
-  background: linear-gradient(90deg, #eef1f6 25%, #f7f8fb 37%, #eef1f6 63%);
-  background-size: 400% 100%;
-  animation: home-shimmer 1.4s ease infinite;
-}
+
 
 .home-skeleton .home-module {
   cursor: default;
@@ -525,13 +519,6 @@
   gap: 8px;
 }
 
-@keyframes home-shimmer {
-  0% { background-position: 100% 50%; }
-  100% { background-position: 0 50%; }
-}
 
-@media (prefers-reduced-motion: reduce) {
-  .home-skeleton .sk {
-    animation: none;
-  }
-}
+
+
