@@ -1,0 +1,127 @@
+.task-docs-dialog.lfp-dialog {
+  width: min(820px, 100%);
+  height: min(620px, calc(100vh - 40px));
+}
+
+.lfp-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr);
+  border-top: 1px solid var(--c-border-soft, #eef0f5);
+}
+
+.lfp-tree {
+  min-height: 0;
+  padding: 8px 6px;
+  overflow: auto;
+  border-right: 1px solid var(--c-border-soft, #eef0f5);
+  background: #fafbfd;
+}
+
+.lfp-list {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.lfp-crumbs {
+  padding: 10px 18px 6px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  color: var(--c-muted);
+  font-size: 12px;
+}
+
+.lfp-crumbs > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.lfp-crumbs button {
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 5px;
+  color: var(--c-text-2);
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.lfp-crumbs button:hover {
+  color: var(--c-primary);
+  background: var(--c-primary-tint);
+}
+
+.lfp-options {
+  flex: 1;
+}
+
+.lfp-folder {
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 8px;
+  color: #c08a16;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lfp-folder:hover {
+  background: #f6f7fb;
+}
+
+.lfp-folder .task-docs-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--c-text);
+}
+
+.lfp-folder > svg:last-child {
+  color: var(--c-muted);
+}
+
+.task-docs-options label.blocked {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.lfp-options .task-docs-none {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.lfp-more {
+  margin: 6px auto;
+  padding: 6px 12px;
+  border: 1px solid var(--c-border, #dbdfe9);
+  border-radius: 8px;
+  color: var(--c-primary);
+  background: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+@media (max-width: 640px) {
+  .lfp-body {
+    grid-template-columns: 1fr;
+  }
+
+  .lfp-tree {
+    display: none;
+  }
+}

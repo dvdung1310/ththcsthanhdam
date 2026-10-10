@@ -102,6 +102,7 @@ const emptyTask = {
   employee_ids: [],
   department_ids: [],
   library_file_ids: [],
+  library_files: [],
   attachments: [],
   pending_files: [],
   removed_attachment_ids: [],
@@ -140,7 +141,6 @@ export default function TaskManagement({ canAssign, canUpdate, canAi = false, se
       employees: [],
       departments: [],
       reviewers: [],
-      library_files: [],
       current_employee: null,
     }),
     [filters, setFilters] = useState(emptyActionFilters),
@@ -249,7 +249,8 @@ export default function TaskManagement({ canAssign, canUpdate, canAi = false, se
       starts_at: draft.starts_at ?? emptyTask.starts_at,
       due_at: draft.due_at ?? "",
       assignment_mode: "assign",
-      library_file_ids: [],
+      library_file_ids: (draft.library_files || []).map((file) => file.id),
+      library_files: draft.library_files || [],
       attachments: [],
       pending_files: [],
       removed_attachment_ids: [],
@@ -556,9 +557,15 @@ export default function TaskManagement({ canAssign, canUpdate, canAi = false, se
   }, [editing?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const inlineEdit = Boolean(editing?.id && viewing?.id === editing.id);
   const formDirty = formBaseline !== null && taskFormSnapshot(formRef.current, editing) !== formBaseline;
-  const libraryOptions = editing
-    ? [...refs.library_files, ...(editing.library_files || []).filter((file) => !refs.library_files.some((option) => option.id === file.id))]
-    : [];
+  const toggleLibraryFile = (file) =>
+    setEditing((current) => {
+      const picked = current.library_file_ids.includes(file.id);
+      return {
+        ...current,
+        library_file_ids: picked ? current.library_file_ids.filter((id) => id !== file.id) : [...current.library_file_ids, file.id],
+        library_files: picked || (current.library_files || []).some((item) => item.id === file.id) ? current.library_files : [...(current.library_files || []), file],
+      };
+    });
   const attachmentCount = editing
     ? editing.library_file_ids.length + (editing.pending_files?.length || 0) + (editing.attachments?.length || 0) - (editing.removed_attachment_ids?.length || 0)
     : 0;
@@ -676,7 +683,7 @@ export default function TaskManagement({ canAssign, canUpdate, canAi = false, se
                   onClick={async () => {
                     if (formDirty && !(await confirm({ tone: "warning", title: "Rời form tạo công việc?", message: "Nội dung đang nhập trong form sẽ không được lưu.", confirmText: "Tiếp tục" }))) return;
                     setEditing(null);
-                    navigate("/tasks/ai", { state: { nodeId: editing.library_file_ids[0] ?? null } });
+                    navigate("/tasks/ai", { state: { nodes: (editing.library_files || []).filter((file) => editing.library_file_ids.includes(file.id)) } });
                   }}
                 >
                   <Sparkles size={15} /> Phân tích tài liệu & gợi ý công việc <small>— AI đọc văn bản và tạo các bản nháp công việc</small>
@@ -685,8 +692,8 @@ export default function TaskManagement({ canAssign, canUpdate, canAi = false, se
               <TaskDocuments
                 editing={editing}
                 setEditing={setEditing}
-                libraryOptions={libraryOptions}
-                onToggleLibrary={(id) => toggle("library_file_ids", id)}
+                canBrowseLibrary={refs.can_browse_library}
+                onToggleLibrary={toggleLibraryFile}
               />
             </div>
           )}
@@ -1234,7 +1241,7 @@ export default function TaskManagement({ canAssign, canUpdate, canAi = false, se
                 )}
                 {!!viewing.library_files?.length && (
                   <section className="drawer-section">
-                    <h4>File từ Chia sẻ chung <em>{viewing.library_files.length}</em></h4>
+                    <h4>File từ Kho dữ liệu <em>{viewing.library_files.length}</em></h4>
                     <div className="drawer-files">
                       {viewing.library_files.map((file, index, all) => {
                         const url = file.download_url.replace(/^.*\/api\//, "/api/");
@@ -1243,7 +1250,6 @@ export default function TaskManagement({ canAssign, canUpdate, canAi = false, se
                             key={file.id}
                             name={file.name}
                             size={file.size}
-                            note={file.in_shared === false ? "ngoài Chia sẻ chung" : null}
                             icon={FileText}
                             onOpen={() => openPreview(all.map((f) => ({ key: f.id, name: f.name, mime_type: f.mime_type, size: f.size, url: f.download_url.replace(/^.*\/api\//, "/api/") })), index)}
                             onDownload={() => downloadFile(url, file.name).catch((e) => setError(e.message))}
