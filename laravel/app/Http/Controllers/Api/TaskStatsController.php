@@ -73,10 +73,16 @@ class TaskStatsController extends Controller
             ];
         })->sortByDesc('assigned')->values();
 
-        $departments = Department::ordered($unitIds->all())->map(function ($unit) use ($employees, $cohort, $start, $belongsTo, $metrics) {
+        $departments = Department::ordered($unitIds->all())->map(function ($unit) use ($employees, $cohort, $start, $previous, $compare, $belongsTo, $metrics, $unitIds) {
             $members = $employees->filter(fn (Employee $t) => in_array($unit['id'], $t->unitIds(), true));
+            $ofMembers = fn (Task $t) => $members->contains(fn (Employee $m) => $belongsTo($t, $m));
 
-            return ['id' => $unit['id'], 'name' => $unit['label'], 'employees' => $members->count(), ...$metrics($cohort($start, fn (Task $t) => $members->contains(fn (Employee $m) => $belongsTo($t, $m))))];
+            return [
+                'id' => $unit['id'], 'name' => $unit['label'], 'short_name' => $unit['name'], 'type' => $unit['type'],
+                'parent_id' => $unit['parent_id'] && $unitIds->contains($unit['parent_id']) ? $unit['parent_id'] : null,
+                'employees' => $members->count(), ...$metrics($cohort($start, $ofMembers)),
+                'previous' => $compare === 'none' ? null : $metrics($cohort($previous, $ofMembers)),
+            ];
         })->values();
 
         return response()->json([
