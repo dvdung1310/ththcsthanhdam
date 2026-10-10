@@ -364,24 +364,35 @@ class LibraryController extends Controller
             'size_desc' => $query->orderByDesc('files.size'),
             default => $query->orderByDesc('files.created_at')->orderByDesc('files.id'),
         };
-        $paginator = $query->select('files.id', 'files.original_name', 'files.size', 'files.mime_type', 'files.created_at', 'file_attachments.attachable_type', 'file_attachments.attachable_id')
+        $paginator = $query->select('files.id', 'files.original_name', 'files.size', 'files.mime_type', 'files.created_at')->groupBy('files.id', 'files.original_name', 'files.size', 'files.mime_type', 'files.created_at')
             ->paginate(min(max($request->integer('per_page', 20), 5), 100));
         $rows = collect($paginator->items());
-        $submissionTasks = TaskSubmission::whereIn('id', $rows->where('attachable_type', TaskSubmission::class)->pluck('attachable_id'))->pluck('task_id', 'id');
-        $tasks = Task::withTrashed()->whereIn('id', $rows->where('attachable_type', Task::class)->pluck('attachable_id')->merge($submissionTasks->values()))->get(['id', 'code', 'title', 'status'])->keyBy('id');
+        $links = DB::table('file_attachments')->whereIn('file_id', $rows->pluck('id'))->whereIn('attachable_type', [Task::class, TaskSubmission::class])
+            ->orderBy('id')->get(['file_id', 'attachable_type', 'attachable_id'])->groupBy('file_id');
+        $all = $links->flatten(1);
+        $submissionTasks = TaskSubmission::whereIn('id', $all->where('attachable_type', TaskSubmission::class)->pluck('attachable_id'))->pluck('task_id', 'id');
+        $tasks = Task::withTrashed()->whereIn('id', $all->where('attachable_type', Task::class)->pluck('attachable_id')->merge($submissionTasks->values()))->get(['id', 'code', 'title', 'status'])->keyBy('id');
         $nodes = LibraryNode::with('parent:id,name')->whereIn('file_id', $rows->pluck('id'))->orderBy('id')->get(['id', 'file_id', 'parent_id'])->groupBy('file_id');
 
         return response()->json([
-            'data' => $rows->map(function ($row) use ($submissionTasks, $tasks, $nodes, $access) {
-                $isSubmission = $row->attachable_type === TaskSubmission::class;
-                $task = $tasks->get($isSubmission ? $submissionTasks->get($row->attachable_id) : $row->attachable_id);
+            'data' => $rows->map(function ($row) use ($links, $submissionTasks, $tasks, $nodes, $access) {
+                $uses = ($links->get($row->id) ?? collect())->map(function ($link) use ($submissionTasks, $tasks) {
+                    $isSubmission = $link->attachable_type === TaskSubmission::class;
+
+                    return ['source' => $isSubmission ? 'submission' : 'attachment', 'task' => $tasks->get($isSubmission ? $submissionTasks->get($link->attachable_id) : $link->attachable_id)];
+                });
+                $taskList = $uses->filter(fn ($use) => $use['task'])->unique(fn ($use) => $use['task']->id.'-'.$use['source'])->values()
+                    ->map(fn ($use) => ['id' => $use['task']->id, 'code' => $use['task']->code, 'title' => $use['task']->title, 'status' => $use['task']->status, 'source' => $use['source']]);
+                $sources = $uses->pluck('source')->unique()->values();
 
                 return [
                     'id' => $row->id, 'name' => $row->original_name, 'size' => (int) $row->size, 'mime_type' => $row->mime_type,
                     'created_at' => Carbon::parse($row->created_at)->toIso8601String(),
-                    'source' => $isSubmission ? 'submission' : 'attachment',
-                    'task' => $task ? ['id' => $task->id, 'code' => $task->code, 'title' => $task->title, 'status' => $task->status] : null,
-                    'can_share' => ! $isSubmission || $task?->status === Task::COMPLETED,
+                    'source' => $sources->first() ?? 'attachment',
+                    'sources' => $sources,
+                    'task' => $taskList->first(),
+                    'tasks' => $taskList,
+                    'can_share' => $uses->contains(fn ($use) => $use['source'] === 'attachment' || $use['task']?->status === Task::COMPLETED),
                     'locations' => ($nodes->get($row->id) ?? collect())->map(fn ($node) => [
                         'node_id' => $node->id, 'folder_id' => $node->parent_id, 'folder_name' => $node->parent?->name ?? 'Kho dữ liệu',
                         'can_open' => $access->can($node, LibraryAccess::READ),
