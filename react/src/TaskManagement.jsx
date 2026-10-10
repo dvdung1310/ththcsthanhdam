@@ -68,6 +68,7 @@ import FilePreview from "./FilePreview";
 import ActionMenu from "./ActionMenu";
 import { useConfirm } from "./ConfirmDialog";
 import Avatar from "./Avatar";
+import TitleInput from "./TitleInput";
 import TaskDocuments from "./TaskDocuments";
 
 const labels = {
@@ -643,11 +644,12 @@ export default function TaskManagement({ canAssign, canUpdate, canAi = false, se
             <span className="field-label">
               Tên công việc <span className="required-mark">*</span>
             </span>
-            <input
+            <TitleInput
+              className="task-title-field"
               name="title"
               required
               defaultValue={editing.title}
-              placeholder="Nhập tên công việc ngắn gọn..."
+              placeholder="Nhập tên công việc..."
             />
           </label>
         </section>

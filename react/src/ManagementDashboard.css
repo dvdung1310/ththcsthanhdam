@@ -362,3 +362,10 @@
     font-size: 19px;
   }
 }
+
+.management-attention-list b {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}

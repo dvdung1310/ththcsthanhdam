@@ -1,0 +1,27 @@
+.title-input {
+  position: relative;
+  display: block;
+  flex: 1;
+  min-width: 0;
+}
+
+.title-input textarea {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  resize: none;
+  font: inherit;
+  line-height: 1.45;
+}
+
+.title-input small {
+  display: block;
+  margin-top: 3px;
+  color: var(--c-muted);
+  font-size: 11px;
+  text-align: right;
+}
+
+.title-input small.full {
+  color: var(--c-danger);
+}

@@ -184,7 +184,7 @@ export default function ManagementDashboard({ onTask, onKpi }) {
             {data.attention.tasks.map((task) => (
               <button key={task.id} onClick={() => onTask(task.code)}>
                 <span>
-                  <b>{task.title}</b>
+                  <b title={task.title}>{task.title}</b>
                   <small>{task.code}</small>
                 </span>
                 <em className={task.reason === "Quá hạn" ? "danger" : ""}>
