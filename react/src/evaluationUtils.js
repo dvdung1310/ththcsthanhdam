@@ -28,6 +28,12 @@ export function scoreError(value, max) {
 
 export const normalizeScore = (value) => String(value ?? "").trim().replace(".", ",").replace(/,$/, "").replace(/^0+(?=\d)/, "");
 
+export const cellScore = (row, column) => {
+  if (column !== "final") return row?.[`${column}_score`];
+  const leader = row?.leader_score ?? "";
+  return leader !== "" ? leader : row?.unit_score;
+};
+
 export function computeTotals(sections, rows, column, isHomeroom) {
   const bySection = {};
   const invalid = [];
@@ -37,7 +43,7 @@ export function computeTotals(sections, rows, column, isHomeroom) {
     if (section.homeroom_only && !isHomeroom) return;
     let sum = 0;
     section.criteria.forEach((criterion) => {
-      const raw = rows[criterion.id]?.[`${column}_score`];
+      const raw = cellScore(rows[criterion.id], column);
       if (scoreError(raw, criterion.max_score)) {
         if (!invalid.includes(section.id)) invalid.push(section.id);
         return;
@@ -57,7 +63,7 @@ export function computeTotals(sections, rows, column, isHomeroom) {
 export function hasZeroCriterion(sections, rows, column, isHomeroom) {
   return sections
     .filter((section) => section.kind !== "bonus" && (!section.homeroom_only || isHomeroom))
-    .some((section) => section.criteria.some((criterion) => criterion.max_score > 0 && !(parseScore(rows[criterion.id]?.[`${column}_score`]) > 0)));
+    .some((section) => section.criteria.some((criterion) => criterion.max_score > 0 && !(parseScore(cellScore(rows[criterion.id], column)) > 0)));
 }
 
 export function suggestGrade(grades, total, isHomeroom, hasViolation, hasZero = false) {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
-import { ArrowLeft, Building2, Check, ChevronRight, ListChecks, Lock, Search, ShieldCheck, TriangleAlert, UserX, Users } from "lucide-react";
+import { ArrowLeft, Building2, CalendarDays, Check, ChevronDown, ChevronRight, ListChecks, Lock, Search, ShieldCheck, TriangleAlert, UserX, Users } from "lucide-react";
 import { apiJson } from "./api";
 import { useConfirm } from "./ConfirmDialog";
 import { STATUS_TONES } from "./evaluationUtils";
@@ -10,6 +10,8 @@ import EvaluationScorerPicker from "./EvaluationScorerPicker";
 
 const pad = (n) => String(n).padStart(2, "0");
 const AUDIENCE_SHORT = { teacher: "GV", staff: "NV", leadership: "BGH" };
+const SLOT_LABELS = { unit: "Tổ", board: "BGH" };
+const columnOf = (row, slot) => (slot === "unit" ? (row.audience === "teacher" ? "unit" : null) : row.audience === "teacher" ? "leader" : "unit");
 
 function nextOpenMonth(periods) {
   const now = new Date();
@@ -47,6 +49,8 @@ export default function EvaluationPeriodEditor() {
   const [collapsed, setCollapsed] = useState(new Set());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [taken, setTaken] = useState([]);
 
   useEffect(() => {
     const load = async () => {
@@ -55,11 +59,12 @@ export default function EvaluationPeriodEditor() {
         setRoster(result);
         setSelected(new Set(result.data.filter((row) => (editing ? row.evaluation : row.eligible)).map((row) => row.teacher_id)));
         setScorers(new Set(editing ? result.scorer_ids : result.scorer_candidates.filter((candidate) => candidate.suggested).map((candidate) => candidate.id)));
-        setSheetScorers(Object.fromEntries(result.data.filter((row) => row.evaluation?.scorer_ids?.length).map((row) => [row.teacher_id, row.evaluation.scorer_ids])));
+        setSheetScorers(Object.fromEntries(result.data.filter((row) => row.evaluation).map((row) => [row.teacher_id, { unit: row.evaluation.scorer_ids ?? [], leader: row.evaluation.leader_scorer_ids ?? [] }])));
         if (editing) {
           setForm({ self_due_on: result.period.self_due_on ?? "", unit_due_on: result.period.unit_due_on ?? "" });
         } else {
           const periods = (await apiJson("/api/evaluation-periods")).data;
+          setTaken(periods.map((p) => `${p.year}-${p.month}`));
           const wanted = Number(query.get("year")) && Number(query.get("month")) ? new Date(Number(query.get("year")), Number(query.get("month")) - 1, 1) : null;
           const taken = wanted && periods.some((p) => p.year === wanted.getFullYear() && p.month === wanted.getMonth() + 1);
           const next = wanted && !taken ? wanted : nextOpenMonth(periods);
@@ -110,7 +115,7 @@ export default function EvaluationPeriodEditor() {
   const scopeLabel = scope === "excluded" ? "Không thuộc diện đánh giá" : scopeNode?.name ?? "Toàn trường";
   const keyword = search.trim().toLowerCase();
   const audiencesPresent = ["teacher", "staff", "leadership"].filter((value) => members.some((row) => row.audience === value));
-  const needsBoard = rows.some((row) => selected.has(row.teacher_id) && row.audience !== "teacher");
+  const needsBoard = selected.size > 0;
   const toggleScorer = (id) =>
     setScorers((current) => {
       const next = new Set(current);
@@ -146,7 +151,6 @@ export default function EvaluationPeriodEditor() {
       return next;
     });
 
-  const title = editing ? `Sửa kỳ ${roster?.period?.label ?? ""}` : form ? `Mở kỳ đánh giá Tháng ${form.month}/${form.year}` : "Mở kỳ đánh giá";
   const backTo = editing ? `/evaluations?tab=board&period=${periodId}` : "/evaluations?tab=board";
   const changes = [added.length && `+${added.length}`, removed.length && `−${removed.length}`].filter(Boolean).join(" / ");
 
@@ -156,7 +160,7 @@ export default function EvaluationPeriodEditor() {
       return;
     }
     if (needsBoard && !scorers.size) {
-      setError("Kỳ có phiếu Nhân viên hoặc Ban giám hiệu: chọn ít nhất một người chấm cột “BGH đánh giá”.");
+      setError("Chọn ít nhất một người chấm cột “BGH đánh giá”.");
       return;
     }
     const losing = removed.filter((row) => row.evaluation.has_data);
@@ -178,8 +182,12 @@ export default function EvaluationPeriodEditor() {
         teacher_ids: [...selected],
         scorer_ids: [...scorers],
         sheet_scorers: rows
-          .filter((row) => selected.has(row.teacher_id) && (sheetScorers[row.teacher_id]?.length || row.evaluation?.scorer_ids?.length))
-          .map((row) => ({ teacher_id: row.teacher_id, user_ids: sheetScorers[row.teacher_id] ?? [] })),
+          .filter((row) => selected.has(row.teacher_id))
+          .flatMap((row) =>
+            (row.audience === "teacher" ? ["unit", "leader"] : ["unit"])
+              .filter((column) => sheetScorers[row.teacher_id]?.[column]?.length || (column === "unit" ? row.evaluation?.scorer_ids : row.evaluation?.leader_scorer_ids)?.length)
+              .map((column) => ({ teacher_id: row.teacher_id, column, user_ids: sheetScorers[row.teacher_id]?.[column] ?? [] })),
+          ),
       };
       const result = editing
         ? await apiJson(`/api/evaluation-periods/${periodId}`, { method: "PUT", body })
@@ -204,25 +212,140 @@ export default function EvaluationPeriodEditor() {
   }
 
   const head = groupState(visible);
+  const monthOptions = (() => {
+    const now = new Date();
+    const list = [];
+    for (let offset = -4; offset <= 8; offset++) {
+      const date = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+      const year = date.getFullYear();
+      const month = date.getMonth() + 1;
+      list.push({ value: `${year}-${month}`, year, month, taken: taken.includes(`${year}-${month}`) });
+    }
+    if (form && !list.some((option) => option.value === `${form.year}-${form.month}`)) list.unshift({ value: `${form.year}-${form.month}`, year: Number(form.year), month: Number(form.month), taken: false });
+    return list;
+  })();
+  const pickMonth = (value) => {
+    const [year, month] = value.split("-").map(Number);
+    const prefix = `${year}-${pad(month)}`;
+    setForm({ ...form, year, month, self_due_on: `${prefix}-25`, unit_due_on: `${prefix}-28` });
+  };
   const candidateById = Object.fromEntries((roster.assignable_scorers ?? []).map((candidate) => [candidate.id, candidate]));
-  const defaultFor = (row) =>
-    row.audience === "teacher"
+  const defaultFor = (row, slot) =>
+    slot === "unit"
       ? ["Tổ trưởng, tổ phó, nhóm trưởng của đơn vị"]
       : roster.scorer_candidates.filter((candidate) => scorers.has(candidate.id) && candidate.employee_id !== row.teacher_id).map((candidate) => candidate.name);
+  const assignedOf = (row, slot) => {
+    const column = columnOf(row, slot);
+    return column ? sheetScorers[row.teacher_id]?.[column] ?? [] : [];
+  };
+  const bulkTargets = (slot) => visible.filter((row) => selected.has(row.teacher_id) && columnOf(row, slot));
+  const applyScorers = async (ids) => {
+    const { slot, rows: targets, bulk } = assigning;
+    const names = ids.map((id) => candidateById[id]?.name ?? "?").join(", ");
+    if (bulk) {
+      const ok = await confirm({
+        title: `Đổi người chấm · ${SLOT_LABELS[slot]} cho ${targets.length} phiếu?`,
+        message: ids.length ? `Chỉ định ${names} chấm cột ${slot === "unit" ? "tổ" : "BGH đánh giá"} của các phiếu đã chọn đang hiển thị.` : "Các phiếu đã chọn đang hiển thị sẽ dùng lại người chấm mặc định.",
+        confirmText: "Đổi người chấm",
+      });
+      if (!ok) return;
+    }
+    const updates = {};
+    const skipped = [];
+    targets.forEach((row) => {
+      const column = columnOf(row, slot);
+      const own = ids.filter((id) => candidateById[id]?.employee_id !== row.teacher_id);
+      if (ids.length && !own.length) {
+        skipped.push(row.name);
+        return;
+      }
+      updates[row.teacher_id] = { ...(updates[row.teacher_id] ?? {}), [column]: own };
+    });
+    setSheetScorers((current) => {
+      const next = { ...current };
+      Object.entries(updates).forEach(([id, change]) => (next[id] = { ...(next[id] ?? {}), ...change }));
+      return next;
+    });
+    if (bulk) setNotice(`Đã đổi người chấm · ${SLOT_LABELS[slot]} cho ${Object.keys(updates).length} phiếu${skipped.length ? `; bỏ qua phiếu của ${skipped.join(", ")} vì không ai chấm phiếu của chính mình` : ""}. Bấm “${editing ? "Lưu thay đổi" : "Mở kỳ"}” để áp dụng.`);
+    setAssigning(null);
+  };
+  const scorerCell = (row, slot) => {
+    if (!selected.has(row.teacher_id) || !columnOf(row, slot)) return <span className="ev-muted">—</span>;
+    const ids = assignedOf(row, slot);
+    return (
+      <span className="ev-assign-line">
+        {ids.length ? (
+          <span className="ev-chip purple" title="Chỉ định riêng">{ids.map((id) => candidateById[id]?.name ?? "?").join(", ")}</span>
+        ) : (
+          <span className="ev-muted">Mặc định</span>
+        )}
+        <button type="button" className="ev-assign-btn" disabled={locked} onClick={() => setAssigning({ slot, rows: [row], bulk: false })}>Đổi</button>
+      </span>
+    );
+  };
+  const scorerHeader = (slot) => {
+    const targets = bulkTargets(slot);
+    return (
+      <th className="ev-scorer-col">
+        <span className="ev-th-assign">
+          Người chấm · {SLOT_LABELS[slot]}
+          <button
+            type="button"
+            className="ev-assign-btn"
+            disabled={locked || !targets.length}
+            title={targets.length ? `Đổi cho ${targets.length} phiếu đã chọn đang hiển thị` : "Chọn phiếu trong danh sách bên dưới để đổi hàng loạt"}
+            onClick={() => setAssigning({ slot, rows: targets, bulk: true })}
+          >
+            Đổi{targets.length ? ` (${targets.length})` : ""}
+          </button>
+        </span>
+      </th>
+    );
+  };
 
   return (
     <div className="ev-page ev-period-page">
-      <section className="ev-tpl-title">
-        <Link className="ev-back" to={backTo}><ArrowLeft size={16} /> Đánh giá tháng</Link>
-        <div><h2>{title}</h2></div>
-        <div className="ev-tpl-actions">
-          <span className="ev-dialog-count">
-            Đã chọn <b>{selected.size}</b> người{editing && changes ? ` · ${changes} phiếu` : ""}
-          </span>
-          <button className="secondary-btn" onClick={() => navigate(backTo)} disabled={saving}>Hủy</button>
-          <button className="primary-btn" onClick={submit} disabled={saving || locked || !selected.size}>
-            {saving ? "Đang lưu..." : editing ? "Lưu thay đổi" : `Mở kỳ (${selected.size} phiếu)`}
-          </button>
+      <section className="ev-card ev-period-head">
+        <div className="ev-period-head-top">
+          <Link className="ev-back" to={backTo}><ArrowLeft size={16} /> Đánh giá tháng</Link>
+          <h2>{editing ? `Sửa kỳ ${roster.period?.label ?? ""}` : "Mở kỳ đánh giá"}</h2>
+          {editing && roster.period && <span className={`ev-chip ${roster.period.status === "published" ? "green" : roster.period.status === "disclosed" ? "orange" : "blue"}`}>{roster.period.status_label}</span>}
+          <div className="ev-tpl-actions">
+            <span className="ev-dialog-count">
+              Đã chọn <b>{selected.size}</b> người{editing && changes ? ` · ${changes} phiếu` : ""}
+            </span>
+            <button className="secondary-btn" onClick={() => navigate(backTo)} disabled={saving}>Hủy</button>
+            <button className="primary-btn" onClick={submit} disabled={saving || locked || !selected.size}>
+              {saving ? "Đang lưu..." : editing ? "Lưu thay đổi" : `Mở kỳ (${selected.size} phiếu)`}
+            </button>
+          </div>
+        </div>
+        <div className="ev-period-head-fields">
+          {!editing && (
+            <label className="ev-head-field">
+              <span>Kỳ đánh giá</span>
+              <span className="ev-head-control">
+                <CalendarDays size={15} />
+                <select value={`${form.year}-${form.month}`} onChange={(e) => pickMonth(e.target.value)}>
+                  {monthOptions.map((option) => (
+                    <option key={option.value} value={option.value} disabled={option.taken}>
+                      Tháng {option.month}/{option.year}{option.taken ? " · đã mở" : ""}
+                    </option>
+                  ))}
+                </select>
+              </span>
+            </label>
+          )}
+          <label className="ev-head-field">
+            <span>Hạn tự chấm</span>
+            <input className="ev-head-control" type="date" value={form.self_due_on} disabled={locked} onChange={(e) => setForm({ ...form, self_due_on: e.target.value })} />
+          </label>
+          <label className="ev-head-field">
+            <span>Hạn chấm phiếu</span>
+            <input className="ev-head-control" type="date" value={form.unit_due_on} disabled={locked} onChange={(e) => setForm({ ...form, unit_due_on: e.target.value })} />
+          </label>
+          <PeriodScorers candidates={roster.scorer_candidates} selected={scorers} missing={needsBoard && !scorers.size} locked={locked} onToggle={toggleScorer} />
+          <TemplateSummary templates={roster.templates.filter((item) => audiencesPresent.includes(item.audience))} editing={editing} />
         </div>
       </section>
 
@@ -234,70 +357,11 @@ export default function EvaluationPeriodEditor() {
         </div>
       )}
       {locked && <div className="ev-notice warn"><Lock size={14} /> Kỳ đã công bố nên không sửa được. Mở lại kỳ trước khi thay đổi.</div>}
-
-      <section className="ev-card ev-period-setup">
-        {!editing && (
-          <>
-            <label>
-              Tháng
-              <select value={form.month} onChange={(e) => setForm({ ...form, month: e.target.value })}>
-                {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>Tháng {i + 1}</option>)}
-              </select>
-            </label>
-            <label>
-              Năm
-              <input type="number" min="2020" max="2100" value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} />
-            </label>
-          </>
-        )}
-        <label>
-          Hạn tự chấm
-          <input type="date" value={form.self_due_on} disabled={locked} onChange={(e) => setForm({ ...form, self_due_on: e.target.value })} />
-        </label>
-        <label>
-          Hạn chấm phiếu
-          <input type="date" value={form.unit_due_on} disabled={locked} onChange={(e) => setForm({ ...form, unit_due_on: e.target.value })} />
-        </label>
-        <div className="ev-period-template">
-          <ListChecks size={16} />
-          <span>
-            {editing ? "Bộ tiêu chí cho phiếu mới" : "Bộ tiêu chí áp dụng"}
-            {roster.templates
-              .filter((item) => audiencesPresent.includes(item.audience))
-              .map((item) => (
-                <em key={item.audience}>
-                  {AUDIENCE_SHORT[item.audience]}: {item.active ? <Link to={`/evaluations/templates/${item.active.id}`}>{item.active.name}</Link> : <b className="ev-text-red">Chưa có</b>}
-                </em>
-              ))}
-          </span>
+      {notice && (
+        <div className="ev-notice">
+          <Check size={14} /> {notice}
+          <button type="button" className="ev-link-btn" onClick={() => setNotice("")}>Đóng</button>
         </div>
-      </section>
-
-      {(needsBoard || scorers.size > 0) && (
-        <section className={`ev-card ev-period-scorers ${needsBoard && !scorers.size ? "missing" : ""}`}>
-          <header>
-            <ShieldCheck size={16} />
-            <span>
-              <b>Người chấm cột “BGH đánh giá”</b>
-              <small>Áp dụng cho phiếu Nhân viên và Ban giám hiệu. Không ai chấm phiếu của chính mình — người khác trong danh sách sẽ chấm.</small>
-            </span>
-          </header>
-          <div className="ev-scorer-list">
-            {roster.scorer_candidates.map((candidate) => {
-              const active = scorers.has(candidate.id);
-              return (
-                <button key={candidate.id} type="button" disabled={locked} className={`ev-scorer ${active ? "active" : ""}`} onClick={() => toggleScorer(candidate.id)} aria-pressed={active}>
-                  <Avatar src={candidate.avatar_url} name={candidate.name} size={28} />
-                  <span>
-                    <b>{candidate.name}</b>
-                    <small>{candidate.roles.slice(0, 2).join(" · ")}</small>
-                  </span>
-                  {active && <Check size={15} />}
-                </button>
-              );
-            })}
-          </div>
-        </section>
       )}
 
       <div className="ev-period-panes">
@@ -356,10 +420,9 @@ export default function EvaluationPeriodEditor() {
                     <TriCheckbox checked={head.all} indeterminate={head.some} disabled={!head.pickable.length} onChange={() => setMany(visible, !head.all)} label="Chọn tất cả đang hiển thị" />
                   </th>
                   <th>Nhân sự</th>
-                  <th>Mã</th>
-                  <th>Đơn vị</th>
-                  <th>Vai trò</th>
-                  <th>Người chấm</th>
+                  <th className="ev-role-col">Vai trò</th>
+                  {scorerHeader("unit")}
+                  {scorerHeader("board")}
                   <th>{editing ? "Phiếu" : "Ghi chú"}</th>
                 </tr>
               </thead>
@@ -376,13 +439,13 @@ export default function EvaluationPeriodEditor() {
                           {row.avatar_url ? <img src={row.avatar_url} alt="" /> : <Avatar name={row.name} />}
                           <span>
                             <b>{row.name}{row.audience !== "teacher" && <em className="ev-tag audience">{AUDIENCE_SHORT[row.audience]}</em>}</b>
-                            {row.other_units?.length > 0 && <small>Cũng thuộc: {row.other_units.join(", ")}</small>}
+                            <small title={[unitName(row.unit_id), ...(row.other_units ?? [])].filter(Boolean).join(", ") || undefined}>
+                              {[row.code, unitName(row.unit_id), row.other_units?.length > 0 && `+${row.other_units.length} đơn vị`].filter(Boolean).join(" · ")}
+                            </small>
                           </span>
                         </span>
                       </td>
-                      <td className="ev-muted">{row.code ?? "—"}</td>
-                      <td>{unitName(row.unit_id) ?? <span className="ev-muted">—</span>}</td>
-                      <td>
+                      <td className="ev-role-col">
                         <span className="ev-role-list">
                           {row.roles?.length ? (
                             row.roles.map((role, index) => (
@@ -396,28 +459,18 @@ export default function EvaluationPeriodEditor() {
                           )}
                         </span>
                       </td>
-                      <td onClick={(e) => e.stopPropagation()}>
-                        {selected.has(row.teacher_id) ? (
-                          <span className="ev-assign-line">
-                            {sheetScorers[row.teacher_id]?.length ? (
-                              <span className="ev-chip purple" title="Chỉ định riêng">{sheetScorers[row.teacher_id].map((id) => candidateById[id]?.name ?? "?").join(", ")}</span>
-                            ) : (
-                              <span className="ev-muted">Mặc định</span>
-                            )}
-                            <button type="button" className="ev-assign-btn" disabled={locked} onClick={() => setAssigning(row)}>Đổi</button>
-                          </span>
-                        ) : (
-                          <span className="ev-muted">—</span>
-                        )}
-                      </td>
+                      <td onClick={(e) => e.stopPropagation()}>{scorerCell(row, "unit")}</td>
+                      <td onClick={(e) => e.stopPropagation()}>{scorerCell(row, "board")}</td>
                       <td>
                         {row.evaluation ? (
                           <span className="ev-roster-tags">
-                            <span className={`ev-chip ${STATUS_TONES[row.evaluation.status]}`}>{row.evaluation.status_label}</span>
+                            <span className={`ev-chip ${STATUS_TONES[row.evaluation.status]}`} title={row.lock_reason ?? undefined}>
+                              {row.lock_reason && <Lock size={11} />} {row.evaluation.status_label}
+                            </span>
                             {row.evaluation.has_data && row.evaluation.status === "draft" && <span className="ev-chip orange">Có dữ liệu</span>}
                           </span>
                         ) : null}
-                        {(row.lock_reason || row.reason) && <small className="ev-sub">{row.lock_reason ?? row.reason}</small>}
+                        {row.reason && !row.evaluation && <small className="ev-sub">{row.reason}</small>}
                       </td>
                     </tr>
                   );
@@ -430,15 +483,13 @@ export default function EvaluationPeriodEditor() {
       </div>
       {assigning && (
         <EvaluationScorerPicker
-          title="Người chấm riêng cho phiếu"
-          subject={`${assigning.name}${editing ? "" : " · áp dụng khi mở kỳ"}`}
-          candidates={(roster.assignable_scorers ?? []).filter((candidate) => candidate.employee_id !== assigning.teacher_id)}
-          selected={sheetScorers[assigning.teacher_id] ?? []}
-          defaultScorers={defaultFor(assigning)}
-          onSave={(ids) => {
-            setSheetScorers((current) => ({ ...current, [assigning.teacher_id]: ids }));
-            setAssigning(null);
-          }}
+          bulk={assigning.bulk}
+          title={assigning.bulk ? `Đổi người chấm · ${SLOT_LABELS[assigning.slot]} cho ${assigning.rows.length} phiếu` : `Người chấm · ${SLOT_LABELS[assigning.slot]} riêng cho phiếu`}
+          subject={assigning.bulk ? `Các phiếu đã chọn đang hiển thị${editing ? "" : " · áp dụng khi mở kỳ"}` : `${assigning.rows[0].name}${editing ? "" : " · áp dụng khi mở kỳ"}`}
+          candidates={(roster.assignable_scorers ?? []).filter((candidate) => assigning.bulk || candidate.employee_id !== assigning.rows[0].teacher_id)}
+          selected={assigning.bulk ? [] : assignedOf(assigning.rows[0], assigning.slot)}
+          defaultScorers={assigning.bulk ? [] : defaultFor(assigning.rows[0], assigning.slot)}
+          onSave={applyScorers}
           onClose={() => setAssigning(null)}
         />
       )}
@@ -477,5 +528,101 @@ function UnitNode({ node, scope, collapsed, groupState, onPick, onCheck, onToggl
         <UnitNode key={child.key} node={child} scope={scope} collapsed={collapsed} groupState={groupState} onPick={onPick} onCheck={onCheck} onToggle={onToggle} />
       ))}
     </>
+  );
+}
+
+function useOutsideClose(open, close) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const outside = (event) => !ref.current?.contains(event.target) && close();
+    const escape = (event) => event.key === "Escape" && close();
+    document.addEventListener("mousedown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("mousedown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open, close]);
+  return ref;
+}
+
+function PeriodScorers({ candidates, selected, missing, locked, onToggle }) {
+  const [open, setOpen] = useState(false);
+  const ref = useOutsideClose(open, () => setOpen(false));
+  const chosen = candidates.filter((candidate) => selected.has(candidate.id));
+  return (
+    <div className="ev-head-field ev-head-pop" ref={ref}>
+      <span>Người chấm “BGH đánh giá”</span>
+      <button type="button" className={`ev-head-control ev-head-trigger ${missing ? "missing" : ""}`} aria-expanded={open} onClick={() => setOpen(!open)}>
+        <ShieldCheck size={15} />
+        {chosen.length ? (
+          <>
+            <span className="ev-avatar-stack">
+              {chosen.slice(0, 3).map((candidate) => <Avatar key={candidate.id} src={candidate.avatar_url} name={candidate.name} size={22} />)}
+            </span>
+            <span className="ev-head-names">{chosen.length > 2 ? `${chosen[0].name}, ${chosen[1].name} +${chosen.length - 2}` : chosen.map((candidate) => candidate.name).join(", ")}</span>
+          </>
+        ) : (
+          <span className="ev-head-names">Chưa chọn người chấm</span>
+        )}
+        <ChevronDown size={14} />
+      </button>
+      {open && (
+        <div className="ev-head-panel ev-scorers-panel" role="dialog" aria-label="Người chấm cột BGH đánh giá">
+          <p>Mặc định chấm cột “BGH đánh giá” của mọi phiếu: phiếu GV chấm sau khi tổ chấm xong, phiếu NV/BGH chấm trực tiếp. Không ai chấm phiếu của chính mình.</p>
+          <div className="ev-scorers-options">
+            {candidates.map((candidate) => {
+              const active = selected.has(candidate.id);
+              const blocked = locked || (candidate.outside && !active);
+              return (
+                <button key={candidate.id} type="button" disabled={blocked} className={active ? "active" : ""} onClick={() => onToggle(candidate.id)} aria-pressed={active}>
+                  <span className="ev-scorer-check">{active && <Check size={12} strokeWidth={3} />}</span>
+                  <Avatar src={candidate.avatar_url} name={candidate.name} size={28} />
+                  <span>
+                    <b>{candidate.name}</b>
+                    <small>{candidate.roles.slice(0, 2).join(" · ")}</small>
+                  </span>
+                  {candidate.outside && <em className="ev-chip orange" title="Không còn vai trò Ban giám hiệu — chỉ bỏ chọn được">Ngoài BGH</em>}
+                </button>
+              );
+            })}
+            {!candidates.length && <p className="ev-muted">Chưa có ai mang vai trò Ban giám hiệu. Gán vai trò ở màn Vai trò & quyền.</p>}
+          </div>
+          <footer>Đã chọn {chosen.length} người · chỉ người có vai trò Ban giám hiệu</footer>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TemplateSummary({ templates, editing }) {
+  const [open, setOpen] = useState(false);
+  const ref = useOutsideClose(open, () => setOpen(false));
+  const missing = templates.filter((item) => !item.active);
+  return (
+    <div className="ev-head-field ev-head-pop ev-head-templates" ref={ref} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      <span>{editing ? "Bộ tiêu chí cho phiếu mới" : "Bộ tiêu chí"}</span>
+      <button type="button" className={`ev-head-control ev-head-trigger ${missing.length ? "missing" : ""}`} aria-expanded={open} onClick={() => setOpen(!open)} onFocus={() => setOpen(true)}>
+        <ListChecks size={15} />
+        {missing.length > 0 && <span className="ev-head-names">Thiếu bộ {missing.map((item) => AUDIENCE_SHORT[item.audience]).join(", ")}</span>}
+        <span className="ev-head-tags">{templates.map((item) => <em key={item.audience} className={item.active ? "" : "bad"}>{AUDIENCE_SHORT[item.audience]}</em>)}</span>
+      </button>
+      {open && (
+        <div className="ev-head-panel ev-templates-panel" role="tooltip">
+          {templates.map((item) => (
+            <div key={item.audience} className="ev-template-row">
+              <em>{AUDIENCE_SHORT[item.audience]}</em>
+              <span>
+                <small>{item.label}</small>
+                {item.active ? <Link to={`/evaluations/templates/${item.active.id}`}>{item.active.name}</Link> : <b className="ev-text-red">Chưa có bộ tiêu chí đang áp dụng</b>}
+              </span>
+            </div>
+          ))}
+          {!templates.length && <p className="ev-muted">Chưa chọn nhân sự nào.</p>}
+          <footer>{editing ? "Chỉ áp dụng cho phiếu thêm mới vào kỳ; phiếu đã có giữ bộ tiêu chí cũ." : "Phiếu tạo theo bộ tiêu chí đang áp dụng của từng đối tượng."}</footer>
+        </div>
+      )}
+    </div>
   );
 }

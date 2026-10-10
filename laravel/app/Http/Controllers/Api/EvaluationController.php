@@ -49,6 +49,7 @@ class EvaluationController extends Controller
         'sheet_scorers.*.teacher_id' => ['required', 'integer'],
         'sheet_scorers.*.user_ids' => ['present', 'array'],
         'sheet_scorers.*.user_ids.*' => ['integer', 'exists:users,id'],
+        'sheet_scorers.*.column' => ['sometimes', 'in:unit,leader'],
     ];
 
     public function __construct(private EvaluationScoring $scoring, private FileStore $store, private EvaluationDirectory $directory, private LeaveSummary $leave) {}
@@ -102,7 +103,7 @@ class EvaluationController extends Controller
                 'active' => ($active = EvaluationTemplate::where('is_active', true)->where('audience', $audience)->first()) ? ['id' => $active->id, 'name' => $active->name] : null,
             ])->values(),
             'scorer_ids' => $period ? $period->scorers()->pluck('users.id') : [],
-            'scorer_candidates' => $this->scorerCandidates(),
+            'scorer_candidates' => $this->scorerCandidates($period),
             'assignable_scorers' => $this->assignableScorers(),
             'units' => Department::orderBy('name')->get(['id', 'name', 'type', 'parent_id', 'is_active'])
                 ->filter(fn (Department $unit) => $unit->is_active || $teachers->contains(fn ($t) => $t->departments->contains('id', $unit->id)))
@@ -121,7 +122,8 @@ class EvaluationController extends Controller
                     'roles' => $this->leadershipRoles($teacher->user),
                     'eligible' => $reason === null, 'reason' => $reason,
                     'evaluation' => $evaluation ? [
-                        'id' => $evaluation->id, 'status' => $evaluation->status, 'scorer_ids' => $evaluation->assignedScorers->pluck('id')->values(), 'status_label' => self::STATUS_LABELS[$evaluation->status],
+                        'id' => $evaluation->id, 'status' => $evaluation->status, 'status_label' => $this->statusLabel($evaluation),
+                        'scorer_ids' => $this->assignedIds($evaluation, Evaluation::UNIT), 'leader_scorer_ids' => $this->assignedIds($evaluation, Evaluation::LEADER),
                         'has_data' => $evaluation->status !== Evaluation::DRAFT || $evaluation->scores_count > 0 || $evaluation->comments_count > 0 || filled($evaluation->duties) || filled($evaluation->results),
                     ] : null,
                     'removable' => ! $evaluation || (! $period?->isLocked() && ! $locked),
@@ -148,6 +150,7 @@ class EvaluationController extends Controller
         $teachers = $this->eligibleOnly($data['teacher_ids']);
         $templates = $this->templatesFor($teachers);
         $this->assertScorers($teachers, $data['scorer_ids'] ?? []);
+        $this->assertBoardMembers($data['scorer_ids'] ?? []);
 
         $period = DB::transaction(function () use ($data, $templates, $request, $teachers) {
             $period = EvaluationPeriod::create([
@@ -187,6 +190,7 @@ class EvaluationController extends Controller
         $templates = $this->templatesFor($added);
         $kept = Employee::with('user.roles')->whereIn('id', $wanted)->get();
         $this->assertScorers($kept, $data['scorer_ids'] ?? $period->scorers()->pluck('users.id')->all());
+        $this->assertBoardMembers($data['scorer_ids'] ?? [], $period);
         $dueChanged = array_key_exists('self_due_on', $data) && ($data['self_due_on'] ?? null) !== $period->self_due_on?->toDateString();
 
         DB::transaction(function () use ($period, $data, $added, $removed, $templates) {
@@ -251,6 +255,8 @@ class EvaluationController extends Controller
     public function publish(Request $request, EvaluationPeriod $period): JsonResponse
     {
         abort_if($period->isLocked(), 422, 'Kỳ đánh giá đã công bố.');
+        $waiting = $period->evaluations()->where('audience', EvaluationTemplate::TEACHER)->where('status', Evaluation::UNIT_SCORED)->whereNull('leader_scored_at')->count();
+        abort_if($waiting > 0, 422, "Còn {$waiting} phiếu giáo viên Ban giám hiệu chưa hoàn tất chấm.");
         DB::transaction(function () use ($period, $request) {
             $period->evaluations()->with(['period', 'scores'])->get()->each(function (Evaluation $evaluation) use ($request) {
                 $this->refreshResult($evaluation);
@@ -298,16 +304,16 @@ class EvaluationController extends Controller
 
         $evaluations = Evaluation::with(['teacher.user', 'teacher.departments', 'scores', 'period', 'assignedScorers:id,name'])
             ->where('period_id', $period->id)
-            ->when($units !== null, fn ($q) => $q->where('teacher_id', '!=', $own ?? 0)->where(fn ($scope) => $scope
+            ->when($units !== null, fn ($q) => $q->where('teacher_id', '!=', $own ?? 0))
+            ->when($units !== null && ! $leadershipScorer, fn ($q) => $q->where(fn ($scope) => $scope
                 ->where(fn ($t) => $t->where('audience', EvaluationTemplate::TEACHER)->whereHas('teacher', fn ($e) => $e->inUnits($units ?: [0])))
-                ->when($leadershipScorer, fn ($b) => $b->orWhere('audience', '!=', EvaluationTemplate::TEACHER))
                 ->when($assignedHere, fn ($b) => $b->orWhereHas('assignedScorers', fn ($u) => $u->where('users.id', $me)))))
             ->when($data['audience'] ?? null, fn ($q, $audience) => $q->where('audience', $audience))
             ->when($data['department_id'] ?? null, fn ($q, $unit) => $q->whereHas('teacher', fn ($t) => $t->inUnits([$unit])))
             ->when($data['status'] ?? null, fn ($q, $status) => $q->where('status', $status))
             ->when(trim($data['search'] ?? ''), fn ($q, $search) => $q->whereHas('teacher', fn ($t) => $t->where('employee_code', 'like', "%{$search}%")->orWhereHas('user', fn ($u) => $u->where('name', 'like', "%{$search}%"))))
             ->get()
-            ->filter(fn (Evaluation $evaluation) => $access->canScore($evaluation) || $access->canReview($evaluation))
+            ->filter(fn (Evaluation $evaluation) => $access->canScore($evaluation) || $access->canScoreLeader($evaluation) || $access->canReview($evaluation))
             ->sort(fn (Evaluation $a, Evaluation $b) => $this->directory->compareNames($a->teacher->user?->name, $b->teacher->user?->name))
             ->values();
 
@@ -324,8 +330,10 @@ class EvaluationController extends Controller
                 $criteria = $this->criteria($evaluation);
                 $self = $this->scoring->totals($evaluation, $criteria, 'self');
                 $unit = $this->scoring->totals($evaluation, $criteria, 'unit');
+                $final = $this->scoring->totals($evaluation, $criteria, 'final');
                 $unitDone = $evaluation->status === Evaluation::UNIT_SCORED
                     || ($evaluation->status === Evaluation::PUBLISHED && $evaluation->scores->contains(fn (EvaluationScore $score) => $score->unit_score !== null));
+                $leaderStarted = $evaluation->scores->contains(fn (EvaluationScore $score) => $score->leader_score !== null);
 
                 return [
                     'id' => $evaluation->id,
@@ -336,9 +344,14 @@ class EvaluationController extends Controller
                     'self_total' => $evaluation->status === Evaluation::DRAFT ? null : $self['total'],
                     'unit_total' => $unitDone ? $unit['total'] : null,
                     'unit_in_progress' => ! $unitDone && $evaluation->status === Evaluation::SUBMITTED && $evaluation->scores->contains(fn (EvaluationScore $score) => $score->unit_score !== null),
+                    'has_leader_column' => $evaluation->hasLeaderColumn(),
+                    'leader_total' => $evaluation->hasLeaderColumn() && ($evaluation->leader_scored_at || $leaderStarted) ? $this->scoring->totals($evaluation, $criteria, 'leader')['total'] : null,
+                    'leader_done' => $evaluation->leader_scored_at !== null,
+                    'leader_in_progress' => $evaluation->hasLeaderColumn() && ! $evaluation->leader_scored_at && $leaderStarted,
+                    'final_total' => $unitDone ? $final['total'] : null,
                     'reviewed' => $evaluation->reviewed_at !== null,
                     'grade' => $this->gradeName($evaluation, $evaluation->grade),
-                    'suggested_grade' => $evaluation->no_grade_reason || ! $unitDone ? null : $this->suggestedGrade($evaluation, $unit['total'])['name'] ?? null,
+                    'suggested_grade' => $evaluation->no_grade_reason || ! $unitDone ? null : $this->suggestedGrade($evaluation, $final['total'])['name'] ?? null,
                     'no_grade_reason' => $evaluation->no_grade_reason,
                     'has_violation' => $evaluation->has_violation,
                     'submitted_at' => $evaluation->submitted_at?->toIso8601String(),
@@ -346,8 +359,10 @@ class EvaluationController extends Controller
                     ...$this->directory->placement($evaluation->teacher),
                     'comments_count' => $evaluation->comments()->count(),
                     'can_score' => $access->canScore($evaluation),
+                    'can_score_leader' => $access->canScoreLeader($evaluation),
                     'can_review' => $access->canReview($evaluation),
-                    'assigned_scorers' => $evaluation->assignedScorers->pluck('name')->values(),
+                    'assigned_scorers' => $evaluation->assignedScorers->filter(fn (User $user) => $user->pivot->column === Evaluation::UNIT)->pluck('name')->values(),
+                    'assigned_leader_scorers' => $evaluation->assignedScorers->filter(fn (User $user) => $user->pivot->column === Evaluation::LEADER)->pluck('name')->values(),
                 ];
             }),
             'units' => $units === null ? Department::orderBy('name')->get(['id', 'name', 'type'])->map(fn ($d) => ['id' => $d->id, 'name' => Department::pathLabel($d->id)])->values() : Department::whereIn('id', $units)->get(['id'])->map(fn ($d) => ['id' => $d->id, 'name' => Department::pathLabel($d->id)])->values(),
@@ -392,6 +407,7 @@ class EvaluationController extends Controller
         abort_unless($access->canScore($evaluation), 403, 'Bạn không có quyền chấm phiếu này.');
         abort_if($evaluation->period->isLocked(), 422, 'Kỳ đánh giá đã công bố.');
         abort_if($evaluation->status === Evaluation::DRAFT && ! $access->manages(), 422, 'Người được đánh giá chưa nộp phiếu tự đánh giá.');
+        abort_if($evaluation->hasLeaderColumn() && $evaluation->leader_scored_at, 422, 'Ban giám hiệu đã hoàn tất chấm, tổ không sửa điểm được nữa. Trả phiếu về nếu cần chấm lại.');
         $data = $this->validateScores($request, $evaluation, 'unit', false);
         $complete = $request->boolean('complete');
 
@@ -403,19 +419,43 @@ class EvaluationController extends Controller
             $this->writeScores($evaluation, $data['scores'] ?? [], 'unit');
             $this->refreshResult($evaluation->fresh(['scores', 'period']));
         });
+        if ($complete && $evaluation->hasLeaderColumn()) {
+            $this->leaderScorers($evaluation)->reject(fn (User $user) => $user->id === $request->user()->id)
+                ->each(fn (User $user) => $this->notify($user, $evaluation, "Tổ đã chấm xong phiếu {$evaluation->period->label()} của {$evaluation->teacher->user?->name}. Mời Ban giám hiệu chấm.", 'evaluation_unit_scored'));
+        }
 
         return response()->json(['message' => $complete ? 'Đã hoàn tất chấm phiếu.' : ($evaluation->scoredByLeadership() ? 'Đã lưu điểm BGH đánh giá.' : 'Đã lưu điểm tổ chấm.'), 'data' => $this->detail($evaluation->fresh(), $access)]);
+    }
+
+    public function saveLeader(Request $request, Evaluation $evaluation): JsonResponse
+    {
+        $access = $this->access($request);
+        abort_unless($access->canScoreLeader($evaluation), 403, 'Bạn không có quyền chấm cột BGH đánh giá của phiếu này.');
+        abort_if($evaluation->period->isLocked(), 422, 'Kỳ đánh giá đã công bố.');
+        abort_unless($evaluation->status === Evaluation::UNIT_SCORED, 422, 'Tổ chưa hoàn tất chấm phiếu này.');
+        $data = $this->validateScores($request, $evaluation, 'leader', false);
+        $complete = $request->boolean('complete');
+
+        DB::transaction(function () use ($evaluation, $data, $complete, $request) {
+            if ($complete) {
+                $evaluation->update(['leader_scored_by' => $request->user()->id, 'leader_scored_at' => now()]);
+            }
+            $this->writeScores($evaluation, $data['scores'] ?? [], 'leader');
+            $this->refreshResult($evaluation->fresh(['scores', 'period']));
+        });
+
+        return response()->json(['message' => $complete ? 'Ban giám hiệu đã hoàn tất chấm phiếu.' : 'Đã lưu điểm BGH đánh giá.', 'data' => $this->detail($evaluation->fresh(), $access)]);
     }
 
     public function returnToTeacher(Request $request, Evaluation $evaluation): JsonResponse
     {
         $access = $this->access($request);
-        abort_unless($access->canScore($evaluation), 403, 'Bạn không có quyền trả phiếu này.');
+        abort_unless($access->canScore($evaluation) || $access->canScoreLeader($evaluation), 403, 'Bạn không có quyền trả phiếu này.');
         abort_if($evaluation->period->isLocked() || $evaluation->status === Evaluation::DRAFT, 422, 'Phiếu không ở trạng thái trả về được.');
         $data = $request->validate(['message' => ['required', 'string', 'max:2000']], ['message.required' => 'Nhập lý do trả phiếu.']);
 
         DB::transaction(function () use ($evaluation, $data, $request) {
-            $evaluation->update(['status' => Evaluation::DRAFT, 'submitted_at' => null, 'unit_scored_by' => null, 'unit_scored_at' => null]);
+            $evaluation->update(['status' => Evaluation::DRAFT, 'submitted_at' => null, 'unit_scored_by' => null, 'unit_scored_at' => null, 'leader_scored_by' => null, 'leader_scored_at' => null]);
             EvaluationComment::create(['evaluation_id' => $evaluation->id, 'user_id' => $request->user()->id, 'content' => 'Trả phiếu: '.$data['message']]);
         });
         $this->notify($evaluation->teacher->user, $evaluation, "Phiếu đánh giá {$evaluation->period->label()} được trả về: {$data['message']}", 'evaluation_returned');
@@ -437,6 +477,7 @@ class EvaluationController extends Controller
         ]);
         $approve = $request->boolean('approve', true);
         abort_if($approve && ! in_array($evaluation->status, [Evaluation::UNIT_SCORED, Evaluation::PUBLISHED], true), 422, 'Phiếu chưa được chấm xong, chưa duyệt được.');
+        abort_if($approve && $evaluation->awaitsLeader(), 422, 'Ban giám hiệu chưa hoàn tất chấm phiếu này, chưa duyệt được.');
 
         DB::transaction(function () use ($evaluation, $data, $request, $approve) {
             $evaluation->update([
@@ -457,12 +498,16 @@ class EvaluationController extends Controller
         abort_unless($access->manages(), 403, 'Bạn không có quyền chỉ định người chấm.');
         abort_if($access->isOwn($evaluation), 403, 'Bạn không chỉ định người chấm cho phiếu của chính mình.');
         abort_if($evaluation->period->isLocked(), 422, 'Kỳ đánh giá đã công bố.');
-        $data = $request->validate(['user_ids' => ['present', 'array'], 'user_ids.*' => ['integer', 'distinct', 'exists:users,id']]);
-        $this->assignTo($evaluation, $data['user_ids']);
-        $names = $evaluation->assignedScorers()->pluck('name');
+        $data = $request->validate([
+            'user_ids' => ['present', 'array'], 'user_ids.*' => ['integer', 'distinct', 'exists:users,id'],
+            'column' => ['sometimes', Rule::in([Evaluation::UNIT, Evaluation::LEADER])],
+        ]);
+        $column = $data['column'] ?? Evaluation::UNIT;
+        $this->assignTo($evaluation, $data['user_ids'], $column);
+        $names = $evaluation->scorersFor($column)->pluck('name');
 
         return response()->json([
-            'message' => $names->isEmpty() ? 'Phiếu dùng lại người chấm mặc định của kỳ.' : 'Đã chỉ định người chấm: '.$names->join(', ').'.',
+            'message' => $names->isEmpty() ? 'Phiếu dùng lại người chấm mặc định.' : 'Đã chỉ định người chấm: '.$names->join(', ').'.',
             'data' => $this->detail($evaluation->fresh(), $access),
         ]);
     }
@@ -591,7 +636,7 @@ class EvaluationController extends Controller
     private function refreshResult(Evaluation $evaluation): void
     {
         $evaluation->loadMissing(['scores', 'period']);
-        $total = $this->hasUnitScores($evaluation) ? $this->scoring->totals($evaluation, $this->criteria($evaluation), 'unit')['total'] : null;
+        $total = $this->hasUnitScores($evaluation) ? $this->scoring->totals($evaluation, $this->criteria($evaluation), 'final')['total'] : null;
         $evaluation->update(['total_score' => $total]);
     }
 
@@ -601,7 +646,7 @@ class EvaluationController extends Controller
 
         $evaluation->loadMissing('scores');
 
-        return $this->scoring->grade($this->template($evaluation)->grades ?? [], $total, $evaluation->is_homeroom, $evaluation->has_violation, $this->scoring->hasZero($evaluation, $this->criteria($evaluation), 'unit'));
+        return $this->scoring->grade($this->template($evaluation)->grades ?? [], $total, $evaluation->is_homeroom, $evaluation->has_violation, $this->scoring->hasZero($evaluation, $this->criteria($evaluation), 'final'));
     }
 
     private function addEvaluations(EvaluationPeriod $period, Collection $teachers, array $templates): void
@@ -627,8 +672,13 @@ class EvaluationController extends Controller
 
     private function assertScorers(Collection $employees, array $scorerIds): void
     {
-        $needsBoard = $employees->contains(fn (Employee $employee) => EvaluationTemplate::audienceOf($employee->user) !== EvaluationTemplate::TEACHER);
-        abort_if($needsBoard && $scorerIds === [], 422, 'Kỳ có phiếu Nhân viên hoặc Ban giám hiệu: chọn ít nhất một người chấm cột “BGH đánh giá”.');
+        abort_if($employees->isNotEmpty() && $scorerIds === [], 422, 'Chọn ít nhất một người chấm cột “BGH đánh giá”.');
+    }
+
+    private function assertBoardMembers(array $scorerIds, ?EvaluationPeriod $period = null): void
+    {
+        $outside = collect($scorerIds)->map(fn ($id) => (int) $id)->diff($this->scorerCandidates($period)->pluck('id'));
+        abort_if($outside->isNotEmpty(), 422, 'Người chấm cột “BGH đánh giá” của kỳ phải có vai trò Ban giám hiệu.');
     }
 
     private function syncSheetScorers(EvaluationPeriod $period, array $rows): void
@@ -636,18 +686,19 @@ class EvaluationController extends Controller
         $sheets = $period->evaluations()->with('teacher')->get()->keyBy('teacher_id');
         foreach ($rows as $row) {
             if ($evaluation = $sheets->get((int) $row['teacher_id'])) {
-                $this->assignTo($evaluation, $row['user_ids']);
+                $this->assignTo($evaluation, $row['user_ids'], $row['column'] ?? Evaluation::UNIT);
             }
         }
     }
 
-    private function assignTo(Evaluation $evaluation, array $userIds): void
+    private function assignTo(Evaluation $evaluation, array $userIds, string $column = Evaluation::UNIT): void
     {
+        abort_if($column === Evaluation::LEADER && ! $evaluation->hasLeaderColumn(), 422, 'Phiếu này không có cột BGH đánh giá riêng.');
         $ids = collect($userIds)->map(fn ($id) => (int) $id)->unique()->values();
         $allowed = $this->assignableScorers()->pluck('id');
         abort_if($ids->diff($allowed)->isNotEmpty(), 422, 'Có người được chọn không có quyền chấm phiếu thi đua.');
         abort_if($ids->contains((int) $evaluation->teacher->user_id), 422, 'Không thể chỉ định '.$evaluation->teacher->user?->name.' chấm phiếu của chính mình.');
-        $evaluation->assignedScorers()->sync($ids->all());
+        $evaluation->scorersFor($column)->sync($ids->all());
     }
 
     private function assignableScorers(): Collection
@@ -659,14 +710,17 @@ class EvaluationController extends Controller
             ->values();
     }
 
-    private function scorerCandidates(): Collection
+    private function scorerCandidates(?EvaluationPeriod $period = null): Collection
     {
+        $current = $period ? $period->scorers()->pluck('users.id')->all() : [];
+
         return User::with('roles')->where('status', 'active')
-            ->whereHas('roles', fn ($r) => $r->whereIn('code', [Role::HIEU_TRUONG, Role::PHO_HIEU_TRUONG, Role::BAN_GIAM_HIEU, Role::THU_KY]))
+            ->where(fn ($q) => $q->whereHas('roles', fn ($r) => $r->where('code', Role::BAN_GIAM_HIEU))->orWhereIn('id', $current))
             ->orderBy('name')->get()
             ->map(fn (User $user) => [
                 'id' => $user->id, 'name' => $user->name, 'avatar_url' => $this->avatar($user), 'roles' => $user->roleLabels(),
                 'employee_id' => $user->employee?->id, 'suggested' => $user->roles->contains('code', Role::BAN_GIAM_HIEU),
+                'outside' => ! $user->roles->contains('code', Role::BAN_GIAM_HIEU),
             ])->values();
     }
 
@@ -720,9 +774,26 @@ class EvaluationController extends Controller
         return $role ? "{$role->name} — không thuộc diện đánh giá" : null;
     }
 
+    private function assignedIds(Evaluation $evaluation, string $column): Collection
+    {
+        return $evaluation->assignedScorers->filter(fn (User $user) => $user->pivot->column === $column)->pluck('id')->values();
+    }
+
+    private function leaderScorers(Evaluation $evaluation): Collection
+    {
+        $assigned = $evaluation->scorersFor(Evaluation::LEADER)->where('users.id', '!=', $evaluation->teacher->user_id)->get();
+
+        return $assigned->isNotEmpty() ? $assigned : $this->defaultLeaderScorers($evaluation);
+    }
+
+    private function defaultLeaderScorers(Evaluation $evaluation): Collection
+    {
+        return $evaluation->period->scorers()->where('users.id', '!=', $evaluation->teacher->user_id)->get();
+    }
+
     private function scorers(Evaluation $evaluation): Collection
     {
-        $assigned = $evaluation->assignedScorers()->where('users.id', '!=', $evaluation->teacher->user_id)->get();
+        $assigned = $evaluation->scorersFor(Evaluation::UNIT)->where('users.id', '!=', $evaluation->teacher->user_id)->get();
         if ($assigned->isNotEmpty()) {
             return $assigned;
         }
@@ -788,13 +859,15 @@ class EvaluationController extends Controller
 
     private function detail(Evaluation $evaluation, EvaluationAccess $access): array
     {
-        $evaluation->load(['period.template', 'template', 'teacher.user', 'teacher.departments', 'scores', 'comments.user', 'unitScorer', 'reviewer']);
+        $evaluation->load(['period.template', 'template', 'teacher.user', 'teacher.departments', 'scores', 'comments.user', 'unitScorer', 'leaderScorer', 'reviewer']);
         $period = $evaluation->period;
         $criteria = $this->criteria($evaluation);
         $isOwn = $access->isOwn($evaluation);
         $canScore = $access->canScore($evaluation);
+        $canLeader = $access->canScoreLeader($evaluation);
+        $hasLeader = $evaluation->hasLeaderColumn();
         $manages = $access->manages();
-        $showResult = ! $isOwn || $canScore || $this->visibleResult($evaluation, $period);
+        $showResult = ! $isOwn || $canScore || $canLeader || $this->visibleResult($evaluation, $period);
         $scores = $evaluation->scores->keyBy('criterion_id');
         $evidence = DB::table('file_attachments')->join('files', 'files.id', '=', 'file_attachments.file_id')
             ->where('attachable_type', EvaluationScore::class)->whereIn('attachable_id', $evaluation->scores->pluck('id'))
@@ -803,8 +876,10 @@ class EvaluationController extends Controller
         $totals = [
             'self' => $this->scoring->totals($evaluation, $criteria, 'self'),
             'unit' => $showResult ? $this->scoring->totals($evaluation, $criteria, 'unit') : null,
+            'leader' => $showResult && $hasLeader ? $this->scoring->totals($evaluation, $criteria, 'leader') : null,
+            'final' => $showResult ? $this->scoring->totals($evaluation, $criteria, 'final') : null,
         ];
-        $suggested = $showResult && ! $evaluation->no_grade_reason ? $this->suggestedGrade($evaluation, $totals['unit']['total']) : null;
+        $suggested = $showResult && ! $evaluation->no_grade_reason ? $this->suggestedGrade($evaluation, $totals['final']['total']) : null;
         $selfEditable = $isOwn && $this->selfEditable($evaluation);
 
         return [
@@ -815,8 +890,11 @@ class EvaluationController extends Controller
             'audience_label' => EvaluationTemplate::AUDIENCES[$evaluation->audience] ?? null,
             'scorer_label' => EvaluationTemplate::SCORER_LABELS[$evaluation->audience] ?? 'Tổ chấm',
             'template_name' => $this->template($evaluation)->name,
-            'assigned_scorers' => $evaluation->assignedScorers()->get()->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name, 'avatar_url' => $this->avatar($u)])->values(),
+            'assigned_scorers' => $evaluation->scorersFor(Evaluation::UNIT)->get()->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name, 'avatar_url' => $this->avatar($u)])->values(),
             'default_scorers' => $this->defaultScorers($evaluation)->pluck('name')->values(),
+            'has_leader_column' => $hasLeader,
+            'assigned_leader_scorers' => $hasLeader ? $evaluation->scorersFor(Evaluation::LEADER)->get()->map(fn (User $u) => ['id' => $u->id, 'name' => $u->name, 'avatar_url' => $this->avatar($u)])->values() : [],
+            'default_leader_scorers' => $hasLeader ? $this->defaultLeaderScorers($evaluation)->pluck('name')->values() : [],
             'scorer_candidates' => $manages && ! $isOwn ? $this->assignableScorers()->reject(fn ($u) => $u['employee_id'] === $evaluation->teacher_id)->values() : [],
             'is_homeroom' => $evaluation->is_homeroom,
             'duties' => $evaluation->duties,
@@ -824,6 +902,7 @@ class EvaluationController extends Controller
             'status' => $evaluation->status, 'status_label' => $this->statusLabel($evaluation),
             'submitted_at' => $evaluation->submitted_at?->toIso8601String(),
             'unit_scored_by' => $evaluation->unitScorer?->name, 'unit_scored_at' => $evaluation->unit_scored_at?->toIso8601String(),
+            'leader_scored_by' => $evaluation->leaderScorer?->name, 'leader_scored_at' => $evaluation->leader_scored_at?->toIso8601String(),
             'reviewed_by' => $evaluation->reviewer?->name, 'reviewed_at' => $evaluation->reviewed_at?->toIso8601String(),
             'show_result' => $showResult,
             'has_violation' => $showResult ? $evaluation->has_violation : null,
@@ -844,6 +923,7 @@ class EvaluationController extends Controller
                         'requires_evidence' => $criterion->requires_evidence, 'tracks_leave' => $criterion->tracks_leave,
                         'self_score' => $this->number($score?->self_score), 'self_note' => $score?->self_note,
                         'unit_score' => $showResult ? $this->number($score?->unit_score) : null, 'unit_note' => $showResult ? $score?->unit_note : null,
+                        'leader_score' => $showResult ? $this->number($score?->leader_score) : null, 'leader_note' => $showResult ? $score?->leader_note : null,
                         'evidence' => $score ? ($evidence->get($score->id) ?? collect())->map(fn ($file) => [
                             'id' => $file->id, 'name' => $file->original_name, 'mime_type' => $file->mime_type, 'size' => (int) $file->size, 'uploaded_by' => (int) $file->uploaded_by,
                         ])->values() : [],
@@ -859,8 +939,10 @@ class EvaluationController extends Controller
             'abilities' => [
                 'is_own' => $isOwn,
                 'can_self_score' => $selfEditable,
-                'can_unit_score' => $canScore && ! $period->isLocked() && ($evaluation->status !== Evaluation::DRAFT || $manages),
-                'can_return' => $canScore && ! $period->isLocked() && $evaluation->status !== Evaluation::DRAFT,
+                'can_unit_score' => $canScore && ! $period->isLocked() && ($evaluation->status !== Evaluation::DRAFT || $manages) && ! ($hasLeader && $evaluation->leader_scored_at),
+                'can_leader_score' => $canLeader && ! $period->isLocked() && $evaluation->status === Evaluation::UNIT_SCORED,
+                'can_return' => ($canScore || $canLeader) && ! $period->isLocked() && $evaluation->status !== Evaluation::DRAFT,
+                'awaits_leader' => $evaluation->awaitsLeader(),
                 'can_review' => $access->canReview($evaluation) && ! $period->isLocked(),
                 'can_comment' => ! $period->isLocked() || $manages,
                 'can_add_evidence' => $selfEditable || ($canScore && ! $period->isLocked()),
@@ -885,7 +967,11 @@ class EvaluationController extends Controller
 
     private function statusLabel(Evaluation $evaluation): string
     {
-        return $evaluation->status === Evaluation::UNIT_SCORED && $evaluation->scoredByLeadership() ? 'BGH đã chấm' : self::STATUS_LABELS[$evaluation->status];
+        if ($evaluation->status !== Evaluation::UNIT_SCORED) {
+            return self::STATUS_LABELS[$evaluation->status];
+        }
+
+        return $evaluation->scoredByLeadership() || $evaluation->leader_scored_at ? 'BGH đã chấm' : 'Chờ BGH chấm';
     }
 
     private function periodData(EvaluationPeriod $period): array

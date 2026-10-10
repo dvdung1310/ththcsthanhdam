@@ -25,17 +25,18 @@ import { useConfirm } from "./ConfirmDialog";
 import FilePreview from "./FilePreview";
 import EvaluationScorerPicker from "./EvaluationScorerPicker";
 import { formatBytes } from "./fileUtils";
-import { SCORE_PATTERN, STATUS_TONES, computeTotals, formatDay, formatMoment, formatScore, hasZeroCriterion, maxBase, normalizeScore, parseScore, scoreError, suggestGrade } from "./evaluationUtils";
+import { SCORE_PATTERN, STATUS_TONES, cellScore, computeTotals, formatDay, formatMoment, formatScore, hasZeroCriterion, maxBase, normalizeScore, parseScore, scoreError, suggestGrade } from "./evaluationUtils";
 import "./Evaluation.css";
 import Avatar from "./Avatar";
 
 const TASK_STATUS = { not_started: "Chưa thực hiện", in_progress: "Đang thực hiện", waiting_approval: "Chờ duyệt", completed: "Hoàn thành" };
 const AUTOSAVE_DELAY = 1500;
+const LEADER_LABEL = "BGH đánh giá";
 const SheetContext = createContext({ scorer: "Tổ chấm", teacherSheet: true, leave: null });
 const SESSION_NAMES = { am: "sáng", pm: "chiều" };
 const shortDay = (value) => value.slice(8, 10) + "/" + value.slice(5, 7);
 const lower = (label) => (label.startsWith("BGH") ? label : label.toLowerCase());
-const CLEAN = { self: false, unit: false, review: false };
+const CLEAN = { self: false, unit: false, leader: false, review: false };
 const toInput = (value) => (value === null || value === undefined ? "" : String(value).replace(".", ","));
 
 function buildRows(data) {
@@ -47,6 +48,8 @@ function buildRows(data) {
         self_note: criterion.self_note ?? "",
         unit_score: toInput(criterion.unit_score),
         unit_note: criterion.unit_note ?? "",
+        leader_score: toInput(criterion.leader_score),
+        leader_note: criterion.leader_note ?? "",
       };
     }),
   );
@@ -85,7 +88,7 @@ export default function EvaluationSheet() {
   const [success, setSuccess] = useState("");
   const [preview, setPreview] = useState(null);
   const [returning, setReturning] = useState(false);
-  const [assigning, setAssigning] = useState(false);
+  const [assigning, setAssigning] = useState(null);
   const [assignSaving, setAssignSaving] = useState(false);
 
   const reset = useCallback((detail) => {
@@ -112,8 +115,8 @@ export default function EvaluationSheet() {
     return () => clearTimeout(timer);
   }, [success]);
 
-  const anyDirty = dirty.self || dirty.unit || dirty.review;
-  const editableColumns = data ? [data.abilities.can_self_score && "self", data.abilities.can_unit_score && "unit"].filter(Boolean) : [];
+  const anyDirty = dirty.self || dirty.unit || dirty.leader || dirty.review;
+  const editableColumns = data ? [data.abilities.can_self_score && "self", data.abilities.can_unit_score && "unit", data.abilities.can_leader_score && "leader"].filter(Boolean) : [];
   const invalidList = data ? editableColumns.flatMap((column) => invalidCells(column)) : [];
   const unsaved = anyDirty || invalidList.length > 0 || autosave.state === "error";
   useEffect(() => {
@@ -130,7 +133,9 @@ export default function EvaluationSheet() {
   const selfMode = abilities.can_self_score;
   const unitMode = abilities.can_unit_score;
   const reviewMode = abilities.can_review;
+  const leaderMode = !!abilities.can_leader_score;
   const showUnit = !!data && (data.show_result || unitMode);
+  const showLeader = !!data && data.has_leader_column && showUnit && (leaderMode || ["unit_scored", "published"].includes(data.status) || data.sections.some((section) => section.criteria.some((criterion) => criterion.leader_score !== null)));
   const isHomeroom = form?.is_homeroom ?? false;
 
   const totals = useMemo(() => {
@@ -138,10 +143,12 @@ export default function EvaluationSheet() {
     return {
       self: computeTotals(data.sections, rows, "self", isHomeroom),
       unit: showUnit ? computeTotals(data.sections, rows, "unit", isHomeroom) : null,
+      leader: showLeader ? computeTotals(data.sections, rows, "leader", isHomeroom) : null,
+      final: showLeader ? computeTotals(data.sections, rows, "final", isHomeroom) : null,
     };
-  }, [data, rows, isHomeroom, showUnit]);
+  }, [data, rows, isHomeroom, showUnit, showLeader]);
 
-  const resultColumn = showUnit ? "unit" : "self";
+  const resultColumn = showLeader ? "final" : showUnit ? "unit" : "self";
   const resultTotal = totals?.[resultColumn]?.total ?? 0;
   const suggested = data && !form?.no_grade ? suggestGrade(data.grades, resultTotal, isHomeroom, form?.has_violation, hasZeroCriterion(data.sections, rows, resultColumn, isHomeroom)) : null;
   const sheetContext = useMemo(() => ({ scorer: data?.scorer_label ?? "Tổ chấm", teacherSheet: (data?.audience ?? "teacher") === "teacher", leave: data?.leave ?? null }), [data]);
@@ -202,6 +209,9 @@ export default function EvaluationSheet() {
     }
     if (group === "unit") {
       return apiJson(`/api/evaluations/${data.id}/unit`, { method: "PUT", body: { is_homeroom: fields.is_homeroom, scores: payload("unit", true, source), complete: false } });
+    }
+    if (group === "leader") {
+      return apiJson(`/api/evaluations/${data.id}/leader`, { method: "PUT", body: { scores: payload("leader", true, source), complete: false } });
     }
     return apiJson(`/api/evaluations/${data.id}/review`, { method: "PUT", body: { ...reviewFields(fields), approve: false } });
   };
@@ -295,10 +305,17 @@ export default function EvaluationSheet() {
   const assignScorers = async (userIds) => {
     setAssignSaving(true);
     try {
-      const result = await apiJson(`/api/evaluations/${data.id}/scorers`, { method: "PUT", body: { user_ids: userIds } });
-      setData((current) => ({ ...current, assigned_scorers: result.data.assigned_scorers, default_scorers: result.data.default_scorers, abilities: result.data.abilities }));
+      const result = await apiJson(`/api/evaluations/${data.id}/scorers`, { method: "PUT", body: { user_ids: userIds, column: assigning } });
+      setData((current) => ({
+        ...current,
+        assigned_scorers: result.data.assigned_scorers,
+        default_scorers: result.data.default_scorers,
+        assigned_leader_scorers: result.data.assigned_leader_scorers,
+        default_leader_scorers: result.data.default_leader_scorers,
+        abilities: result.data.abilities,
+      }));
       setSuccess(result.message);
-      setAssigning(false);
+      setAssigning(null);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -362,10 +379,39 @@ export default function EvaluationSheet() {
     await save(() => apiJson(`/api/evaluations/${data.id}/unit`, { method: "PUT", body: { is_homeroom: form.is_homeroom, scores: payload("unit"), complete: true } }), "Đã hoàn tất chấm phiếu.");
   };
 
+  const completeLeader = async () => {
+    if (guardInvalid("leader")) return;
+    const changed = data.sections.flatMap((s) => s.criteria).filter((c) => parseScore(rows[c.id]?.leader_score) !== null).length;
+    const unexplained = changedWithoutNote();
+    const ok = await confirm({
+      tone: unexplained.length ? "danger" : undefined,
+      title: "Ban giám hiệu hoàn tất chấm?",
+      message: [
+        changed ? `BGH đã chấm lại ${changed} tiêu chí; các tiêu chí còn lại giữ điểm tổ chấm.` : "BGH giữ nguyên toàn bộ điểm tổ chấm.",
+        unexplained.length ? `${unexplained.length} tiêu chí BGH sửa điểm nhưng chưa ghi lý do.` : null,
+        "Sau khi hoàn tất, tổ không sửa điểm được nữa.",
+      ].filter(Boolean).join(" "),
+      confirmText: "Hoàn tất",
+    });
+    if (!ok) return;
+    await save(() => apiJson(`/api/evaluations/${data.id}/leader`, { method: "PUT", body: { scores: payload("leader"), complete: true } }), "Ban giám hiệu đã hoàn tất chấm phiếu.");
+  };
+
+  function changedWithoutNote() {
+    return data.sections
+      .flatMap((s) => s.criteria)
+      .filter((c) => {
+        const value = parseScore(rows[c.id]?.leader_score);
+        return value !== null && value !== parseScore(rows[c.id]?.unit_score) && !rows[c.id]?.leader_note?.trim();
+      });
+  }
+
   const approve = async () => {
     if (unitMode && guardInvalid("unit")) return;
+    if (leaderMode && guardInvalid("leader")) return;
     await save(async () => {
       if (unitMode && dirty.unit) await apiJson(`/api/evaluations/${data.id}/unit`, { method: "PUT", body: { is_homeroom: form.is_homeroom, scores: payload("unit"), complete: false } });
+      if (leaderMode && dirty.leader) await apiJson(`/api/evaluations/${data.id}/leader`, { method: "PUT", body: { scores: payload("leader"), complete: false } });
       return apiJson(`/api/evaluations/${data.id}/review`, { method: "PUT", body: { ...reviewFields(form), approve: true } });
     });
   };
@@ -490,15 +536,18 @@ export default function EvaluationSheet() {
           <button className="secondary-btn" onClick={() => window.print()}><Printer size={15} /> In phiếu</button>
           {editableColumns.length > 0 && <SaveStatus autosave={autosave} dirty={anyDirty} invalid={invalidList.length} onRetry={() => latest.current.persist()} onFocusInvalid={focusInvalid} />}
           {selfMode && <button className="primary-btn" disabled={saving} onClick={() => saveSelf(true)}><Send size={15} /> Nộp phiếu</button>}
-          {unitMode && abilities.can_return && <button className="secondary-btn" disabled={saving} onClick={() => setReturning(true)}><Undo2 size={15} /> Trả phiếu</button>}
+          {(unitMode || leaderMode) && abilities.can_return && <button className="secondary-btn" disabled={saving} onClick={() => setReturning(true)}><Undo2 size={15} /> Trả phiếu</button>}
           {unitMode && data.status !== "unit_scored" && (
             <button className="primary-btn" disabled={saving} onClick={completeUnit}><CheckCircle2 size={15} /> Hoàn tất chấm</button>
           )}
-          {reviewMode && !(unitMode && !["unit_scored", "published"].includes(data.status)) && (
+          {leaderMode && !data.leader_scored_at && (
+            <button className="primary-btn" disabled={saving} onClick={completeLeader}><CheckCircle2 size={15} /> BGH hoàn tất chấm</button>
+          )}
+          {reviewMode && !(unitMode && !["unit_scored", "published"].includes(data.status)) && !(leaderMode && abilities.awaits_leader) && (
             <button
               className="primary-btn"
-              disabled={saving || !["unit_scored", "published"].includes(data.status)}
-              title={["unit_scored", "published"].includes(data.status) ? undefined : `Cần hoàn tất ${lower(sheetContext.scorer)} trước khi duyệt`}
+              disabled={saving || !["unit_scored", "published"].includes(data.status) || abilities.awaits_leader}
+              title={!["unit_scored", "published"].includes(data.status) ? `Cần hoàn tất ${lower(sheetContext.scorer)} trước khi duyệt` : abilities.awaits_leader ? "Cần Ban giám hiệu hoàn tất chấm trước khi duyệt" : undefined}
               onClick={approve}
             ><CheckCircle2 size={15} /> {data.reviewed_at ? "Duyệt lại" : "Duyệt phiếu"}</button>
           )}
@@ -554,9 +603,10 @@ export default function EvaluationSheet() {
               onToggleHomeroom={(value) => setField("is_homeroom", value, selfMode ? "self" : "unit")}
               selfMode={selfMode}
               unitMode={unitMode}
+              leaderMode={leaderMode}
               reviewMode={reviewMode}
               showUnit={showUnit}
-             
+              showLeader={showLeader}
               canAddEvidence={abilities.can_add_evidence}
               onCell={setCell}
               onUpload={uploadEvidence}
@@ -575,18 +625,18 @@ export default function EvaluationSheet() {
             totals={totals}
             isHomeroom={isHomeroom}
             showUnit={showUnit}
-           
+            showLeader={showLeader}
             suggested={suggested}
             resultColumn={resultColumn}
             form={form}
             reviewMode={reviewMode}
             onField={(field, value) => setField(field, value, "review")}
-            onAssign={() => setAssigning(true)}
+            onAssign={setAssigning}
           />
         </aside>
       </div>
 
-      <PrintSheet data={data} rows={rows} form={form} totals={totals} suggested={suggested} showUnit={showUnit} />
+      <PrintSheet data={data} rows={rows} form={form} totals={totals} suggested={suggested} showUnit={showUnit} showLeader={showLeader} />
 
       {returning && (
         <ReturnDialog
@@ -600,14 +650,14 @@ export default function EvaluationSheet() {
       {preview && <FilePreview files={preview.files} startIndex={preview.index} onClose={() => setPreview(null)} />}
       {assigning && (
         <EvaluationScorerPicker
-          title={`Người chấm cột “${sheetContext.scorer}”`}
+          title={`Người chấm cột “${assigning === "leader" ? LEADER_LABEL : sheetContext.scorer}”`}
           subject={`Phiếu của ${data.teacher.name} · ${data.period.label}`}
           candidates={data.scorer_candidates ?? []}
-          selected={(data.assigned_scorers ?? []).map((user) => user.id)}
-          defaultScorers={data.default_scorers}
+          selected={((assigning === "leader" ? data.assigned_leader_scorers : data.assigned_scorers) ?? []).map((user) => user.id)}
+          defaultScorers={assigning === "leader" ? data.default_leader_scorers : data.default_scorers}
           saving={assignSaving}
           onSave={assignScorers}
-          onClose={() => setAssigning(false)}
+          onClose={() => setAssigning(null)}
         />
       )}
     </div>
@@ -615,7 +665,7 @@ export default function EvaluationSheet() {
   );
 }
 
-function SectionCard({ section, rows, totals, isHomeroom, canToggleHomeroom, onToggleHomeroom, selfMode, unitMode, reviewMode, showUnit, canAddEvidence, onCell, onUpload, onRemoveEvidence, onOpenEvidence, onCopySelf }) {
+function SectionCard({ section, rows, totals, isHomeroom, canToggleHomeroom, onToggleHomeroom, selfMode, unitMode, leaderMode, reviewMode, showUnit, showLeader, canAddEvidence, onCell, onUpload, onRemoveEvidence, onOpenEvidence, onCopySelf }) {
   const { scorer } = useContext(SheetContext);
   const disabled = section.homeroom_only && !isHomeroom;
   const bonus = section.kind === "bonus";
@@ -644,11 +694,12 @@ function SectionCard({ section, rows, totals, isHomeroom, canToggleHomeroom, onT
       {disabled ? (
         <p className="ev-disabled-note">Chỉ áp dụng cho giáo viên chủ nhiệm. Bật “GVCN” ở trên nếu bạn chủ nhiệm lớp trong tháng này.</p>
       ) : (
-        <div className="ev-criteria" style={{ "--score-cols": 1 + Number(showUnit) }}>
+        <div className="ev-criteria" style={{ "--score-cols": 1 + Number(showUnit) + Number(showLeader) }}>
           <div className="ev-criteria-head">
             <span>Tiêu chí</span>
             <span>Tự chấm</span>
             {showUnit && <span>{scorer}</span>}
+            {showLeader && <span title="Ô trống giữ điểm tổ chấm">{LEADER_LABEL}</span>}
           </div>
           {section.criteria.map((criterion) => (
             <CriterionRow
@@ -658,9 +709,10 @@ function SectionCard({ section, rows, totals, isHomeroom, canToggleHomeroom, onT
               bonus={bonus}
               selfMode={selfMode}
               unitMode={unitMode}
+              leaderMode={leaderMode}
               reviewMode={reviewMode}
               showUnit={showUnit}
-             
+              showLeader={showLeader}
               canAddEvidence={canAddEvidence}
               onCell={onCell}
               onUpload={onUpload}
@@ -672,6 +724,7 @@ function SectionCard({ section, rows, totals, isHomeroom, canToggleHomeroom, onT
             <span>{bonus ? "Tổng điểm cộng" : "Tổng mục"}</span>
             <SectionTotal totals={totals.self} id={section.id} />
             {showUnit && <SectionTotal totals={totals.unit} id={section.id} />}
+            {showLeader && <SectionTotal totals={totals.final} id={section.id} />}
           </div>
         </div>
       )}
@@ -710,7 +763,7 @@ function SectionTotal({ totals, id }) {
   return <b>{formatScore(totals?.sections[id])}</b>;
 }
 
-function ScoreCell({ value, max, editable, onScore }) {
+function ScoreCell({ value, max, editable, onScore, placeholder = "—", fallback }) {
   const [hint, setHint] = useState("");
   useEffect(() => {
     if (!hint) return undefined;
@@ -721,7 +774,7 @@ function ScoreCell({ value, max, editable, onScore }) {
   if (!editable) {
     return (
       <div className="ev-cell readonly">
-        <b>{value === "" ? "—" : formatScore(parsed)}</b>
+        {value === "" && fallback !== undefined ? <b className="ev-cell-fallback" title="Giữ điểm tổ chấm">{fallback}</b> : <b>{value === "" ? "—" : formatScore(parsed)}</b>}
       </div>
     );
   }
@@ -733,7 +786,7 @@ function ScoreCell({ value, max, editable, onScore }) {
         <input
           inputMode="decimal"
           value={value}
-          placeholder="—"
+          placeholder={placeholder}
           onChange={(e) => {
             const next = e.target.value.trim();
             if (SCORE_PATTERN.test(next)) {
@@ -774,23 +827,27 @@ function NoteField({ label, value, editable, placeholder, onChange, autoFocus })
   );
 }
 
-function CriterionRow({ criterion, row, bonus, selfMode, unitMode, reviewMode, showUnit, canAddEvidence, onCell, onUpload, onRemoveEvidence, onOpenEvidence }) {
+function CriterionRow({ criterion, row, bonus, selfMode, unitMode, leaderMode, reviewMode, showUnit, showLeader, canAddEvidence, onCell, onUpload, onRemoveEvidence, onOpenEvidence }) {
   const { scorer, leave } = useContext(SheetContext);
   const [open, setOpen] = useState(false);
   const fileInput = useRef(null);
   const lines = (criterion.guidance ?? "").split("\n").filter(Boolean);
   const selfValue = parseScore(row.self_score) ?? 0;
   const [opened, setOpened] = useState({});
-  const needsNote = (score) => {
+  const unitValue = parseScore(row.unit_score);
+  const needsNote = (score, column) => {
     const value = parseScore(score);
-    return value !== null && !Number.isNaN(value) && (bonus ? value > 0 : value < criterion.max_score);
+    if (value === null || Number.isNaN(value)) return false;
+    if (column === "leader") return value !== unitValue;
+    return bonus ? value > 0 : value < criterion.max_score;
   };
   const columns = [
     { column: "self", label: "Cá nhân", editable: selfMode, value: row.self_note ?? "", score: row.self_score },
     ...(showUnit ? [{ column: "unit", label: scorer, editable: unitMode, value: row.unit_note ?? "", score: row.unit_score }] : []),
+    ...(showLeader ? [{ column: "leader", label: LEADER_LABEL, editable: leaderMode, value: row.leader_note ?? "", score: row.leader_score }] : []),
   ];
   const notes = columns
-    .map((note) => ({ ...note, opened: !!opened[note.column], visible: !!note.value.trim() || (note.editable && (needsNote(note.score) || opened[note.column])) }))
+    .map((note) => ({ ...note, opened: !!opened[note.column], visible: !!note.value.trim() || (note.editable && (needsNote(note.score, note.column) || opened[note.column])) }))
     .filter((note) => note.visible || note.editable);
   const labelled = showUnit;
   return (
@@ -850,6 +907,16 @@ function CriterionRow({ criterion, row, bonus, selfMode, unitMode, reviewMode, s
           onScore={(value) => onCell(criterion.id, "unit_score", value, "unit")}
         />
       )}
+      {showLeader && (
+        <ScoreCell
+          value={row.leader_score ?? ""}
+          max={criterion.max_score}
+          editable={leaderMode}
+          placeholder={unitValue === null ? "—" : `${formatScore(unitValue)} (tổ)`}
+          fallback={unitValue === null ? "—" : formatScore(unitValue)}
+          onScore={(value) => onCell(criterion.id, "leader_score", value, "leader")}
+        />
+      )}
       {notes.some((note) => note.visible) && (
         <div className="ev-notes">
           {notes.filter((note) => note.visible).map((note) => (
@@ -859,7 +926,7 @@ function CriterionRow({ criterion, row, bonus, selfMode, unitMode, reviewMode, s
               value={note.value}
               editable={note.editable}
               autoFocus={note.opened}
-              placeholder={bonus ? "Nội dung, số lần, minh chứng..." : "Lý do trừ điểm (VD: đi muộn họp hội đồng ngày 3/10)"}
+              placeholder={note.column === "leader" ? "Lý do BGH điều chỉnh điểm tổ chấm" : bonus ? "Nội dung, số lần, minh chứng..." : "Lý do trừ điểm (VD: đi muộn họp hội đồng ngày 3/10)"}
               onChange={(value) => onCell(criterion.id, `${note.column}_note`, value, note.column)}
             />
           ))}
@@ -869,10 +936,10 @@ function CriterionRow({ criterion, row, bonus, selfMode, unitMode, reviewMode, s
   );
 }
 
-function Summary({ data, totals, isHomeroom, showUnit, suggested, resultColumn, form, reviewMode, onField, onAssign }) {
+function Summary({ data, totals, isHomeroom, showUnit, showLeader, suggested, resultColumn, form, reviewMode, onField, onAssign }) {
   const { scorer, teacherSheet } = useContext(SheetContext);
   const base = maxBase(data.sections, isHomeroom);
-  const columns = [["self", "Tự chấm"], ...(showUnit ? [["unit", scorer]] : [])];
+  const columns = [["self", "Tự chấm"], ...(showUnit ? [["unit", scorer]] : []), ...(showLeader ? [["final", "Điểm chốt"]] : [])];
   const chosen = data.grades.find((grade) => grade.code === form.grade);
   const gradeLabel = form.no_grade ? "Không xếp loại" : chosen?.name ?? suggested?.name ?? "Chưa đạt khung xếp loại";
   return (
@@ -948,30 +1015,46 @@ function Summary({ data, totals, isHomeroom, showUnit, suggested, resultColumn, 
         </div>
       )}
 
+      {showLeader && <p className="ev-summary-note">Điểm chốt lấy theo cột {LEADER_LABEL}; tiêu chí BGH để trống giữ điểm {lower(scorer)}.</p>}
+
       <dl className="ev-trail">
         {!data.abilities.is_own && (
-          <>
-            <dt>Người chấm</dt>
-            <dd className="ev-assign-line">
-              {data.assigned_scorers?.length ? (
-                <>
-                  <span>{data.assigned_scorers.map((user) => user.name).join(", ")}</span>
-                  <span className="ev-chip purple">Chỉ định riêng</span>
-                </>
-              ) : (
-                <span>{data.default_scorers?.length ? data.default_scorers.join(", ") : "Chưa có"} <small className="ev-muted">(mặc định)</small></span>
-              )}
-              {data.abilities.can_assign_scorers && (
-                <button type="button" className="ev-assign-btn" onClick={onAssign}>Đổi</button>
-              )}
-            </dd>
-          </>
+          <ScorerLine
+            label={data.has_leader_column ? `Người chấm · ${scorer.replace(" chấm", "")}` : "Người chấm"}
+            assigned={data.assigned_scorers}
+            defaults={data.default_scorers}
+            canAssign={data.abilities.can_assign_scorers}
+            onAssign={() => onAssign("unit")}
+          />
+        )}
+        {!data.abilities.is_own && data.has_leader_column && (
+          <ScorerLine label="Người chấm · BGH" assigned={data.assigned_leader_scorers} defaults={data.default_leader_scorers} canAssign={data.abilities.can_assign_scorers} onAssign={() => onAssign("leader")} />
         )}
         {data.submitted_at && <><dt>Nộp phiếu</dt><dd>{formatMoment(data.submitted_at)}</dd></>}
         {data.unit_scored_by && <><dt>{scorer}</dt><dd>{data.unit_scored_by} · {formatMoment(data.unit_scored_at)}</dd></>}
+        {data.leader_scored_by && <><dt>{LEADER_LABEL}</dt><dd>{data.leader_scored_by} · {formatMoment(data.leader_scored_at)}</dd></>}
         {data.reviewed_by && <><dt>Duyệt</dt><dd>{data.reviewed_by} · {formatMoment(data.reviewed_at)}</dd></>}
       </dl>
     </div>
+  );
+}
+
+function ScorerLine({ label, assigned, defaults, canAssign, onAssign }) {
+  return (
+    <>
+      <dt>{label}</dt>
+      <dd className="ev-assign-line">
+        {assigned?.length ? (
+          <>
+            <span>{assigned.map((user) => user.name).join(", ")}</span>
+            <span className="ev-chip purple">Chỉ định riêng</span>
+          </>
+        ) : (
+          <span>{defaults?.length ? defaults.join(", ") : "Chưa có"} <small className="ev-muted">(mặc định)</small></span>
+        )}
+        {canAssign && <button type="button" className="ev-assign-btn" onClick={onAssign}>Đổi</button>}
+      </dd>
+    </>
   );
 }
 
@@ -1077,12 +1160,12 @@ function noteHeader(section) {
   return flagged === section.criteria.length ? "Minh chứng" : "Ghi chú / minh chứng";
 }
 
-function PrintSheet({ data, rows, form, totals, suggested, showUnit }) {
+function PrintSheet({ data, rows, form, totals, suggested, showUnit, showLeader }) {
   const { scorer, teacherSheet } = useContext(SheetContext);
   const isHomeroom = form.is_homeroom;
   const sections = data.sections.filter((section) => !section.homeroom_only || isHomeroom);
   const value = (criterionId, column) => {
-    const parsed = parseScore(rows[criterionId]?.[`${column}_score`]);
+    const parsed = parseScore(cellScore(rows[criterionId], column));
     return parsed === null ? "" : formatScore(parsed);
   };
   const grade = data.status === "published" ? data.grade_name : form.no_grade ? "Không xếp loại" : suggested?.name;
@@ -1107,20 +1190,22 @@ function PrintSheet({ data, rows, form, totals, suggested, showUnit }) {
         <table key={section.id}>
           <colgroup>
             <col style={{ width: "6%" }} />
-            <col style={{ width: "19%" }} />
-            <col style={{ width: "45%" }} />
+            <col style={{ width: showLeader ? "17%" : "19%" }} />
+            <col style={{ width: showLeader ? "38%" : "45%" }} />
             <col style={{ width: "9%" }} />
             <col style={{ width: "9%" }} />
+            {showLeader && <col style={{ width: "9%" }} />}
             <col style={{ width: "12%" }} />
           </colgroup>
           <thead>
-            <tr><th colSpan={6} className="left">{section.code}. {section.title.toUpperCase()} ({section.kind === "bonus" ? `tối đa ${formatScore(section.max_score)} điểm/tháng` : `Tối đa: ${formatScore(section.max_score)} điểm`})</th></tr>
+            <tr><th colSpan={showLeader ? 7 : 6} className="left">{section.code}. {section.title.toUpperCase()} ({section.kind === "bonus" ? `tối đa ${formatScore(section.max_score)} điểm/tháng` : `Tối đa: ${formatScore(section.max_score)} điểm`})</th></tr>
             <tr>
               <th>STT</th>
               <th>Tiêu chuẩn đánh giá</th>
               <th>Nội dung và cách tính điểm</th>
               <th>Cá nhân tự chấm</th>
               <th>{scorer}</th>
+              {showLeader && <th>{LEADER_LABEL}</th>}
               <th>{noteHeader(section)}</th>
             </tr>
           </thead>
@@ -1132,8 +1217,9 @@ function PrintSheet({ data, rows, form, totals, suggested, showUnit }) {
                 <td className="guide">{(criterion.guidance ?? "").split("\n").filter(Boolean).map((line, index) => <div key={index}>• {line}</div>)}</td>
                 <td className="center">{value(criterion.id, "self")}</td>
                 <td className="center">{showUnit ? value(criterion.id, "unit") : ""}</td>
+                {showLeader && <td className="center">{value(criterion.id, "final")}</td>}
                 <td>
-                  {[rows[criterion.id]?.self_note, showUnit ? rows[criterion.id]?.unit_note : ""].filter(Boolean).join("; ")}
+                  {[rows[criterion.id]?.self_note, showUnit ? rows[criterion.id]?.unit_note : "", showLeader ? rows[criterion.id]?.leader_note : ""].filter(Boolean).join("; ")}
                   {criterion.evidence.length > 0 && <div className="files">{criterion.evidence.map((file) => file.name).join("; ")}</div>}
                 </td>
               </tr>
@@ -1142,6 +1228,7 @@ function PrintSheet({ data, rows, form, totals, suggested, showUnit }) {
               <td colSpan={3}>TỔNG ĐIỂM</td>
               <td className="center">{formatScore(totals.self.sections[section.id])}</td>
               <td className="center">{showUnit ? formatScore(totals.unit?.sections[section.id]) : ""}</td>
+              {showLeader && <td className="center">{formatScore(totals.final?.sections[section.id])}</td>}
               <td />
             </tr>
           </tbody>
@@ -1150,6 +1237,7 @@ function PrintSheet({ data, rows, form, totals, suggested, showUnit }) {
       <p>
         Tổng điểm tháng: cá nhân tự chấm <b>{formatScore(totals.self.total)}</b>
         {showUnit && <> — {lower(scorer)} <b>{formatScore(totals.unit?.total)}</b></>}
+        {showLeader && <> — {LEADER_LABEL} (điểm chốt) <b>{formatScore(totals.final?.total)}</b></>}
       </p>
       <p>Xếp loại thi đua: <b>{grade ?? "……………"}</b></p>
       <div className="ev-print-signs">
