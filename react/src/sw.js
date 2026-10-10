@@ -24,7 +24,7 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     (async () => {
       const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-      if (windows.some((client) => client.visibilityState === "visible" && client.focused)) return;
+      if (!payload.data?.test && windows.some((client) => client.visibilityState === "visible" && client.focused)) return;
       await self.registration.showNotification(payload.title || "TH-THCS Thanh Đàm", {
         body: payload.body,
         icon: payload.icon || "/icons/icon-192.png",

@@ -79,6 +79,41 @@ export async function disableNotifications() {
   await releaseDevice();
 }
 
+const TEST_TITLE = "Thông báo thử";
+const TEST_BODY = "Thiết bị này đã nhận được thông báo từ TH-THCS Thanh Đàm.";
+
+export async function sendTestNotification() {
+  const reg = await registration().catch(() => null);
+  const options = { body: TEST_BODY, tag: "device-test", icon: "/icons/icon-192.png", badge: "/icons/icon-192.png", lang: "vi", data: { url: "/profile" } };
+  const send = async () => {
+    const pushed = await syncPushSubscription();
+    const subscription = pushed ? await reg.pushManager.getSubscription() : null;
+    if (!subscription) {
+      if (reg) await reg.showNotification(TEST_TITLE, options);
+      else new Notification(TEST_TITLE, options);
+      return "local";
+    }
+    await apiJson("/api/push-subscriptions/test", { method: "POST", body: { endpoint: subscription.endpoint } });
+    return "push";
+  };
+  try {
+    return await send();
+  } catch (error) {
+    if (![404, 410].includes(error.status)) throw error;
+    await (await reg.pushManager.getSubscription())?.unsubscribe().catch(() => null);
+    return send();
+  }
+}
+
+export function systemSettingsHint() {
+  const agent = navigator.userAgent;
+  if (isIos()) return "Cài đặt → Thông báo → Thanh Đàm → bật Cho phép thông báo.";
+  if (/android/i.test(agent)) return "Cài đặt → Ứng dụng → Chrome (hoặc ứng dụng Thanh Đàm) → Thông báo → bật.";
+  if (/mac/i.test(navigator.platform)) return "Cài đặt hệ thống → Thông báo → trình duyệt bạn đang dùng → bật Cho phép thông báo.";
+  if (/win/i.test(navigator.platform)) return "Settings → System → Notifications → bật cho trình duyệt bạn đang dùng.";
+  return "Mở cài đặt thông báo của hệ điều hành và cho phép trình duyệt bạn đang dùng.";
+}
+
 export async function showDeviceNotification({ title, body, url, tag }) {
   if (!notificationsActive() || document.visibilityState === "visible") return;
   const options = { body, tag, icon: "/icons/icon-192.png", badge: "/icons/icon-192.png", lang: "vi", data: { url } };

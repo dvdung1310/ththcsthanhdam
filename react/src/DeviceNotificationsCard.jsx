@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { BellOff, BellRing, Smartphone } from "lucide-react";
-import { disableNotifications, enableNotifications, isIos, isStandalone, notificationsActive, notificationsSupported, permission, pushSupported } from "./deviceNotifications";
+import { BellOff, BellRing, Send, Smartphone } from "lucide-react";
+import { disableNotifications, enableNotifications, isIos, isStandalone, notificationsActive, notificationsSupported, permission, pushSupported, sendTestNotification, systemSettingsHint } from "./deviceNotifications";
 
 export default function DeviceNotificationsCard() {
   const [state, setState] = useState(() => ({ permission: permission(), active: notificationsActive() }));
   const [busy, setBusy] = useState(false);
+  const [test, setTest] = useState(null);
   const refresh = () => setState({ permission: permission(), active: notificationsActive() });
   useEffect(() => {
     window.addEventListener("focus", refresh);
@@ -16,9 +17,20 @@ export default function DeviceNotificationsCard() {
     try {
       if (state.active) await disableNotifications();
       else await enableNotifications();
+      setTest(null);
     } finally {
       refresh();
       setBusy(false);
+    }
+  };
+
+  const sendTest = async () => {
+    setTest({ sending: true });
+    try {
+      const via = await sendTestNotification();
+      setTest({ sent: via });
+    } catch (error) {
+      setTest({ error: error.message || "Không gửi được thông báo thử." });
     }
   };
 
@@ -44,9 +56,28 @@ export default function DeviceNotificationsCard() {
       </div>
       <p className="device-status">{status}</p>
       {notificationsSupported() && !iosNeedsInstall && state.permission !== "denied" && (
-        <button type="button" className={state.active ? "personal-upload" : "personal-save"} disabled={busy} onClick={toggle}>
-          {busy ? "Đang xử lý..." : state.active ? "Tắt thông báo trên thiết bị này" : "Bật thông báo"}
-        </button>
+        <div className="device-actions">
+          <button type="button" className={state.active ? "personal-upload" : "personal-save"} disabled={busy} onClick={toggle}>
+            {busy ? "Đang xử lý..." : state.active ? "Tắt thông báo trên thiết bị này" : "Bật thông báo"}
+          </button>
+          {state.active && (
+            <button type="button" className="personal-upload" disabled={busy || test?.sending} onClick={sendTest}>
+              <Send size={14} /> {test?.sending ? "Đang gửi..." : "Gửi thử thông báo"}
+            </button>
+          )}
+        </div>
+      )}
+      {test?.error && <p className="device-test error">{test.error}</p>}
+      {test?.sent && (
+        <div className="device-test">
+          <b>{test.sent === "push" ? "Đã gửi qua máy chủ." : "Đã hiện thông báo thử trên thiết bị."} Thông báo sẽ hiện trong vài giây.</b>
+          <span>Không thấy gì? Kiểm tra:</span>
+          <ul>
+            <li>{systemSettingsHint()}</li>
+            <li>Tắt chế độ Không làm phiền / Tập trung nếu đang bật.</li>
+            {test.sent === "local" && <li>Máy chủ chưa bật Web Push nên chưa nhận được thông báo khi đã đóng trang.</li>}
+          </ul>
+        </div>
       )}
     </section>
   );
