@@ -36,8 +36,7 @@ class LibraryController extends Controller
 
         $scope = LibraryNode::query()->with(['owner:id,name,avatar_path', 'file:id,size,mime_type,original_name', 'shares.user:id,name,avatar_path', 'shares.department:id,name']);
         if ($search !== '') {
-            $ids = $access->accessibleIds();
-            $scope->when($ids !== null, fn ($q) => $q->whereIn('id', $ids ?: [0]))->where('name', 'like', "%{$search}%");
+            $access->scopeReadable($scope)->where('name', 'like', "%{$search}%");
         } elseif ($folder) {
             $scope->where('parent_id', $folder->id);
         } elseif ($access->manages()) {
@@ -68,7 +67,7 @@ class LibraryController extends Controller
         $paginator = $files->latest('id')->paginate(min(max($request->integer('per_page', 20), 5), 100));
 
         return response()->json([
-            'folder' => $folder ? [...$this->serialize($folder, $access), 'breadcrumbs' => $this->breadcrumbs($folder, $access)] : null,
+            'folder' => $folder ? [...$this->serialize($folder, $access), 'breadcrumbs' => $this->breadcrumbs($folder->id, $access)] : null,
             'root' => ['can_upload' => $access->canWriteRoot(), 'manages' => $access->manages()],
             'folders' => $folders->map(fn ($node) => $this->serialize($node, $access))->values(),
             'data' => collect($paginator->items())->map(fn ($node) => $this->serialize($node, $access, $search !== ''))->values(),
@@ -324,14 +323,15 @@ class LibraryController extends Controller
             return implode(' › ', $parts);
         };
 
-        $ids = $access->accessibleIds();
-        $visible = $folders->filter(fn ($f) => $ids === null || $f->is_system || in_array($f->id, $ids, true));
-        $visibleIds = $visible->pluck('id')->all();
+        $ids = $access->readableFolderIds();
+        $readable = $ids === null ? null : array_flip($ids);
+        $visible = $folders->filter(fn ($f) => $readable === null || $f->is_system || isset($readable[$f->id]));
+        $visibleIds = array_flip($visible->pluck('id')->all());
 
         return response()->json([
             'root' => $access->canWriteRoot(),
             'folders' => $visible->map(fn ($f) => [
-                'id' => $f->id, 'parent_id' => in_array($f->parent_id, $visibleIds, true) ? $f->parent_id : null,
+                'id' => $f->id, 'parent_id' => isset($visibleIds[$f->parent_id]) ? $f->parent_id : null,
                 'name' => $f->name, 'path' => $path($f->id), 'is_system' => $f->is_system,
                 'can_target' => $f->is_system || $access->can($f->id, LibraryAccess::UPLOAD),
             ])->values(),
@@ -535,27 +535,25 @@ class LibraryController extends Controller
         };
     }
 
-    private function breadcrumbs(LibraryNode $folder, LibraryAccess $access): array
+    private function breadcrumbs(int $folderId, LibraryAccess $access): array
     {
-        $names = LibraryNode::whereIn('id', $access->chain($folder->id))->pluck('name', 'id');
-
-        return collect(array_reverse($access->chain($folder->id)))
+        return collect(array_reverse($access->chain($folderId)))
             ->filter(fn ($id) => $access->can($id, LibraryAccess::READ))
-            ->map(fn ($id) => ['id' => $id, 'name' => $names[$id] ?? ''])->values()->all();
+            ->map(fn ($id) => ['id' => $id, 'name' => $access->folderName($id) ?? ''])->values()->all();
     }
 
     private function tree(LibraryAccess $access): Collection
     {
-        $ids = $access->accessibleIds();
+        $ids = $access->readableFolderIds();
         $folders = LibraryNode::where('type', LibraryNode::FOLDER)->when($ids !== null, fn ($q) => $q->whereIn('id', $ids ?: [0]))
             ->orderByDesc('is_system')->orderBy('name')->get(['id', 'parent_id', 'name', 'is_system', 'owner_id', 'type']);
-        $visible = $folders->pluck('id')->all();
+        $visible = array_flip($folders->pluck('id')->all());
 
         return $folders->map(function (LibraryNode $f) use ($visible, $access) {
             $level = $access->level($f);
 
             return [
-                'id' => $f->id, 'type' => LibraryNode::FOLDER, 'parent_id' => in_array($f->parent_id, $visible, true) ? $f->parent_id : null, 'name' => $f->name, 'is_system' => $f->is_system,
+                'id' => $f->id, 'type' => LibraryNode::FOLDER, 'parent_id' => isset($visible[$f->parent_id]) ? $f->parent_id : null, 'name' => $f->name, 'is_system' => $f->is_system,
                 'abilities' => [
                     'level' => $level, 'can_upload' => $level >= LibraryAccess::UPLOAD, 'can_edit' => $level >= LibraryAccess::EDIT,
                     'can_rename' => $level >= LibraryAccess::EDIT && ! $f->is_system, 'can_share' => $level >= LibraryAccess::EDIT,
@@ -619,7 +617,7 @@ class LibraryController extends Controller
             'size' => $node->file?->size, 'mime_type' => $node->file?->mime_type,
             'children_count' => $node->children_count ?? null,
             'created_at' => $node->created_at?->toIso8601String(), 'updated_at' => $node->updated_at?->toIso8601String(),
-            'path' => $withPath && $node->parent_id ? $this->breadcrumbs(LibraryNode::find($node->parent_id), $access) : null,
+            'path' => $withPath && $node->parent_id ? $this->breadcrumbs($node->parent_id, $access) : null,
             'shares' => $shares->map(fn ($s) => $this->shareRow($s))->values(),
             'abilities' => [
                 'level' => $level,

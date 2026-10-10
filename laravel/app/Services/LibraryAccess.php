@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\LibraryNode;
 use App\Models\LibraryShare;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
 class LibraryAccess
@@ -15,9 +16,12 @@ class LibraryAccess
     public const EDIT = 3;
     public const MANAGE = 4;
 
-    private ?Collection $tree = null;
+    private ?array $folders = null;
     private ?Collection $grants = null;
-    private ?Collection $ownerMap = null;
+    private array $nodes = [];
+    private array $folderLevels = [];
+    private ?array $readableFolders = null;
+    private ?array $rootIds = null;
 
     public function __construct(private User $user) {}
 
@@ -40,12 +44,15 @@ class LibraryAccess
             return self::MANAGE;
         }
         $id = $node instanceof LibraryNode ? $node->id : $node;
-        $best = self::NONE;
-        foreach ($this->chain($id) as $nodeId) {
-            $best = max($best, $this->directLevel($nodeId));
+        if (isset($this->folders()[$id])) {
+            return $this->folderLevel($id);
+        }
+        $row = $node instanceof LibraryNode ? ['parent_id' => $node->parent_id, 'owner_id' => $node->owner_id] : $this->node($id);
+        if (! $row) {
+            return self::NONE;
         }
 
-        return $best;
+        return max($this->directLevel($id, $row['owner_id']), $row['parent_id'] ? $this->folderLevel($row['parent_id']) : self::NONE);
     }
 
     public function can(LibraryNode|int|null $node, int $required): bool
@@ -65,40 +72,102 @@ class LibraryAccess
 
     public function accessibleRootIds(): array
     {
-        $direct = $this->tree()->keys()->filter(fn ($id) => $this->directLevel($id) > self::NONE);
-
-        return $direct->filter(function ($id) use ($direct) {
-            $parent = $this->tree()->get($id);
-            while ($parent) {
-                if ($direct->contains($parent)) {
-                    return false;
+        if ($this->rootIds !== null) {
+            return $this->rootIds;
+        }
+        $folders = $this->folders();
+        $direct = [];
+        foreach ($folders as $id => $folder) {
+            if ($this->directLevel($id, $folder['owner_id']) > self::NONE) {
+                $direct[$id] = true;
+            }
+        }
+        $underDirect = function (?int $parent) use ($folders, $direct) {
+            for ($seen = []; $parent && ! isset($seen[$parent]); $parent = $folders[$parent]['parent_id'] ?? null) {
+                if (isset($direct[$parent])) {
+                    return true;
                 }
-                $parent = $this->tree()->get($parent);
+                $seen[$parent] = true;
             }
 
-            return true;
-        })->values()->all();
+            return false;
+        };
+        $roots = array_keys(array_filter($direct, fn ($_, $id) => ! $underDirect($folders[$id]['parent_id']), ARRAY_FILTER_USE_BOTH));
+        $files = LibraryNode::where('type', LibraryNode::FILE)
+            ->where(fn ($q) => $q->where('owner_id', $this->user->id)->orWhereIn('id', $this->grants()->keys()->all() ?: [0]))
+            ->get(['id', 'parent_id']);
+        foreach ($files as $file) {
+            if (! $underDirect($file->parent_id)) {
+                $roots[] = $file->id;
+            }
+        }
+
+        return $this->rootIds = $roots;
     }
 
-    public function accessibleIds(): ?array
+    public function readableFolderIds(): ?array
     {
         if ($this->manages()) {
             return null;
         }
-        $roots = $this->accessibleRootIds();
+        if ($this->readableFolders !== null) {
+            return $this->readableFolders;
+        }
+        $children = [];
+        foreach ($this->folders() as $id => $folder) {
+            $children[$folder['parent_id'] ?? 0][] = $id;
+        }
+        $result = [];
+        $queue = array_values(array_filter($this->accessibleRootIds(), fn ($id) => isset($this->folders()[$id])));
+        while ($queue) {
+            $id = array_pop($queue);
+            if (isset($result[$id])) {
+                continue;
+            }
+            $result[$id] = true;
+            foreach ($children[$id] ?? [] as $child) {
+                $queue[] = $child;
+            }
+        }
 
-        return $this->tree()->keys()->filter(fn ($id) => array_intersect($this->chain($id), $roots) !== [])->values()->all();
+        return $this->readableFolders = array_keys($result);
+    }
+
+    public function scopeReadable(Builder $query): Builder
+    {
+        $folders = $this->readableFolderIds();
+        if ($folders === null) {
+            return $query;
+        }
+        $files = array_values(array_filter($this->accessibleRootIds(), fn ($id) => ! isset($this->folders()[$id])));
+
+        return $query->where(fn ($q) => $q->whereIn('library_nodes.id', $folders ?: [0])
+            ->orWhereIn('library_nodes.parent_id', $folders ?: [0])
+            ->orWhereIn('library_nodes.id', $files ?: [0]));
     }
 
     public function chain(int $id): array
     {
         $ids = [];
-        while ($id && ! in_array($id, $ids, true)) {
+        if (! isset($this->folders()[$id])) {
+            $row = $this->node($id);
+            if (! $row) {
+                return [];
+            }
             $ids[] = $id;
-            $id = $this->tree()->get($id);
+            $id = $row['parent_id'];
+        }
+        while ($id && isset($this->folders()[$id]) && ! in_array($id, $ids, true)) {
+            $ids[] = $id;
+            $id = $this->folders()[$id]['parent_id'];
         }
 
         return $ids;
+    }
+
+    public function folderName(int $id): ?string
+    {
+        return $this->folders()[$id]['name'] ?? null;
     }
 
     public function isDescendantOrSelf(int $candidate, int $ancestor): bool
@@ -106,22 +175,39 @@ class LibraryAccess
         return in_array($ancestor, $this->chain($candidate), true);
     }
 
-    private function directLevel(int $nodeId): int
+    private function folderLevel(int $id): int
     {
-        $grant = $this->grants()->get($nodeId, self::NONE);
-        $owner = $this->owners()->get($nodeId) === $this->user->id ? self::EDIT : self::NONE;
+        if (isset($this->folderLevels[$id])) {
+            return $this->folderLevels[$id];
+        }
+        $folder = $this->folders()[$id] ?? null;
+        if (! $folder) {
+            return self::NONE;
+        }
+        $this->folderLevels[$id] = self::NONE;
 
-        return max($grant, $owner);
+        return $this->folderLevels[$id] = max($this->directLevel($id, $folder['owner_id']), $folder['parent_id'] ? $this->folderLevel($folder['parent_id']) : self::NONE);
     }
 
-    private function tree(): Collection
+    private function directLevel(int $nodeId, ?int $ownerId): int
     {
-        return $this->tree ??= LibraryNode::query()->pluck('parent_id', 'id');
+        return max($this->grants()->get($nodeId, self::NONE), $ownerId === $this->user->id ? self::EDIT : self::NONE);
     }
 
-    private function owners(): Collection
+    private function folders(): array
     {
-        return $this->ownerMap ??= LibraryNode::query()->pluck('owner_id', 'id');
+        return $this->folders ??= LibraryNode::where('type', LibraryNode::FOLDER)->get(['id', 'parent_id', 'owner_id', 'name'])
+            ->mapWithKeys(fn (LibraryNode $f) => [$f->id => ['parent_id' => $f->parent_id, 'owner_id' => $f->owner_id, 'name' => $f->name]])->all();
+    }
+
+    private function node(int $id): ?array
+    {
+        if (! array_key_exists($id, $this->nodes)) {
+            $row = LibraryNode::whereKey($id)->first(['id', 'parent_id', 'owner_id']);
+            $this->nodes[$id] = $row ? ['parent_id' => $row->parent_id, 'owner_id' => $row->owner_id] : null;
+        }
+
+        return $this->nodes[$id];
     }
 
     private function grants(): Collection
