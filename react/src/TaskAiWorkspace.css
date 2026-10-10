@@ -685,3 +685,148 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+.ai-source.filled {
+  place-items: stretch;
+  border-style: solid;
+}
+
+.ai-picked-list {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.ai-picked-list header {
+  display: grid;
+  gap: 2px;
+}
+
+.ai-picked-list header b {
+  color: var(--c-text);
+  font-size: 14px;
+}
+
+.ai-picked-list header small {
+  color: var(--c-muted);
+  font-size: 12px;
+}
+
+.ai-picked-list ul,
+.ai-sources,
+.ai-running-files {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  list-style: none;
+}
+
+.ai-picked-list li {
+  padding: 8px 8px 8px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #e6e9f0;
+  border-radius: 10px;
+}
+
+.ai-picked-name {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+}
+
+.ai-picked-name b,
+.ai-sources b {
+  overflow: hidden;
+  color: #2d3756;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-picked-name small,
+.ai-sources small {
+  color: var(--c-muted);
+  font-size: 11.5px;
+}
+
+.ai-picked-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-running-files {
+  justify-items: center;
+  color: var(--c-text-2);
+  font-size: 12px;
+}
+
+.ai-running-files li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ai-warning {
+  margin: 10px 0 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #b25e09;
+  font-size: 12px;
+}
+
+.ai-sources li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ai-sources li > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+}
+
+.ai-attach {
+  margin-left: 32px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.ai-attach > span {
+  margin-right: 2px;
+  color: #46516a;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ai-attach button {
+  max-width: 280px;
+  padding: 3px 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  border: 1px dashed #cfd5e3;
+  border-radius: 99px;
+  color: var(--c-muted);
+  background: #fff;
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ai-attach button.active {
+  border-style: solid;
+  border-color: var(--c-primary-line);
+  color: var(--c-primary);
+  background: var(--c-primary-tint);
+}

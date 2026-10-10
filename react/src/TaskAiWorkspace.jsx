@@ -38,6 +38,8 @@ const PRIORITIES = [
 const ACCEPT = ".pdf,.docx,.doc,.txt,.jpg,.jpeg,.png,.webp";
 const PROGRESS = ["Đang đọc tài liệu…", "Đang xác định các đầu việc…", "Đang gợi ý người thực hiện và thời hạn…", "Sắp xong…"];
 const SAVE_DELAY = 800;
+const MAX_DOCUMENTS = 5;
+const MAX_TOTAL_BYTES = 30 * 1024 * 1024;
 
 const fromNow = (value) => {
   const minutes = Math.round((Date.now() - new Date(value).getTime()) / 60000);
@@ -151,29 +153,61 @@ export default function TaskAiWorkspace() {
 }
 
 function StartView({ refs, batches, initialNodeId, onAnalyzed, onOpen, onError, onDeleteBatch }) {
-  const [source, setSource] = useState(() => {
+  const [sources, setSources] = useState(() => {
     const node = initialNodeId && refs.library_files.find((file) => file.id === initialNodeId);
-    return node ? { kind: "library", node } : null;
+    return node ? [{ key: `n${node.id}`, kind: "library", node }] : [];
   });
   const [picking, setPicking] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [running, setRunning] = useState(false);
   const [step, setStep] = useState(0);
+  const [warning, setWarning] = useState("");
   const inputRef = useRef(null);
   const abortRef = useRef(null);
 
   useEffect(() => {
     if (!running) return undefined;
     setStep(0);
-    const timer = setInterval(() => setStep((current) => Math.min(current + 1, PROGRESS.length - 1)), 12000);
+    const timer = setInterval(() => setStep((current) => Math.min(current + 1, PROGRESS.length - 1)), 15000);
     return () => clearInterval(timer);
   }, [running]);
 
-  const pickFile = (file) => file && setSource({ kind: "upload", file });
+  const nameOf = (item) => (item.kind === "library" ? item.node.name : item.file.name);
+  const sizeOf = (item) => (item.kind === "library" ? item.node.size : item.file.size) || 0;
+  const totalSize = sources.reduce((sum, item) => sum + sizeOf(item), 0);
+  const addItems = (items) => {
+    setWarning("");
+    setSources((current) => {
+      const merged = [...current];
+      for (const item of items) {
+        if (merged.some((existing) => existing.key === item.key)) continue;
+        if (merged.length >= MAX_DOCUMENTS) {
+          setWarning(`Mỗi lần phân tích tối đa ${MAX_DOCUMENTS} tài liệu.`);
+          break;
+        }
+        merged.push(item);
+      }
+      return merged;
+    });
+  };
+  const addFiles = (fileList) => addItems([...fileList].map((file) => ({ key: `u${file.name}-${file.size}-${file.lastModified}`, kind: "upload", file })));
+  const toggleNode = (id) => {
+    const key = `n${id}`;
+    if (sources.some((item) => item.key === key)) setSources((current) => current.filter((item) => item.key !== key));
+    else addItems([{ key, kind: "library", node: refs.library_files.find((file) => file.id === id) }]);
+  };
+  const remove = (key) => {
+    setWarning("");
+    setSources((current) => current.filter((item) => item.key !== key));
+  };
+
   const analyze = async () => {
+    if (totalSize > MAX_TOTAL_BYTES) {
+      setWarning("Tổng dung lượng các tài liệu tối đa 30MB.");
+      return;
+    }
     const body = new FormData();
-    if (source.kind === "library") body.append("node_id", source.node.id);
-    else body.append("file", source.file);
+    sources.forEach((item) => (item.kind === "library" ? body.append("node_ids[]", item.node.id) : body.append("files[]", item.file)));
     const controller = new AbortController();
     abortRef.current = controller;
     setRunning(true);
@@ -182,7 +216,7 @@ function StartView({ refs, batches, initialNodeId, onAnalyzed, onOpen, onError, 
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(Object.values(result.errors ?? {}).flat()[0] ?? result.message ?? "Không phân tích được tài liệu.");
       onAnalyzed(result.data, result.message);
-      setSource(null);
+      setSources([]);
     } catch (e) {
       if (e.name !== "AbortError") onError(e.message);
     } finally {
@@ -191,46 +225,65 @@ function StartView({ refs, batches, initialNodeId, onAnalyzed, onOpen, onError, 
     }
   };
 
-  const name = source?.kind === "library" ? source.node.name : source?.file.name;
-  const size = source?.kind === "library" ? source.node.size : source?.file.size;
-
   return (
     <div className="ai-start">
-      <section className={`ai-card ai-source ${dragging ? "dragging" : ""}`}
+      <section className={`ai-card ai-source ${dragging ? "dragging" : ""} ${sources.length && !running ? "filled" : ""}`}
         onDragOver={(event) => { event.preventDefault(); if (!running) setDragging(true); }}
         onDragLeave={(event) => !event.currentTarget.contains(event.relatedTarget) && setDragging(false)}
-        onDrop={(event) => { event.preventDefault(); setDragging(false); if (!running) pickFile(event.dataTransfer.files[0]); }}
+        onDrop={(event) => { event.preventDefault(); setDragging(false); if (!running) addFiles(event.dataTransfer.files); }}
       >
         {running ? (
           <div className="ai-running">
             <span className="ai-orb"><Sparkles size={26} /></span>
             <b>{PROGRESS[step]}</b>
-            <small>{name} · thường mất 20–60 giây</small>
+            <small>{sources.length > 1 ? `${sources.length} tài liệu · thường mất 1–2 phút` : "Thường mất 20–60 giây"}</small>
+            <ul className="ai-running-files">{sources.map((item) => <li key={item.key}><FileText size={13} /> {nameOf(item)}</li>)}</ul>
             <div className="ai-bar"><i style={{ width: `${((step + 1) / PROGRESS.length) * 100}%` }} /></div>
             <button type="button" className="secondary-btn" onClick={() => abortRef.current?.abort()}>Hủy</button>
           </div>
-        ) : source ? (
-          <div className="ai-picked">
-            <span className="ai-file-icon"><FileText size={22} /></span>
-            <span>
-              <b>{name}</b>
-              <small>{source.kind === "library" ? "Chia sẻ chung" : "Tải lên từ máy"} · {formatBytes(size)}</small>
-            </span>
-            <button type="button" className="ai-icon-btn" onClick={() => setSource(null)} aria-label="Bỏ chọn"><X size={16} /></button>
-            <button type="button" className="primary-btn" onClick={analyze}><Sparkles size={16} /> Phân tích bằng AI</button>
+        ) : sources.length ? (
+          <div className="ai-picked-list">
+            <header>
+              <b>{sources.length} tài liệu sẽ được phân tích cùng nhau</b>
+              <small>Ví dụ: công văn kèm phụ lục, mẫu biểu, kế hoạch · tối đa {MAX_DOCUMENTS} file, tổng 30MB</small>
+            </header>
+            <ul>
+              {sources.map((item, index) => (
+                <li key={item.key}>
+                  <span className="ai-index">{index + 1}</span>
+                  <span className="ai-file-icon small"><FileText size={16} /></span>
+                  <span className="ai-picked-name">
+                    <b title={nameOf(item)}>{nameOf(item)}</b>
+                    <small>{item.kind === "library" ? "Chia sẻ chung" : "Tải lên từ máy"} · {formatBytes(sizeOf(item))}</small>
+                  </span>
+                  <button type="button" className="ai-icon-btn" onClick={() => remove(item.key)} aria-label={`Bỏ ${nameOf(item)}`}><X size={15} /></button>
+                </li>
+              ))}
+            </ul>
+            <div className="ai-picked-actions">
+              {sources.length < MAX_DOCUMENTS && (
+                <>
+                  <button type="button" className="secondary-btn" onClick={() => setPicking(true)}><FolderOpen size={15} /> Thêm từ Chia sẻ chung</button>
+                  <button type="button" className="secondary-btn" onClick={() => inputRef.current?.click()}><Upload size={15} /> Tải thêm file</button>
+                </>
+              )}
+              <span className="ai-toolbar-gap" />
+              <button type="button" className="primary-btn" onClick={analyze}><Sparkles size={16} /> Phân tích {sources.length > 1 ? `${sources.length} tài liệu` : "bằng AI"}</button>
+            </div>
           </div>
         ) : (
           <div className="ai-empty-source">
             <span className="ai-orb"><FileSearch size={26} /></span>
             <b>Chọn công văn, kế hoạch hoặc yêu cầu báo cáo</b>
-            <small>PDF, Word (.docx), ảnh chụp văn bản · tối đa 20MB · hoặc kéo thả file vào đây</small>
+            <small>Chọn được tối đa {MAX_DOCUMENTS} tài liệu liên quan (công văn kèm phụ lục, mẫu biểu…) · PDF, Word (.docx), ảnh chụp · hoặc kéo thả vào đây</small>
             <div className="ai-source-actions">
               <button type="button" className="secondary-btn" onClick={() => setPicking(true)}><FolderOpen size={16} /> Chọn từ Chia sẻ chung</button>
               <button type="button" className="secondary-btn" onClick={() => inputRef.current?.click()}><Upload size={16} /> Tải file lên</button>
             </div>
           </div>
         )}
-        <input ref={inputRef} type="file" hidden accept={ACCEPT} onChange={(event) => { pickFile(event.target.files[0]); event.target.value = ""; }} />
+        {warning && !running && <p className="ai-warning"><TriangleAlert size={13} /> {warning}</p>}
+        <input ref={inputRef} type="file" hidden multiple accept={ACCEPT} onChange={(event) => { addFiles(event.target.files); event.target.value = ""; }} />
       </section>
 
       <section className="ai-card ai-history">
@@ -244,7 +297,7 @@ function StartView({ refs, batches, initialNodeId, onAnalyzed, onOpen, onError, 
               <span className="ai-file-icon small"><FileText size={16} /></span>
               <span>
                 <b>{batch.analysis?.number ? `${batch.analysis.number} · ` : ""}{batch.analysis?.title || batch.document_name}</b>
-                <small>{batch.drafts.length} bản nháp · {fromNow(batch.updated_at)}</small>
+                <small>{batch.sources.length > 1 ? `${batch.sources.length} tài liệu · ` : ""}{batch.drafts.length} bản nháp · {fromNow(batch.updated_at)}</small>
               </span>
             </button>
             <button type="button" className="ai-icon-btn danger" onClick={() => onDeleteBatch(batch)} aria-label="Xóa"><Trash2 size={15} /></button>
@@ -255,11 +308,8 @@ function StartView({ refs, batches, initialNodeId, onAnalyzed, onOpen, onError, 
       {picking && (
         <SharedFilePicker
           files={refs.library_files}
-          selected={source?.kind === "library" ? [source.node.id] : []}
-          onToggle={(id) => {
-            setSource({ kind: "library", node: refs.library_files.find((file) => file.id === id) });
-            setPicking(false);
-          }}
+          selected={sources.filter((item) => item.kind === "library").map((item) => item.node.id)}
+          onToggle={toggleNode}
           onClose={() => setPicking(false)}
         />
       )}
@@ -272,11 +322,16 @@ function BatchView({ batch, refs, confirm, onChange, onDeleted, onError, onSucce
   const [states, setStates] = useState({});
   const [created, setCreated] = useState([]);
   const [publishing, setPublishing] = useState(false);
-  const [preview, setPreview] = useState(false);
+  const [preview, setPreview] = useState(null);
   const timers = useRef({});
+  const pending = useRef({});
 
   const setState = (id, value) => setStates((current) => ({ ...current, [id]: { ...current[id], ...value } }));
-  const persist = useCallback(async (id, payload) => {
+  const persist = useCallback(async (id) => {
+    const payload = pending.current[id];
+    delete pending.current[id];
+    clearTimeout(timers.current[id]);
+    if (!payload) return;
     setState(id, { saving: true });
     try {
       await apiJson(`/api/task-drafts/${id}`, { method: "PUT", body: payload, silent: true });
@@ -291,8 +346,9 @@ function BatchView({ batch, refs, confirm, onChange, onDeleted, onError, onSucce
     const payload = { ...draft.payload, ...change };
     onChange((current) => ({ ...current, drafts: current.drafts.map((item) => (item.id === draft.id ? { ...item, payload } : item)) }));
     setState(draft.id, { error: null });
+    pending.current[draft.id] = { ...pending.current[draft.id], ...change };
     clearTimeout(timers.current[draft.id]);
-    timers.current[draft.id] = setTimeout(() => persist(draft.id, change), SAVE_DELAY);
+    timers.current[draft.id] = setTimeout(() => persist(draft.id), SAVE_DELAY);
   };
 
   const addDraft = async (payload = {}) => {
@@ -335,7 +391,7 @@ function BatchView({ batch, refs, confirm, onChange, onDeleted, onError, onSucce
     });
     if (!ok) return;
     setPublishing(true);
-    Object.values(timers.current).forEach(clearTimeout);
+    await Promise.all(ready.map((draft) => persist(draft.id)));
     const done = [];
     for (const draft of ready) {
       setState(draft.id, { publishing: true, error: null });
@@ -400,10 +456,24 @@ function BatchView({ batch, refs, confirm, onChange, onDeleted, onError, onSucce
             <ul className="ai-summary">{analysis.summary.map((line, index) => <li key={index}>{line}</li>)}</ul>
           </div>
         )}
-        {batch.source.available && (
-          <button type="button" className="secondary-btn ai-doc-open" onClick={() => setPreview(true)}><ExternalLink size={15} /> Xem tài liệu gốc</button>
-        )}
-        <small className="ai-doc-file">{batch.document_name} · {batch.source.kind === "library" ? "Chia sẻ chung" : "tải lên"} — sẽ được đính kèm vào các công việc được tạo.</small>
+        <div className="ai-doc-block">
+          <b><FileText size={14} /> Tài liệu ({batch.sources.length})</b>
+          <ul className="ai-sources">
+            {batch.sources.map((source, index) => (
+              <li key={source.id}>
+                <span className="ai-index">{index + 1}</span>
+                <span>
+                  <b title={source.name}>{source.name}</b>
+                  <small>{[source.kind, source.origin === "library" ? "Chia sẻ chung" : "Tải lên"].filter(Boolean).join(" · ")}</small>
+                </span>
+                {source.available && (
+                  <button type="button" className="ai-icon-btn" onClick={() => setPreview(index)} title="Xem tài liệu" aria-label={`Xem ${source.name}`}><ExternalLink size={14} /></button>
+                )}
+              </li>
+            ))}
+          </ul>
+          <small className="ai-doc-file">Mỗi công việc chỉ đính kèm các tài liệu được đánh dấu trên thẻ nháp.</small>
+        </div>
       </aside>
 
       <section className="ai-drafts">
@@ -442,6 +512,7 @@ function BatchView({ batch, refs, confirm, onChange, onDeleted, onError, onSucce
               else next.add(draft.id);
               return next;
             })}
+            sources={batch.sources}
             onEdit={(change) => edit(draft, change)}
             onDuplicate={() => addDraft({ ...draft.payload, title: `${draft.payload.title} (bản sao)` })}
             onRemove={() => removeDraft(draft)}
@@ -450,17 +521,18 @@ function BatchView({ batch, refs, confirm, onChange, onDeleted, onError, onSucce
         ))}
       </section>
 
-      {preview && (
+      {preview !== null && (
         <FilePreview
-          files={[{ key: batch.id, name: batch.document_name, mime_type: batch.source.mime_type, size: batch.source.size, url: batch.source.url }]}
-          onClose={() => setPreview(false)}
+          files={batch.sources.filter((source) => source.available).map((source) => ({ key: source.id, name: source.name, mime_type: source.mime_type, size: source.size, url: source.url }))}
+          startIndex={batch.sources.filter((source) => source.available).indexOf(batch.sources[preview])}
+          onClose={() => setPreview(null)}
         />
       )}
     </div>
   );
 }
 
-function DraftCard({ index, draft, refs, state, problems, selected, onSelect, onEdit, onDuplicate, onRemove, onOpenForm }) {
+function DraftCard({ index, draft, refs, sources, state, problems, selected, onSelect, onEdit, onDuplicate, onRemove, onOpenForm }) {
   const payload = draft.payload;
   const [showDescription, setShowDescription] = useState(false);
   const editing = useMemo(() => ({ employee_ids: payload.employee_ids, department_ids: payload.department_ids }), [payload.employee_ids, payload.department_ids]);
@@ -515,6 +587,26 @@ function DraftCard({ index, draft, refs, state, problems, selected, onSelect, on
           />
         </div>
       </div>
+      {sources.length > 0 && (
+        <div className="ai-attach">
+          <span>Đính kèm</span>
+          {sources.map((source, position) => {
+            const active = (payload.source_ids ?? []).includes(source.id);
+            return (
+              <button
+                key={source.id}
+                type="button"
+                className={active ? "active" : ""}
+                aria-pressed={active}
+                title={active ? "Bấm để bỏ đính kèm" : "Bấm để đính kèm vào công việc"}
+                onClick={() => onEdit({ source_ids: active ? payload.source_ids.filter((id) => id !== source.id) : [...(payload.source_ids ?? []), source.id] })}
+              >
+                <FileText size={12} /> {position + 1}. {source.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
       <div className="ai-description">
         <button type="button" className={`ai-desc-toggle ${showDescription ? "open" : ""}`} onClick={() => setShowDescription(!showDescription)}>
           <span>Mô tả & yêu cầu</span> <ChevronDown size={14} />
