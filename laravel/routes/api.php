@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\EvaluationTemplateController;
 use App\Http\Controllers\Api\TaskStatsController;
 use App\Http\Controllers\Api\AiAssistantController;
 use App\Http\Controllers\Api\LeaveRecordController;
+use App\Http\Controllers\Api\TaskDraftController;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Broadcasting\BroadcastController;
 Route::post('auth/login',[AuthController::class,'login']);
@@ -23,6 +24,10 @@ Route::middleware('api.token')->group(function(){
  Route::get('notifications',[NotificationController::class,'index']);Route::get('notifications/unread-count',[NotificationController::class,'unreadCount']);Route::post('notifications/read-all',[NotificationController::class,'markAllRead']);Route::post('notifications/{notification}/read',[NotificationController::class,'markRead']);
  Route::get('auth/me',[AuthController::class,'me']);Route::post('auth/logout',[AuthController::class,'logout']);Route::post('auth/change-password',[AuthController::class,'changePassword']);Route::post('auth/avatar',[AuthController::class,'updateAvatar']);
  Route::post('ai-assistant/ask',[AiAssistantController::class,'ask']);
+ Route::middleware(['permission:tasks.assign', 'permission:ai.tasks'])->group(function(){
+  Route::get('task-drafts',[TaskDraftController::class,'index']);Route::post('task-drafts/analyze',[TaskDraftController::class,'analyze']);Route::put('task-drafts/{draft}',[TaskDraftController::class,'update']);Route::delete('task-drafts/{draft}',[TaskDraftController::class,'destroy']);
+  Route::post('task-draft-batches/{batch}/drafts',[TaskDraftController::class,'storeDraft']);Route::delete('task-draft-batches/{batch}',[TaskDraftController::class,'destroyBatch']);Route::get('task-draft-batches/{batch}/source',[TaskDraftController::class,'source']);
+ });
  Route::get('leave-records',[LeaveRecordController::class,'index']);Route::post('leave-records',[LeaveRecordController::class,'store']);Route::put('leave-records/{leaveRecord}',[LeaveRecordController::class,'update']);Route::delete('leave-records/{leaveRecord}',[LeaveRecordController::class,'destroy']);
  Route::middleware('permission:library.view')->group(function(){
   Route::get('library',[LibraryController::class,'index']);Route::get('library/targets',[LibraryController::class,'targets']);Route::get('library/share-options',[LibraryController::class,'shareOptions']);
