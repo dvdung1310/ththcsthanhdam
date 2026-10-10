@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { ArrowRight } from "lucide-react";
 import { apiFetch } from "./api";
 import "./KpiReport.css";
 import "./KpiTaskDetails.css";
 import "./KpiAnalytics.css";
 import TaskStatsPeople, { PersonTasksDialog } from "./TaskStatsPeople";
+import TaskStatsUnits from "./TaskStatsUnits";
 const n = (v) =>
   v == null
     ? "—"
@@ -261,33 +261,15 @@ export default function TaskStats({ onTask }) {
                 ))}
               </article>
             </section>
-            <article className="kpi-analysis-panel">
-              <h3>
-                Theo tổ / nhóm <small>Bấm để lọc theo đơn vị</small>
-              </h3>
-              <div className="kpi-department-grid">
-                {report.departments.map((d) => (
-                  <button
-                    key={d.id}
-                    onClick={() => change("department_id", String(d.id))}
-                  >
-                    <span>
-                      {d.name}
-                      <small>
-                        {d.employees} nhân sự · {d.completed}/{d.assigned} việc hoàn thành
-                        {d.overdue > 0 && ` · ${d.overdue} quá hạn`}
-                      </small>
-                    </span>
-                    <b>
-                      {d.completion_rate == null ? "—" : n(d.completion_rate) + "%"} <ArrowRight size={16} />
-                    </b>
-                  </button>
-                ))}
-                {!report.departments.length && (
-                  <p>Không có dữ liệu đơn vị phù hợp.</p>
-                )}
-              </div>
-            </article>
+            <TaskStatsUnits
+              units={report.departments}
+              schoolRate={current.completion_rate}
+              comparison={report.comparison_period}
+              selectedId={filters.department_id ? +filters.department_id : null}
+              selectedName={refs.departments?.find((d) => d.id === +filters.department_id)?.name}
+              onSelect={(id) => change("department_id", String(id))}
+              onClear={() => change("department_id", "")}
+            />
             <TaskStatsPeople rows={report.data} period={report.period} onUnit={(id) => change("department_id", String(id))} onOpen={setSelected} />
             <p className="kpi-methodology">
               Thống kê theo công việc có hạn trong tháng, không tính công việc
