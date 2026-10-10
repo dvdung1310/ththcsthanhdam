@@ -33,6 +33,37 @@
   min-width: max(100%, 220px);
 }
 
+.personnel-filters .ev-unit-picker {
+  min-width: 0;
+}
+
+.personnel-filters .ev-more-btn {
+  width: 100%;
+  height: 37px;
+  padding: 0 10px 0 11px;
+  border-color: #e1e5ee;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.personnel-filters .ev-more-btn > svg:first-child {
+  flex: none;
+  color: var(--c-muted);
+}
+
+.personnel-filters .ev-unit-picker .ev-more-btn span {
+  max-width: none;
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+}
+
+.personnel-filters .ev-unit-panel {
+  width: max(100%, 300px);
+  max-width: calc(100vw - 24px);
+}
+
 .staff-badge {
   padding: 3px 9px;
   border-radius: 4px;

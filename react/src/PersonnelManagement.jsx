@@ -28,6 +28,7 @@ import "./PersonnelManagement.css";
 import Avatar from "./Avatar";
 import { PageButtons } from "./TablePagination";
 import Dropdown from "./Dropdown";
+import UnitPicker from "./UnitPicker";
 
 const LEADER_ROLES = ["hieu_truong", "pho_hieu_truong", "ban_giam_hieu", "thu_ky", "to_truong", "to_pho", "nhom_truong"];
 
@@ -116,18 +117,11 @@ export default function PersonnelManagement({ view = "people" }) {
   const orphanUnits = data.units.filter(
     (unit) => unit.parent_id && !data.units.some((root) => root.id === unit.parent_id),
   );
-  const unitOptions = [
-    { value: "", label: "Tất cả tổ, nhóm" },
-    { divider: true },
-    ...unitGroups.flatMap(({ root, children }) =>
-      children.length
-        ? [{ divider: true }, { value: root.id, label: root.name, hint: "cả tổ" }, ...children.map((child) => ({ value: child.id, label: child.name, indent: true })), { divider: true }]
-        : [{ value: root.id, label: root.name }],
-    ),
-    ...orphanUnits.map((unit) => ({ value: unit.id, label: unit.label })),
-    { divider: true },
-    { value: "none", label: "Chưa thuộc tổ, nhóm" },
-  ].filter((option, index, list) => !option.divider || (index > 0 && !list[index - 1].divider));
+  const pickerTeams = [...unitGroups.map(({ root }) => root), ...orphanUnits];
+  const pickerGroups = unitGroups.flatMap(({ root, children }) => children.map((child) => ({ ...child, team_id: root.id })));
+  const pickedUnit = data.units.find((unit) => unit.id === Number(unitFilter));
+  const pickedGroup = pickedUnit && pickerGroups.some((child) => child.id === pickedUnit.id) ? pickedUnit.id : null;
+  const pickedTeam = unitFilter === "none" ? "none" : pickedGroup ? pickedUnit.parent_id : (pickedUnit?.id ?? "");
 
   const matched = data.data.filter((person) => {
     const text = [person.name, person.email, person.employee_code, person.phone].join(" ").toLowerCase();
@@ -277,12 +271,13 @@ export default function PersonnelManagement({ view = "people" }) {
                 <Search size={17} />
                 <input value={keyword} onChange={filterChange(setKeyword)} placeholder="Tìm theo tên, mã, email, số điện thoại..." />
               </label>
-              <Dropdown
-                label="Tổ, nhóm"
-                icon={Building2}
-                value={unitFilter}
-                onChange={filterTo(setUnitFilter)}
-                options={unitOptions}
+              <UnitPicker
+                teams={pickerTeams}
+                groups={pickerGroups}
+                team={pickedTeam}
+                group={pickedGroup}
+                noneLabel="Chưa thuộc tổ, nhóm"
+                onChange={(next) => filterTo(setUnitFilter)(next.group || next.team || "")}
               />
               <Dropdown
                 label="Vai trò"
