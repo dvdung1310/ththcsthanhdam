@@ -11,9 +11,9 @@ class EvaluationTemplateSeeder extends Seeder
     public const BONUS_MAX = 10;
 
     private const META = [
-        EvaluationTemplate::TEACHER => ['Tiêu chí thi đua giáo viên 2026–2027', 'Theo bảng tiêu chí chấm điểm thi đua hằng tháng dành cho giáo viên (văn bản 5.10).', 'VI'],
-        EvaluationTemplate::STAFF => ['Tiêu chí thi đua nhân viên 2026–2027', 'Theo bảng tiêu chí chấm điểm thi đua hằng tháng dành cho nhân viên (văn bản 5.10).', 'IV'],
-        EvaluationTemplate::LEADERSHIP => ['Tiêu chí thi đua Ban giám hiệu 2026–2027', 'Theo bảng tiêu chí chấm điểm thi đua hằng tháng dành cho Ban giám hiệu (văn bản 5.10).', 'IV'],
+        EvaluationTemplate::TEACHER => ['Tiêu chí thi đua giáo viên', 'Theo bảng tiêu chí chấm điểm thi đua hằng tháng dành cho giáo viên (văn bản 5.10).', 'VI'],
+        EvaluationTemplate::STAFF => ['Tiêu chí thi đua nhân viên', 'Theo bảng tiêu chí chấm điểm thi đua hằng tháng dành cho nhân viên (văn bản 5.10).', 'IV'],
+        EvaluationTemplate::LEADERSHIP => ['Tiêu chí thi đua Ban giám hiệu', 'Theo bảng tiêu chí chấm điểm thi đua hằng tháng dành cho Ban giám hiệu (văn bản 5.10).', 'IV'],
     ];
 
     private const TEACHER_GRADES = [
@@ -318,7 +318,7 @@ Minh chứng: Biên bản đánh giá; quyết định công nhận; thời đi�
             }
             [$name, $description, $bonusCode] = self::META[$audience];
             $template = EvaluationTemplate::create([
-                'name' => $name, 'audience' => $audience, 'description' => $description, 'is_active' => true,
+                'name' => $name.' '.$this->schoolYear(), 'audience' => $audience, 'description' => $description, 'is_active' => true,
                 'grades' => $audience === EvaluationTemplate::TEACHER ? self::TEACHER_GRADES : self::OFFICE_GRADES,
             ]);
 
@@ -344,5 +344,12 @@ Minh chứng: Biên bản đánh giá; quyết định công nhận; thời đi�
             'max_score' => $max, 'kind' => $kind, 'homeroom_only' => $homeroomOnly, 'requires_evidence' => $requiresEvidence,
             'tracks_leave' => $tracksLeave, 'position' => $position,
         ]);
+    }
+
+    private function schoolYear(): string
+    {
+        $start = now()->month >= 8 ? now()->year : now()->year - 1;
+
+        return $start.'–'.($start + 1);
     }
 }
