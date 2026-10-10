@@ -1147,3 +1147,47 @@ body.dl-resizing {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.dl-table th.dl-sortable button {
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  color: inherit;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.dl-table th.dl-sortable button:hover,
+.dl-table th.dl-sortable.sorted button {
+  color: var(--c-primary);
+}
+
+.dl-table th.dl-sortable .idle {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.dl-table th.dl-sortable button:hover .idle {
+  opacity: 0.6;
+}
+
+.dl-owner {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+}
+
+.dl-owner > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dl-owner .dl-avatar {
+  flex: none;
+}

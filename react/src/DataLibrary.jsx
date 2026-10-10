@@ -28,6 +28,9 @@ import {
   UserRound,
   Users,
   X,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
 } from "lucide-react";
 import { apiFetch, apiJson } from "./api";
 import { uploadProblem } from "./uploadLimits";
@@ -449,10 +452,14 @@ export default function DataLibrary({ view = "library", folderId = null, selectI
                 <option value="image">Hình ảnh</option>
               </select>
               <select value={sort} onChange={(e) => { setSort(e.target.value); setPage(1); }}>
-                <option value="newest">Mới nhất</option>
-                <option value="oldest">Cũ nhất</option>
+                <option value="newest">Mới tải lên</option>
+                <option value="oldest">Tải lên lâu nhất</option>
                 <option value="name_asc">Tên A → Z</option>
                 <option value="name_desc">Tên Z → A</option>
+                <option value="size_desc">Dung lượng lớn nhất</option>
+                <option value="size_asc">Dung lượng nhỏ nhất</option>
+                <option value="updated_desc">Mới cập nhật</option>
+                <option value="updated_asc">Cập nhật lâu nhất</option>
               </select>
               {canUploadHere && !search && (
                 <div className="dl-actions">
@@ -496,10 +503,10 @@ export default function DataLibrary({ view = "library", folderId = null, selectI
             <table className="dl-table">
               <thead>
                 <tr>
-                  <th>Tên</th>
-                  <th>Kích thước</th>
+                  <SortHeader column="name" label="Tên" sort={sort} onSort={(value) => { setSort(value); setPage(1); }} />
+                  <SortHeader column="size" label="Kích thước" sort={sort} onSort={(value) => { setSort(value); setPage(1); }} />
                   <th className="dl-col-optional">Chủ sở hữu</th>
-                  <th className="dl-col-optional">Cập nhật</th>
+                  <SortHeader column="updated" label="Cập nhật" className="dl-col-optional" sort={sort} onSort={(value) => { setSort(value); setPage(1); }} />
                   <th aria-label="Thao tác" />
                 </tr>
               </thead>
@@ -530,7 +537,16 @@ export default function DataLibrary({ view = "library", folderId = null, selectI
                         {isFolder && !node.abilities.can_upload && <Lock size={12} className="dl-readonly" aria-label="Chỉ xem" />}
                       </td>
                       <td className="dl-muted">{isFolder ? `${node.children_count ?? 0} mục` : formatBytes(node.size)}</td>
-                      <td className="dl-col-optional dl-muted">{node.owner?.name ?? "—"}</td>
+                      <td className="dl-col-optional dl-muted">
+                        {node.owner ? (
+                          <span className="dl-owner" title={node.owner.name}>
+                            <PersonAvatar person={node.owner} size={22} />
+                            <span>{node.owner.name}</span>
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
                       <td className="dl-col-optional dl-muted">{formatDate(node.updated_at)}</td>
                       <td className="dl-row-menu" onClick={(e) => e.stopPropagation()}>
                         <ActionMenu items={nodeMenu(node)} />
@@ -636,6 +652,22 @@ export default function DataLibrary({ view = "library", folderId = null, selectI
 
 const fullDate = (value) => (value ? new Date(value).toLocaleString("vi-VN", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" }) : "—");
 
+
+const SORT_COLUMNS = { name: ["name_asc", "name_desc"], size: ["size_desc", "size_asc"], updated: ["updated_desc", "updated_asc"] };
+
+function SortHeader({ column, label, sort, onSort, className = "" }) {
+  const [first, second] = SORT_COLUMNS[column];
+  const active = sort === first || sort === second;
+  const ascending = sort.endsWith("_asc");
+  return (
+    <th className={`dl-sortable ${active ? "sorted" : ""} ${className}`} aria-sort={active ? (ascending ? "ascending" : "descending") : "none"}>
+      <button type="button" onClick={() => onSort(active && sort === first ? second : first)} title={`Sắp xếp theo ${label.toLowerCase()}`}>
+        {label}
+        {active ? ascending ? <ArrowUp size={12} /> : <ArrowDown size={12} /> : <ArrowUpDown size={12} className="idle" />}
+      </button>
+    </th>
+  );
+}
 
 function PersonAvatar({ person, size = 26 }) {
   return person?.avatar_url ? (
