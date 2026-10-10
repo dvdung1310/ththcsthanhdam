@@ -739,6 +739,22 @@ export default function TaskManagement({ canAssign, canUpdate, canAi = false, se
           />
         </section>
         <section className="form-block">
+          <div className="field">
+            <span className="field-label">Mô tả</span>
+            <RichTextEditor
+              value={editing.description || ""}
+              onChange={(description) =>
+                setEditing({ ...editing, description })
+              }
+            />
+            <input
+              type="hidden"
+              name="description"
+              value={editing.description || ""}
+            />
+          </div>
+        </section>
+        <section className="form-block">
           <h4>Thời hạn & ưu tiên</h4>
           <div className="field-row">
             <label className="field">
@@ -787,22 +803,6 @@ export default function TaskManagement({ canAssign, canUpdate, canAi = false, se
                 )}
               </select>
             </label>
-          </div>
-        </section>
-        <section className="form-block">
-          <div className="field">
-            <span className="field-label">Mô tả</span>
-            <RichTextEditor
-              value={editing.description || ""}
-              onChange={(description) =>
-                setEditing({ ...editing, description })
-              }
-            />
-            <input
-              type="hidden"
-              name="description"
-              value={editing.description || ""}
-            />
           </div>
         </section>
         {editing.assignment_mode !== "self" && (
