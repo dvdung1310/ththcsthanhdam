@@ -167,6 +167,10 @@ class LibraryController extends Controller
     {
         abort_unless($this->access($request)->canDelete($node), 403, 'Bạn không có quyền xóa mục này.');
         abort_if($node->isFolder() && $node->children()->exists(), 422, 'Chỉ có thể xóa thư mục trống.');
+        $tasks = $node->isFolder() ? 0 : DB::table('task_library_files')->where('node_id', $node->id)->count();
+        if ($tasks && ! $request->boolean('force')) {
+            return response()->json(['message' => "File đang được gắn vào {$tasks} công việc. Xóa file sẽ gỡ file khỏi các công việc này.", 'task_count' => $tasks], 409);
+        }
         $fileId = $node->file_id;
         DB::transaction(fn () => $node->delete());
         $this->store->releaseIfUnused($fileId);
@@ -214,6 +218,8 @@ class LibraryController extends Controller
                 $existing->update(['file_id' => $node->file_id]);
                 $existing->touch();
                 if ($cut) {
+                    $linked = DB::table('task_library_files')->where('node_id', $existing->id)->pluck('task_id');
+                    DB::table('task_library_files')->where('node_id', $node->id)->whereNotIn('task_id', $linked)->update(['node_id' => $existing->id]);
                     $node->delete();
                 }
             });

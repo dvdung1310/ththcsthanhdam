@@ -217,12 +217,30 @@ export default function DataLibrary({ view = "library", folderId = null, selectI
     const ok = await confirm({
       tone: "danger",
       title: `Xóa ${node.type === "folder" ? "thư mục" : "file"} “${node.name}”?`,
-      message: node.type === "folder" ? "Chỉ xóa được thư mục trống." : "File sẽ bị gỡ khỏi kho. File vẫn được giữ trong các công việc đang dùng nó.",
+      message: node.type === "folder" ? "Chỉ xóa được thư mục trống." : "File sẽ bị gỡ khỏi kho.",
       confirmText: "Xóa",
     });
-    if (ok && (await run(() => apiJson(`/api/library/nodes/${node.id}`, { method: "DELETE" })))) {
+    if (!ok) return;
+    try {
+      let result;
+      try {
+        result = await apiJson(`/api/library/nodes/${node.id}`, { method: "DELETE" });
+      } catch (e) {
+        if (e.status !== 409 || !e.payload?.task_count) throw e;
+        const linked = await confirm({
+          tone: "danger",
+          title: `“${node.name}” đang được gắn vào ${e.payload.task_count} công việc`,
+          message: "Xóa file sẽ gỡ file khỏi các công việc này, người thực hiện và người duyệt sẽ không xem được file nữa.",
+          confirmText: "Vẫn xóa",
+        });
+        if (!linked) return;
+        result = await apiJson(`/api/library/nodes/${node.id}?force=1`, { method: "DELETE" });
+      }
+      await done(result.message);
       setSelected(null);
       if (detail?.id === node.id) setDetail(null);
+    } catch (e) {
+      setError(e.message);
     }
   };
 
