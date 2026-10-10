@@ -14,21 +14,19 @@ class RoleController extends Controller
 
     public function index(): JsonResponse
     {
-        $roles = Role::with('permissions:id')->withCount('users')->get()
+        $roles = Role::with('permissions:id,code')->withCount('users')->get()
             ->sortBy(fn (Role $role) => Role::rank($role->code))
             ->map(fn (Role $role) => [
                 'id' => $role->id, 'code' => $role->code, 'name' => $role->name,
                 'scope' => $role->scope, 'unit_type' => $role->unit_type,
                 'users_count' => $role->users_count,
                 'locked' => $role->code === Role::ADMIN,
-                'permission_ids' => $role->permissions->pluck('id')->values(),
+                'permission_ids' => $role->permissions->whereNotIn('code', self::NOT_ENFORCED)->pluck('id')->values(),
             ])->values();
 
         return response()->json([
             'roles' => $roles,
-            'permissions' => Permission::orderBy('id')->get(['id', 'code', 'name', 'module'])
-                ->map(fn (Permission $permission) => [...$permission->toArray(), 'enforced' => ! in_array($permission->code, self::NOT_ENFORCED, true)])
-                ->values(),
+            'permissions' => Permission::whereNotIn('code', self::NOT_ENFORCED)->orderBy('id')->get(['id', 'code', 'name', 'module']),
         ]);
     }
 
@@ -39,7 +37,9 @@ class RoleController extends Controller
             'permission_ids' => ['present', 'array'],
             'permission_ids.*' => ['integer', 'exists:permissions,id'],
         ]);
-        $role->permissions()->sync($data['permission_ids']);
+        $hidden = $role->permissions()->whereIn('code', self::NOT_ENFORCED)->pluck('permissions.id')->all();
+        $visible = Permission::whereKey($data['permission_ids'])->whereNotIn('code', self::NOT_ENFORCED)->pluck('id')->all();
+        $role->permissions()->sync([...$visible, ...$hidden]);
 
         return response()->json(['message' => 'Đã cập nhật quyền cho vai trò '.$role->name.'.']);
     }
