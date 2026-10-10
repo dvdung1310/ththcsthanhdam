@@ -11,31 +11,51 @@ class Evaluation extends Model
     public const UNIT_SCORED = 'unit_scored';
     public const PUBLISHED = 'published';
 
+    public const UNIT = 'unit';
+    public const LEADER = 'leader';
+
     protected $fillable = [
         'period_id', 'teacher_id', 'audience', 'template_id', 'is_homeroom', 'duties', 'results', 'status', 'total_score', 'grade',
-        'has_violation', 'no_grade_reason', 'submitted_at', 'unit_scored_by', 'unit_scored_at', 'reviewed_by', 'reviewed_at',
+        'has_violation', 'no_grade_reason', 'submitted_at', 'unit_scored_by', 'unit_scored_at', 'leader_scored_by', 'leader_scored_at', 'reviewed_by', 'reviewed_at',
     ];
 
     protected function casts(): array
     {
         return [
             'is_homeroom' => 'boolean', 'has_violation' => 'boolean', 'total_score' => 'decimal:2',
-            'submitted_at' => 'datetime', 'unit_scored_at' => 'datetime', 'reviewed_at' => 'datetime',
+            'submitted_at' => 'datetime', 'unit_scored_at' => 'datetime', 'leader_scored_at' => 'datetime', 'reviewed_at' => 'datetime',
         ];
     }
 
     public function period() { return $this->belongsTo(EvaluationPeriod::class, 'period_id'); }
     public function teacher() { return $this->belongsTo(Employee::class, 'teacher_id'); }
     public function template() { return $this->belongsTo(EvaluationTemplate::class, 'template_id'); }
-    public function assignedScorers() { return $this->belongsToMany(User::class, 'evaluation_scorers')->withTimestamps(); }
+    public function assignedScorers() { return $this->belongsToMany(User::class, 'evaluation_scorers')->withPivot('column')->withTimestamps(); }
+    public function scorersFor(string $column) { return $this->belongsToMany(User::class, 'evaluation_scorers')->withPivotValue('column', $column)->withTimestamps(); }
 
     public function scoredByLeadership(): bool
     {
         return $this->audience !== EvaluationTemplate::TEACHER;
     }
+
+    public function hasLeaderColumn(): bool
+    {
+        return $this->audience === EvaluationTemplate::TEACHER;
+    }
+
+    public function boardColumn(): string
+    {
+        return $this->hasLeaderColumn() ? self::LEADER : self::UNIT;
+    }
+
+    public function awaitsLeader(): bool
+    {
+        return $this->hasLeaderColumn() && $this->leader_scored_at === null;
+    }
     public function scores() { return $this->hasMany(EvaluationScore::class); }
     public function comments() { return $this->hasMany(EvaluationComment::class)->orderBy('id'); }
     public function unitScorer() { return $this->belongsTo(User::class, 'unit_scored_by'); }
+    public function leaderScorer() { return $this->belongsTo(User::class, 'leader_scored_by'); }
     public function reviewer() { return $this->belongsTo(User::class, 'reviewed_by'); }
 
     public function resolveRouteBinding($value, $field = null)
