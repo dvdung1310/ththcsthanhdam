@@ -703,6 +703,16 @@ body.dl-resizing {
   }
 }
 
+@container (max-width: 480px) {
+  .dl-table td.dl-name {
+    width: 100%;
+  }
+
+  .dl-table .dl-size {
+    display: none;
+  }
+}
+
 .dl-detail-task {
   padding: 12px;
   display: flex;
