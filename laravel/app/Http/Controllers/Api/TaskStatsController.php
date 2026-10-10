@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Department;
 use App\Models\Task;
 use App\Models\TaskCategory;
-use App\Models\Teacher;
+use App\Models\Employee;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -20,25 +20,25 @@ class TaskStatsController extends Controller
         $v = $request->validate([
             'year' => 'nullable|integer|min:2020|max:2100', 'month' => 'nullable|integer|min:1|max:12',
             'compare' => 'nullable|in:previous,year,none', 'department_id' => 'nullable|integer',
-            'teacher_id' => 'nullable|integer', 'category_id' => 'nullable|integer',
+            'employee_id' => 'nullable|integer', 'category_id' => 'nullable|integer',
         ]);
         [$scope, $visibleIds] = $this->visibility($request);
         $start = Carbon::create($v['year'] ?? now()->year, $v['month'] ?? now()->month, 1)->startOfDay();
         $compare = $v['compare'] ?? 'previous';
         $previous = $compare === 'year' ? $start->copy()->subYear() : $start->copy()->subMonth();
 
-        $allTeachers = Teacher::with(['user:id,name', 'departments' => fn ($q) => $q->wherePivotNull('ends_on')])
+        $allEmployees = Employee::with(['user:id,name', 'departments' => fn ($q) => $q->wherePivotNull('ends_on')])
             ->when($visibleIds !== null, fn ($q) => $q->whereIn('id', $visibleIds))->get();
-        $teachers = $allTeachers->filter(fn ($t) => (empty($v['department_id']) || in_array((int) $v['department_id'], $t->unitIds(), true)) && (empty($v['teacher_id']) || $t->id == $v['teacher_id']))->values();
-        $unitIds = $teachers->flatMap(fn ($t) => $t->unitIds())->unique()->values();
+        $employees = $allEmployees->filter(fn ($t) => (empty($v['department_id']) || in_array((int) $v['department_id'], $t->unitIds(), true)) && (empty($v['employee_id']) || $t->id == $v['employee_id']))->values();
+        $unitIds = $employees->flatMap(fn ($t) => $t->unitIds())->unique()->values();
 
-        $tasks = Task::with(['teachers:id', 'departments:id', 'category:id,name'])->where('status', '!=', Task::CANCELLED)
-            ->where(fn ($q) => $q->whereHas('teachers', fn ($t) => $t->whereIn('teachers.id', $teachers->pluck('id')->all() ?: [0]))->orWhereHas('departments', fn ($d) => $d->whereIn('departments.id', $unitIds->all() ?: [0])))
+        $tasks = Task::with(['employees:id', 'departments:id', 'category:id,name'])->where('status', '!=', Task::CANCELLED)
+            ->where(fn ($q) => $q->whereHas('employees', fn ($t) => $t->whereIn('employees.id', $employees->pluck('id')->all() ?: [0]))->orWhereHas('departments', fn ($d) => $d->whereIn('departments.id', $unitIds->all() ?: [0])))
             ->when(! empty($v['category_id']), fn ($q) => $q->where('category_id', $v['category_id']))
             ->get();
         $finishedAt = $this->finishTimes($tasks);
         $inMonth = fn (Task $task, Carbon $from) => $task->due_at && $task->due_at->gte($from) && $task->due_at->lt($from->copy()->addMonth());
-        $belongsTo = fn (Task $task, Teacher $teacher) => $task->teachers->contains('id', $teacher->id) || $task->departments->pluck('id')->intersect($teacher->unitIds())->isNotEmpty();
+        $belongsTo = fn (Task $task, Employee $employee) => $task->employees->contains('id', $employee->id) || $task->departments->pluck('id')->intersect($employee->unitIds())->isNotEmpty();
         $revisions = DB::table('task_submissions')->whereIn('task_id', $tasks->pluck('id'))->where('status', 'revision_required')->selectRaw('task_id, COUNT(*) as total')->groupBy('task_id')->pluck('total', 'task_id');
 
         $metrics = function (Collection $cohort) use ($finishedAt) {
@@ -56,12 +56,12 @@ class TaskStatsController extends Controller
         };
         $cohort = fn (Carbon $from, ?callable $filter = null) => $tasks->filter(fn (Task $t) => $inMonth($t, $from) && (! $filter || $filter($t)))->values();
 
-        $rows = $teachers->map(function (Teacher $teacher) use ($cohort, $start, $belongsTo, $metrics, $finishedAt, $revisions) {
-            $own = $cohort($start, fn (Task $t) => $belongsTo($t, $teacher));
+        $rows = $employees->map(function (Employee $employee) use ($cohort, $start, $belongsTo, $metrics, $finishedAt, $revisions) {
+            $own = $cohort($start, fn (Task $t) => $belongsTo($t, $employee));
 
             return [
-                'teacher_id' => $teacher->id, 'teacher' => $teacher->user?->name, 'employee_code' => $teacher->employee_code,
-                'department' => $teacher->departments->map(fn ($d) => Department::pathLabel($d->id))->join(', '),
+                'employee_id' => $employee->id, 'employee' => $employee->user?->name, 'employee_code' => $employee->employee_code,
+                'department' => $employee->departments->map(fn ($d) => Department::pathLabel($d->id))->join(', '),
                 ...$metrics($own),
                 'tasks' => $own->map(fn (Task $t) => [
                     'id' => $t->id, 'code' => $t->code, 'title' => $t->title, 'category' => $t->category?->name,
@@ -72,10 +72,10 @@ class TaskStatsController extends Controller
             ];
         })->sortByDesc('assigned')->values();
 
-        $departments = Department::ordered($unitIds->all())->map(function ($unit) use ($teachers, $cohort, $start, $belongsTo, $metrics) {
-            $members = $teachers->filter(fn (Teacher $t) => in_array($unit['id'], $t->unitIds(), true));
+        $departments = Department::ordered($unitIds->all())->map(function ($unit) use ($employees, $cohort, $start, $belongsTo, $metrics) {
+            $members = $employees->filter(fn (Employee $t) => in_array($unit['id'], $t->unitIds(), true));
 
-            return ['id' => $unit['id'], 'name' => $unit['label'], 'teachers' => $members->count(), ...$metrics($cohort($start, fn (Task $t) => $members->contains(fn (Teacher $m) => $belongsTo($t, $m))))];
+            return ['id' => $unit['id'], 'name' => $unit['label'], 'employees' => $members->count(), ...$metrics($cohort($start, fn (Task $t) => $members->contains(fn (Employee $m) => $belongsTo($t, $m))))];
         })->values();
 
         return response()->json([
@@ -89,8 +89,8 @@ class TaskStatsController extends Controller
             'no_deadline_open' => $tasks->filter(fn (Task $t) => ! $t->due_at && in_array($t->status, Task::OPEN, true))->count(),
             'data' => $rows, 'departments' => $departments,
             'references' => [
-                'teachers' => $allTeachers->map(fn ($t) => ['id' => $t->id, 'name' => $t->user?->name, 'department_ids' => $t->unitIds()])->values(),
-                'departments' => Department::ordered($allTeachers->flatMap(fn ($t) => $t->unitIds())->unique()->values()->all())->map(fn ($d) => ['id' => $d['id'], 'name' => $d['label']])->values(),
+                'employees' => $allEmployees->map(fn ($t) => ['id' => $t->id, 'name' => $t->user?->name, 'department_ids' => $t->unitIds()])->values(),
+                'departments' => Department::ordered($allEmployees->flatMap(fn ($t) => $t->unitIds())->unique()->values()->all())->map(fn ($d) => ['id' => $d['id'], 'name' => $d['label']])->values(),
                 'task_types' => TaskCategory::orderBy('name')->get(['id', 'name']),
             ],
         ]);
@@ -114,16 +114,16 @@ class TaskStatsController extends Controller
         if ($unitIds === null) {
             return ['school', null];
         }
-        $teacher = $user->teacher;
+        $employee = $user->employee;
         if ($unitIds) {
-            $ids = Teacher::inUnits($unitIds)->pluck('id');
-            if ($teacher) {
-                $ids->push($teacher->id);
+            $ids = Employee::inUnits($unitIds)->pluck('id');
+            if ($employee) {
+                $ids->push($employee->id);
             }
 
             return ['department', $ids->unique()->values()->all()];
         }
 
-        return ['self', $teacher ? [$teacher->id] : []];
+        return ['self', $employee ? [$employee->id] : []];
     }
 }

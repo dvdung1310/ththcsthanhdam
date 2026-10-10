@@ -81,7 +81,7 @@ class TaskSeeder extends Seeder
         [$title, $category, $scope, $priority, $bullets] = $this->pick($templates);
         $principal = DemoRoster::principal();
         $plan = ['title' => $title, 'category' => $category, 'priority' => $this->chance(20) ? $this->pick(array_keys(self::PRIORITY_LABELS)) : $priority,
-            'bullets' => $bullets, 'teachers' => [], 'units' => [], 'reviewers' => [], 'personal' => $personal, 'vars' => []];
+            'bullets' => $bullets, 'employees' => [], 'units' => [], 'reviewers' => [], 'personal' => $personal, 'vars' => []];
 
         switch ($scope) {
             case 'school':
@@ -116,22 +116,22 @@ class TaskSeeder extends Seeder
                 $plan['creator'] = $this->chance(25) ? $principal : $this->pick(DemoRoster::leadersOf($to));
                 $members = array_values(array_diff(DemoRoster::membersOf($to), [$plan['creator'], $principal]));
                 shuffle($members);
-                $plan['teachers'] = array_slice($members, 0, $this->chance(70) ? 1 : mt_rand(2, 3));
+                $plan['employees'] = array_slice($members, 0, $this->chance(70) ? 1 : mt_rand(2, 3));
                 $reviewer = DemoRoster::leaderOf($to);
-                if (($plan['creator'] === $principal || $this->chance(25)) && $reviewer !== $plan['creator'] && ! in_array($reviewer, $plan['teachers'], true)) {
+                if (($plan['creator'] === $principal || $this->chance(25)) && $reviewer !== $plan['creator'] && ! in_array($reviewer, $plan['employees'], true)) {
                     $plan['reviewers'] = [$reviewer];
                 }
-                $plan['vars']['{subject}'] = DemoRoster::people()[$plan['teachers'][0]]['subject'];
+                $plan['vars']['{subject}'] = DemoRoster::people()[$plan['employees'][0]]['subject'];
                 break;
             default:
-                $teacher = $this->pick(array_keys(array_filter(DemoRoster::people(), fn ($person, $handle) => $person['status'] === 'working' && $handle !== $principal, ARRAY_FILTER_USE_BOTH)));
-                $plan['creator'] = $teacher;
-                $plan['teachers'] = [$teacher];
-                $reviewer = DemoRoster::leaderOf(DemoRoster::people()[$teacher]['unit']);
-                if ($reviewer !== $teacher && $this->chance(50)) {
+                $employee = $this->pick(array_keys(array_filter(DemoRoster::people(), fn ($person, $handle) => $person['status'] === 'working' && $handle !== $principal, ARRAY_FILTER_USE_BOTH)));
+                $plan['creator'] = $employee;
+                $plan['employees'] = [$employee];
+                $reviewer = DemoRoster::leaderOf(DemoRoster::people()[$employee]['unit']);
+                if ($reviewer !== $employee && $this->chance(50)) {
                     $plan['reviewers'] = [$reviewer];
                 }
-                $plan['vars']['{subject}'] = DemoRoster::people()[$teacher]['subject'];
+                $plan['vars']['{subject}'] = DemoRoster::people()[$employee]['subject'];
         }
 
         return $plan;
@@ -151,15 +151,15 @@ class TaskSeeder extends Seeder
         $task = Task::create([
             'code' => 'TMP-'.Str::random(8), 'title' => $title, 'description' => $this->description($title, $plan['bullets']),
             'category_id' => $this->categories[$plan['category']] ?? null, 'created_by' => $creator->id,
-            'priority' => $plan['priority'], 'share_submissions' => ! ($plan['units'] || count($plan['teachers']) > 1) || ! $this->chance(18),
+            'priority' => $plan['priority'], 'share_submissions' => ! ($plan['units'] || count($plan['employees']) > 1) || ! $this->chance(18),
             'status' => Task::NOT_STARTED, 'starts_at' => $createdAt, 'due_at' => $due,
         ]);
         $task->update(['code' => 'CV-'.$createdAt->format('ym').'-'.str_pad((string) $task->id, 4, '0', STR_PAD_LEFT)]);
         foreach ($plan['reviewers'] as $handle) {
             DB::table('task_reviewers')->insert(['task_id' => $task->id, 'user_id' => $this->user($handle)->id, 'created_at' => $createdAt, 'updated_at' => $createdAt]);
         }
-        foreach ($plan['teachers'] as $handle) {
-            $task->teachers()->attach($this->user($handle)->teacher->id, ['assigned_by' => $creator->id, 'assigned_at' => $createdAt]);
+        foreach ($plan['employees'] as $handle) {
+            $task->employees()->attach($this->user($handle)->employee->id, ['assigned_by' => $creator->id, 'assigned_at' => $createdAt]);
         }
         foreach ($plan['units'] as $unit) {
             $task->departments()->attach($this->unitId($unit), ['assigned_by' => $creator->id, 'created_at' => $createdAt, 'updated_at' => $createdAt]);
@@ -210,7 +210,7 @@ class TaskSeeder extends Seeder
         $starter = $this->user($workers[0]);
         $status = Task::IN_PROGRESS;
         $this->history($timeline, Task::NOT_STARTED, $status, $starter, 'Cập nhật trạng thái', $at(0.12));
-        $this->log($timeline, $starter, $starter->teacher?->id, $status, 'Đã bắt đầu thực hiện.', $at(0.12));
+        $this->log($timeline, $starter, $starter->employee?->id, $status, 'Đã bắt đầu thực hiện.', $at(0.12));
 
         if ($state === 'cancelled') {
             $this->comments($timeline, $task, $workers, $manager, $status, $at(0.15), $at(0.6), mt_rand(0, 3));
@@ -249,7 +249,7 @@ class TaskSeeder extends Seeder
             $editedAt = $pending && $this->chance(20) ? $submittedAt->addMinutes(mt_rand(40, 180))->min($this->now->subMinutes(20)) : null;
 
             $submission = TaskSubmission::create([
-                'task_id' => $task->id, 'teacher_id' => $submitter->teacher->id, 'version' => $round,
+                'task_id' => $task->id, 'employee_id' => $submitter->employee->id, 'version' => $round,
                 'result_content' => $this->chance(85) ? $this->pick(TaskCatalog::SUBMISSION_NOTES) : null,
                 'links' => $this->chance(40) ? [$this->pick(TaskCatalog::LINKS)] : [],
                 'status' => $decision ?? 'submitted', 'submitted_at' => $submittedAt, 'edited_at' => $editedAt,
@@ -264,10 +264,10 @@ class TaskSeeder extends Seeder
 
             $this->history($timeline, $status, Task::WAITING_APPROVAL, $submitter, 'Gửi đề nghị hoàn thành', $submittedAt);
             $status = Task::WAITING_APPROVAL;
-            $this->log($timeline, $submitter, $submitter->teacher->id, $status, 'Đã gửi bài nộp.', $submittedAt);
+            $this->log($timeline, $submitter, $submitter->employee->id, $status, 'Đã gửi bài nộp.', $submittedAt);
             $this->notify(array_values(array_unique([$plan['creator'], ...$plan['reviewers']])), $task, $submitter->name.' đã gửi đề nghị xác nhận hoàn thành: '.$title, $submittedAt, $submitter, 'completion_submitted');
             if ($editedAt) {
-                $this->log($timeline, $submitter, $submitter->teacher->id, $status, 'Đã chỉnh sửa bài nộp.', $editedAt);
+                $this->log($timeline, $submitter, $submitter->employee->id, $status, 'Đã chỉnh sửa bài nộp.', $editedAt);
                 $this->notify(array_values(array_unique([$plan['creator'], ...$plan['reviewers']])), $task, $submitter->name.' đã chỉnh sửa bài nộp: '.$title, $editedAt, $submitter, 'completion_updated');
             }
             if (! $decision) {
@@ -277,7 +277,7 @@ class TaskSeeder extends Seeder
             $approved = $decision === 'approved';
             $next = $approved ? Task::COMPLETED : Task::IN_PROGRESS;
             $this->history($timeline, $status, $next, $manager, $comment ?? ($approved ? 'Xác nhận hoàn thành' : 'Yêu cầu chỉnh sửa'), $reviewAt);
-            $this->log($timeline, $manager, $submitter->teacher->id, $next, $approved ? 'Đã xác nhận hoàn thành.' : 'Đã yêu cầu chỉnh sửa bài nộp.', $reviewAt);
+            $this->log($timeline, $manager, $submitter->employee->id, $next, $approved ? 'Đã xác nhận hoàn thành.' : 'Đã yêu cầu chỉnh sửa bài nộp.', $reviewAt);
             $message = ($approved ? 'Công việc đã được xác nhận hoàn thành' : 'Công việc được yêu cầu chỉnh sửa').': '.$title;
             $this->notify([$this->handleOf($submitter)], $task, $message.($comment ? '. Nhận xét: '.$comment : ''), $reviewAt, $manager, $decision);
             $status = $next;
@@ -290,7 +290,7 @@ class TaskSeeder extends Seeder
         if ($state === 'overdue' && $due && ! $plan['personal']) {
             foreach (array_slice($workers, 0, mt_rand(1, 2)) as $handle) {
                 $sentAt = $due->addDays(1)->setTime(8, 0)->min($this->now->subHour());
-                DB::table('task_reminders')->insert(['task_id' => $task->id, 'teacher_id' => $this->user($handle)->teacher->id, 'sent_by' => $creator->id, 'email' => $this->user($handle)->email, 'sent_at' => $sentAt, 'created_at' => $sentAt, 'updated_at' => $sentAt]);
+                DB::table('task_reminders')->insert(['task_id' => $task->id, 'employee_id' => $this->user($handle)->employee->id, 'sent_by' => $creator->id, 'email' => $this->user($handle)->email, 'sent_at' => $sentAt, 'created_at' => $sentAt, 'updated_at' => $sentAt]);
             }
         }
 
@@ -333,14 +333,14 @@ class TaskSeeder extends Seeder
 
     private function assignees(array $plan): array
     {
-        $handles = $plan['teachers'];
+        $handles = $plan['employees'];
         foreach ($plan['units'] as $unit) {
             $handles = [...$handles, ...DemoRoster::membersOf($unit)];
         }
         $exclude = $plan['personal'] ? [] : [$plan['creator'], DemoRoster::principal(), ...$plan['reviewers']];
         $workers = array_values(array_unique(array_diff($handles, $exclude)));
 
-        return $plan['personal'] ? $plan['teachers'] : $workers;
+        return $plan['personal'] ? $plan['employees'] : $workers;
     }
 
     private function description(string $title, array $bullets): string
@@ -358,7 +358,7 @@ class TaskSeeder extends Seeder
             $at = $this->workday($from->addSeconds((int) ($span * ($i + 1) / ($count + 1))));
             if ($i % 2 === 0) {
                 $author = $this->user($this->pick($workers));
-                $this->log($timeline, $author, $author->teacher?->id, $status, $this->pick(TaskCatalog::ASSIGNEE_COMMENTS), $at);
+                $this->log($timeline, $author, $author->employee?->id, $status, $this->pick(TaskCatalog::ASSIGNEE_COMMENTS), $at);
                 $this->notify([$this->handleOf($manager)], $task, $author->name.' đã gửi nhận xét về công việc '.$task->title, $at, $author, 'task_comment');
             } else {
                 $this->log($timeline, $manager, null, $status, $this->pick(TaskCatalog::MANAGER_COMMENTS), $at);
@@ -377,10 +377,10 @@ class TaskSeeder extends Seeder
         DB::table('task_status_histories')->insert($withTask($timeline->histories));
     }
 
-    private function log(object $timeline, User $author, ?int $teacherId, string $status, string $content, CarbonImmutable $at): void
+    private function log(object $timeline, User $author, ?int $employeeId, string $status, string $content, CarbonImmutable $at): void
     {
         $at = $at->min($this->now->subMinutes(5));
-        $timeline->updates[] = ['teacher_id' => $teacherId, 'created_by' => $author->id, 'status' => $status, 'content' => $content, 'created_at' => $at, 'updated_at' => $at];
+        $timeline->updates[] = ['employee_id' => $employeeId, 'created_by' => $author->id, 'status' => $status, 'content' => $content, 'created_at' => $at, 'updated_at' => $at];
     }
 
     private function history(object $timeline, ?string $from, string $to, User $by, string $reason, CarbonImmutable $at): void

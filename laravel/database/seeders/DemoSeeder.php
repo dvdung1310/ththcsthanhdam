@@ -5,7 +5,7 @@ namespace Database\Seeders;
 use App\Models\Department;
 use App\Models\Role;
 use App\Models\Subject;
-use App\Models\Teacher;
+use App\Models\Employee;
 use App\Models\User;
 use Database\Seeders\Demo\DemoFiles;
 use Database\Seeders\Demo\DemoRoster;
@@ -42,16 +42,16 @@ class DemoSeeder extends Seeder
                     $user->update(['avatar_path' => DemoFiles::avatar($handle, $index)]);
                 }
                 $index++;
-                $teacher = Teacher::firstOrCreate(['user_id' => $user->id], ['employee_code' => $person['code'], 'employment_status' => $person['status']]);
+                $employee = Employee::firstOrCreate(['user_id' => $user->id], ['employee_code' => $person['code'], 'employment_status' => $person['status']]);
                 $subject = Subject::firstOrCreate(['name' => $person['subject']], ['code' => strtoupper(Str::slug($person['subject'], '_')), 'is_active' => true]);
                 $startsOn = in_array('new', $person['flags'], true) ? now()->subMonths(5)->startOfMonth()->toDateString() : self::JOINED_ON;
 
-                DB::table('teacher_department')->updateOrInsert(
-                    ['teacher_id' => $teacher->id, 'department_id' => $units[$person['unit']], 'starts_on' => $startsOn],
+                DB::table('department_employee')->updateOrInsert(
+                    ['employee_id' => $employee->id, 'department_id' => $units[$person['unit']], 'starts_on' => $startsOn],
                     ['is_primary' => true, 'ends_on' => null, 'created_at' => now(), 'updated_at' => now()],
                 );
-                DB::table('teacher_subject')->updateOrInsert(
-                    ['teacher_id' => $teacher->id, 'subject_id' => $subject->id, 'starts_on' => $startsOn],
+                DB::table('employee_subject')->updateOrInsert(
+                    ['employee_id' => $employee->id, 'subject_id' => $subject->id, 'starts_on' => $startsOn],
                     ['is_primary' => true, 'ends_on' => null, 'created_at' => now(), 'updated_at' => now()],
                 );
 

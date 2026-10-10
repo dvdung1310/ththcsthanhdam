@@ -17,15 +17,15 @@ class TaskActionFilters
             'due_from' => ['nullable', 'date'], 'due_to' => $request->filled('due_from') ? ['nullable', 'date', 'after_or_equal:due_from'] : ['nullable', 'date'],
             'late' => ['nullable', 'in:yes,no'],
         ]);
-        foreach (['teacher_id', 'created_by'] as $key) {
+        foreach (['employee_id', 'created_by'] as $key) {
             if ($id = $request->integer($key)) {
-                $key === 'teacher_id'
-                    ? $query->where(fn ($q) => $q->whereHas('teachers', fn ($t) => $t->where('teachers.id', $id))->orWhereHas('departments', fn ($d) => $d->whereIn('departments.id', DB::table('teacher_department')->where('teacher_id', $id)->whereNull('ends_on')->select('department_id'))))
+                $key === 'employee_id'
+                    ? $query->where(fn ($q) => $q->whereHas('employees', fn ($t) => $t->where('employees.id', $id))->orWhereHas('departments', fn ($d) => $d->whereIn('departments.id', DB::table('department_employee')->where('employee_id', $id)->whereNull('ends_on')->select('department_id'))))
                     : $query->where($key, $id);
             }
         }
         if ($id = $request->integer('organization_id')) {
-            $query->where(fn ($q) => $q->whereHas('departments', fn ($d) => $d->where('departments.id', $id))->orWhereHas('teachers', fn ($t) => $t->whereHas('departments', fn ($d) => $d->where('departments.id', $id)->whereNull('teacher_department.ends_on'))));
+            $query->where(fn ($q) => $q->whereHas('departments', fn ($d) => $d->where('departments.id', $id))->orWhereHas('employees', fn ($t) => $t->whereHas('departments', fn ($d) => $d->where('departments.id', $id)->whereNull('department_employee.ends_on'))));
         }
         foreach (['assigned' => 'created_at', 'due' => 'due_at'] as $prefix => $column) {
             if ($value = $request->input($prefix.'_from')) {

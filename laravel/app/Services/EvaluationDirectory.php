@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use App\Models\Department;
-use App\Models\Teacher;
+use App\Models\Employee;
 use Collator;
 use Illuminate\Support\Str;
 
@@ -11,7 +11,7 @@ class EvaluationDirectory
 {
     private ?Collator $collator = null;
 
-    public function placement(Teacher $teacher): array
+    public function placement(Employee $teacher): array
     {
         $current = $teacher->departments->filter(fn ($d) => $d->pivot->ends_on === null)->sortByDesc(fn ($d) => (int) $d->pivot->is_primary)->values();
         $primary = $current->first();

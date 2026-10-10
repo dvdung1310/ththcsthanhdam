@@ -17,7 +17,7 @@ class EvaluationAccess
 
     public function isOwn(Evaluation $evaluation): bool
     {
-        return $this->user->teacher && (int) $evaluation->teacher_id === $this->user->teacher->id;
+        return $this->user->employee && (int) $evaluation->teacher_id === $this->user->employee->id;
     }
 
     public function canScore(Evaluation $evaluation): bool

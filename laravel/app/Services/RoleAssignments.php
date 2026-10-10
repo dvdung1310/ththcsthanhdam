@@ -11,15 +11,15 @@ use Illuminate\Validation\ValidationException;
 
 class RoleAssignments
 {
-    public function normalize(array $rows, bool $isTeacher): Collection
+    public function normalize(array $rows, bool $isEmployee): Collection
     {
         $roles = Role::whereIn('id', collect($rows)->pluck('role_id'))->get()->keyBy('id');
         $units = Department::whereIn('id', collect($rows)->pluck('department_id')->filter())->get()->keyBy('id');
 
-        return collect($rows)->map(function ($row, $index) use ($roles, $units, $isTeacher) {
+        return collect($rows)->map(function ($row, $index) use ($roles, $units, $isEmployee) {
             $role = $roles[$row['role_id']];
             $unitId = $row['department_id'] ?? null;
-            if (! $isTeacher && ($role->requiresUnit() || $role->code === Role::GIAO_VIEN)) {
+            if (! $isEmployee && ($role->requiresUnit() || $role->code === Role::GIAO_VIEN)) {
                 throw ValidationException::withMessages(["roles.$index.role_id" => "Vai trò {$role->name} chỉ dành cho nhân sự là giáo viên."]);
             }
             if ($role->requiresUnit()) {

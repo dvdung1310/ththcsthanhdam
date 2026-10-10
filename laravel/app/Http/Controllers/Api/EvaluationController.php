@@ -13,7 +13,7 @@ use App\Models\EvaluationTemplate;
 use App\Models\Role;
 use App\Models\StoredFile;
 use App\Models\Task;
-use App\Models\Teacher;
+use App\Models\Employee;
 use App\Models\User;
 use App\Notifications\EvaluationNotification;
 use App\Notifications\EvaluationPeriodNotification;
@@ -46,7 +46,7 @@ class EvaluationController extends Controller
     public function periods(Request $request): JsonResponse
     {
         $access = $this->access($request);
-        $own = $request->user()->teacher?->id;
+        $own = $request->user()->employee?->id;
         $periods = EvaluationPeriod::withCount('evaluations')->orderByDesc('year')->orderByDesc('month')->get();
         $mine = $own ? Evaluation::with('scores')->where('teacher_id', $own)->get()->keyBy('period_id') : collect();
 
@@ -77,10 +77,10 @@ class EvaluationController extends Controller
         $evaluations = $period
             ? $period->evaluations()->withCount(['scores', 'comments'])->get()->keyBy('teacher_id')
             : collect();
-        $teachers = Teacher::with(['user.roles', 'departments' => fn ($q) => $q->wherePivotNull('ends_on')->orderByDesc('teacher_department.is_primary')])
+        $teachers = Employee::with(['user.roles', 'departments' => fn ($q) => $q->wherePivotNull('ends_on')->orderByDesc('department_employee.is_primary')])
             ->where(fn ($q) => $q->where('employment_status', '!=', 'terminated')->orWhereIn('id', $evaluations->keys()))
             ->get()
-            ->sort(fn (Teacher $a, Teacher $b) => $this->directory->compareNames($a->user?->name, $b->user?->name))
+            ->sort(fn (Employee $a, Employee $b) => $this->directory->compareNames($a->user?->name, $b->user?->name))
             ->values();
 
         return response()->json([
@@ -89,7 +89,7 @@ class EvaluationController extends Controller
             'units' => Department::orderBy('name')->get(['id', 'name', 'type', 'parent_id', 'is_active'])
                 ->filter(fn (Department $unit) => $unit->is_active || $teachers->contains(fn ($t) => $t->departments->contains('id', $unit->id)))
                 ->map(fn (Department $unit) => ['id' => $unit->id, 'name' => $unit->name, 'type' => $unit->type, 'parent_id' => $unit->parent_id])->values(),
-            'data' => $teachers->map(function (Teacher $teacher) use ($evaluations, $period) {
+            'data' => $teachers->map(function (Employee $teacher) use ($evaluations, $period) {
                 $evaluation = $evaluations->get($teacher->id);
                 $reason = $this->ineligibleReason($teacher);
                 $locked = $evaluation && $evaluation->status !== Evaluation::DRAFT;
@@ -253,7 +253,7 @@ class EvaluationController extends Controller
         $period = EvaluationPeriod::with('template')->findOrFail($data['period_id']);
         $units = $access->scopeUnitIds();
         abort_if($units === [], 403, 'Bạn không có quyền xem phiếu của người khác.');
-        $own = $request->user()->teacher?->id;
+        $own = $request->user()->employee?->id;
 
         $evaluations = Evaluation::with(['teacher.user', 'teacher.departments', 'scores', 'period'])
             ->where('period_id', $period->id)
@@ -268,8 +268,8 @@ class EvaluationController extends Controller
         $criteria = $this->criteria($period);
 
         $notIncluded = $access->manages()
-            ? Teacher::with('user.roles')->where('employment_status', 'working')->whereNotIn('id', $period->evaluations()->pluck('teacher_id'))->get()
-                ->filter(fn (Teacher $teacher) => $this->ineligibleReason($teacher) === null)->map(fn (Teacher $teacher) => $teacher->user?->name)->sort()->values()
+            ? Employee::with('user.roles')->where('employment_status', 'working')->whereNotIn('id', $period->evaluations()->pluck('teacher_id'))->get()
+                ->filter(fn (Employee $teacher) => $this->ineligibleReason($teacher) === null)->map(fn (Employee $teacher) => $teacher->user?->name)->sort()->values()
             : null;
 
         return response()->json([
@@ -423,7 +423,7 @@ class EvaluationController extends Controller
         $units = $teacher->unitIds();
 
         $tasks = Task::where(fn ($q) => $q
-            ->whereHas('teachers', fn ($t) => $t->where('teachers.id', $teacher->id))
+            ->whereHas('employees', fn ($t) => $t->where('employees.id', $teacher->id))
             ->orWhereHas('departments', fn ($d) => $d->whereIn('departments.id', $units ?: [0])))
             ->where('status', '!=', Task::CANCELLED)
             ->whereRaw('COALESCE(starts_at, created_at) <= ?', [$end])
@@ -562,8 +562,8 @@ class EvaluationController extends Controller
 
     private function eligibleOnly(array $ids): Collection
     {
-        $teachers = Teacher::with('user.roles')->whereIn('id', $ids)->get();
-        $invalid = $teachers->filter(fn (Teacher $teacher) => $this->ineligibleReason($teacher) !== null);
+        $teachers = Employee::with('user.roles')->whereIn('id', $ids)->get();
+        $invalid = $teachers->filter(fn (Employee $teacher) => $this->ineligibleReason($teacher) !== null);
         abort_if($invalid->isNotEmpty() || $teachers->count() !== count(array_unique($ids)), 422, 'Không thể tạo phiếu cho: '.($invalid->map(fn ($t) => $t->user?->name)->join(', ') ?: 'giáo viên không tồn tại').'.');
 
         return $teachers;
@@ -581,7 +581,7 @@ class EvaluationController extends Controller
             ->values()->all();
     }
 
-    private function ineligibleReason(Teacher $teacher): ?string
+    private function ineligibleReason(Employee $teacher): ?string
     {
         $statuses = ['on_leave' => 'Nghỉ phép', 'suspended' => 'Tạm nghỉ', 'terminated' => 'Đã nghỉ việc'];
         if ($teacher->employment_status !== 'working') {
@@ -738,7 +738,7 @@ class EvaluationController extends Controller
         ];
     }
 
-    private function teacherData(Teacher $teacher): array
+    private function teacherData(Employee $teacher): array
     {
         $units = $teacher->relationLoaded('departments') ? $teacher->departments->filter(fn ($d) => $d->pivot->ends_on === null) : $teacher->departments()->wherePivotNull('ends_on')->get();
 

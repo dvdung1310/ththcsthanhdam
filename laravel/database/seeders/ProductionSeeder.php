@@ -16,8 +16,8 @@ class ProductionSeeder extends Seeder
 {
     private const PERMISSIONS = [
         ['dashboard.view', 'Xem tổng quan', 'dashboard'],
-        ['teachers.view', 'Xem giáo viên', 'teachers'],
-        ['teachers.manage', 'Quản lý giáo viên', 'teachers'],
+        ['personnel.view', 'Xem nhân sự', 'personnel'],
+        ['personnel.manage', 'Quản lý nhân sự', 'personnel'],
         ['tasks.view', 'Xem công việc', 'tasks'],
         ['tasks.assign', 'Giao và quản lý công việc', 'tasks'],
         ['tasks.update', 'Cập nhật tiến độ', 'tasks'],
@@ -53,12 +53,12 @@ class ProductionSeeder extends Seeder
         }
         $all = array_column(self::PERMISSIONS, 0);
         Permission::whereNotIn('code', $all)->delete();
-        $unitLeader = ['dashboard.view', 'teachers.view', 'teachers.manage', 'tasks.view', 'tasks.assign', 'tasks.update', 'library.view', 'evaluation.view', 'evaluation.score', 'kpi.view'];
+        $unitLeader = ['dashboard.view', 'personnel.view', 'personnel.manage', 'tasks.view', 'tasks.assign', 'tasks.update', 'library.view', 'evaluation.view', 'evaluation.score', 'kpi.view'];
 
         $roles = [
             Role::ADMIN => ['Quản trị viên', Role::SCOPE_SYSTEM, null, $all],
             Role::HIEU_TRUONG => ['Hiệu trưởng', Role::SCOPE_SCHOOL, null, $all],
-            Role::THU_KY => ['Thư ký', Role::SCOPE_SCHOOL, null, ['dashboard.view', 'teachers.view', 'tasks.view', 'tasks.assign', 'library.view', 'kpi.view']],
+            Role::THU_KY => ['Thư ký', Role::SCOPE_SCHOOL, null, ['dashboard.view', 'personnel.view', 'tasks.view', 'tasks.assign', 'library.view', 'kpi.view']],
             Role::TO_TRUONG => ['Tổ trưởng', Role::SCOPE_UNIT, Department::TYPE_TO, $unitLeader],
             Role::TO_PHO => ['Tổ phó', Role::SCOPE_UNIT, Department::TYPE_TO, $unitLeader],
             Role::NHOM_TRUONG => ['Nhóm trưởng', Role::SCOPE_UNIT, Department::TYPE_NHOM, $unitLeader],

@@ -110,7 +110,7 @@ class DemoRoster
             }
             $used[] = $handle;
             $people[$handle] = [
-                'handle' => $handle, 'name' => $name, 'code' => sprintf('GV%03d', $index + 1), 'unit' => $unit, 'tổ' => self::rootOf($unit),
+                'handle' => $handle, 'name' => $name, 'code' => sprintf('NS%03d', $index + 1), 'unit' => $unit, 'tổ' => self::rootOf($unit),
                 'subject' => $subject, 'roles' => $roles, 'status' => $status, 'homeroom' => $homeroom, 'flags' => $flags,
                 'phone' => '09'.str_pad((string) ((12345678 + $index * 7919) % 100000000), 8, '0', STR_PAD_LEFT),
             ];
