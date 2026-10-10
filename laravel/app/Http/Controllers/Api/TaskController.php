@@ -69,6 +69,7 @@ class TaskController extends Controller
                 'overdue' => (clone $base)->whereIn('status', [Task::NOT_STARTED, Task::IN_PROGRESS])->where('due_at', '<', now())->count(),
                 'soon' => (clone $base)->whereIn('status', [Task::NOT_STARTED, Task::IN_PROGRESS])->whereBetween('due_at', [now(), now()->addDay()])->count(),
                 'my_review' => $this->reviewQueue(clone $base, $request)->count(),
+                'needs_me' => $this->needsMe($base, $request),
             ],
         ]);
     }
@@ -724,6 +725,14 @@ class TaskController extends Controller
         }
 
         return $this->canManageTask($request, $task) || $this->isPersonalTaskFor($request, $task);
+    }
+
+    private function needsMe($base, Request $request): int
+    {
+        $assigned = (clone $base)->whereIn('status', [Task::NOT_STARTED, Task::IN_PROGRESS])
+            ->whereHas('employees', fn ($t) => $t->where('employees.id', $request->user()->employee?->id ?? 0))->pluck('tasks.id');
+
+        return $assigned->merge($this->reviewQueue(clone $base, $request)->pluck('tasks.id'))->unique()->count();
     }
 
     private function reviewQueue($query, Request $request)

@@ -65,6 +65,8 @@ import Avatar from "./Avatar";
 import { releaseDevice, syncPushSubscription } from "./deviceNotifications";
 import NotificationPrompt from "./NotificationPrompt";
 
+const NEEDS_ME_HINT = "Việc cần bạn xử lý: được giao chưa nộp và đang chờ bạn duyệt";
+
 const navTree = [
   { key: "dashboard", label: "Tổng quan", icon: LayoutDashboard, path: "/", permission: "dashboard.view" },
   { key: "stats", label: "Thống kê", icon: ChartNoAxesColumnIncreasing, path: "/stats", permission: "kpi.view" },
@@ -370,7 +372,7 @@ function App() {
   const [authOffline, setAuthOffline] = useState(false);
   const retryAuth = useRef(null);
   const [selectedTask, setSelectedTask] = useState(null);
-  const [pendingTaskCount, setPendingTaskCount] = useState(0);
+  const [needsMeCount, setNeedsMeCount] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
 
   const location = useLocation();
@@ -430,12 +432,12 @@ function App() {
         const response = await apiFetch("/api/tasks?per_page=5", { headers: { Accept: "application/json" }, silent: true });
         if (!response.ok) return;
         const payload = await response.json();
-        setPendingTaskCount(Number(payload.stats?.pending || 0));
+        setNeedsMeCount(Number(payload.stats?.needs_me || 0));
       } catch {
         // Giữ số gần nhất nếu việc làm mới huy hiệu tạm thời thất bại.
       }
     };
-    const updateFromTaskStats = (event) => setPendingTaskCount(Number(event.detail?.pending || 0));
+    const updateFromTaskStats = (event) => setNeedsMeCount(Number(event.detail?.needs_me || 0));
     loadTaskBadge();
     const interval = window.setInterval(loadTaskBadge, 30000);
     window.addEventListener("task-stats:updated", updateFromTaskStats);
@@ -571,7 +573,7 @@ function App() {
                   <Link to={leaf.path} className={`nav-link ${current?.key === leaf.key ? "active" : ""}`} onClick={closeSidebar}>
                     <Icon size={18} />
                     <span>{item.label}</span>
-                    {leaf.badge && <em>{pendingTaskCount}</em>}
+                    {leaf.badge && needsMeCount > 0 && <em title={NEEDS_ME_HINT}>{needsMeCount}</em>}
                   </Link>
                 </div>
               );
@@ -582,7 +584,7 @@ function App() {
                 <button type="button" className={`nav-link nav-parent ${current?.group?.key === item.key ? "in-group" : ""}`} aria-expanded={open} onClick={() => toggleGroup(item.key)}>
                   <Icon size={18} />
                   <span>{item.label}</span>
-                  {!open && children.some((child) => child.badge) && <em>{pendingTaskCount}</em>}
+                  {!open && needsMeCount > 0 && children.some((child) => child.badge) && <em title={NEEDS_ME_HINT}>{needsMeCount}</em>}
                   <ChevronDown size={15} className="nav-chevron" />
                 </button>
                 {open && (
@@ -590,7 +592,7 @@ function App() {
                     {children.map((child) => (
                       <Link key={child.key} to={child.path} className={`nav-link ${current?.key === child.key ? "active" : ""}`} onClick={closeSidebar}>
                         <span>{child.label}</span>
-                        {child.badge && <em>{pendingTaskCount}</em>}
+                        {child.badge && needsMeCount > 0 && <em title={NEEDS_ME_HINT}>{needsMeCount}</em>}
                       </Link>
                     ))}
                   </div>
