@@ -17,20 +17,29 @@ use ZipArchive;
 
 class TaskDraftAnalyzer
 {
-    public const MAX_TASKS = 12;
+    public const MAX_TASKS = 15;
+
+    public const MAX_DOCUMENTS = 5;
 
     private const PRIORITIES = ['low', 'normal', 'high', 'urgent'];
 
     private const REVIEWER_ROLES = [Role::HIEU_TRUONG, Role::PHO_HIEU_TRUONG, Role::BAN_GIAM_HIEU, Role::THU_KY, Role::TO_TRUONG, Role::TO_PHO, Role::NHOM_TRUONG];
 
-    public function analyze(User $user, string $name, string $mime, string $contents): array
+    /** @param array<int, array{name: string, mime: string, contents: string}> $documents */
+    public function analyze(User $user, array $documents): array
     {
         $apiKey = config('services.openai.key');
         if (! $apiKey) {
             throw new RuntimeException('AI chưa được cấu hình OPENAI_API_KEY.', 503);
         }
         $context = $this->context($user);
-        $response = Http::withToken($apiKey)->timeout(170)->post('https://api.openai.com/v1/responses', [
+        $inputs = [];
+        foreach (array_values($documents) as $index => $document) {
+            $inputs[] = ['type' => 'input_text', 'text' => 'TÀI LIỆU SỐ '.($index + 1).': “'.$document['name'].'”'];
+            $inputs[] = $this->documentInput($document['name'], $document['mime'], $document['contents']);
+        }
+        $names = collect($documents)->values()->map(fn ($d, $i) => ($i + 1).'. '.$d['name'])->join('; ');
+        $response = Http::withToken($apiKey)->timeout(280)->post('https://api.openai.com/v1/responses', [
             'model' => config('services.openai.model', 'gpt-5'),
             'store' => false,
             'max_output_tokens' => 12000,
@@ -40,9 +49,9 @@ class TaskDraftAnalyzer
             'input' => [[
                 'role' => 'user',
                 'content' => [
-                    $this->documentInput($name, $mime, $contents),
+                    ...$inputs,
                     ['type' => 'input_text', 'text' => "DỮ LIỆU TRƯỜNG (chỉ dùng các id có trong đây):\n".json_encode($context['prompt'], JSON_UNESCAPED_UNICODE)
-                        ."\n\nHãy đọc toàn bộ tài liệu “{$name}”, rồi trả về phân tích tài liệu và danh sách công việc cần giao theo đúng schema."],
+                        ."\n\nHãy đọc toàn bộ ".count($documents)." tài liệu ({$names}) như một bộ hồ sơ liên quan, rồi trả về phân tích và danh sách công việc cần giao theo đúng schema. Với mỗi việc, ghi số thứ tự các tài liệu làm căn cứ vào document_numbers."],
                 ],
             ]],
         ]);
@@ -56,13 +65,20 @@ class TaskDraftAnalyzer
             throw new RuntimeException('AI không trả về được kế hoạch công việc cho tài liệu này.', 422);
         }
 
-        return ['analysis' => $this->analysis($plan['document'] ?? []), 'drafts' => $this->drafts($plan['tasks'], $context, $user)];
+        $count = count($documents);
+
+        return [
+            'analysis' => $this->analysis($plan['document'] ?? []),
+            'documents' => collect(range(1, $count))->map(fn ($number) => trim((string) (collect($plan['files'] ?? [])->firstWhere('number', $number)['kind'] ?? '')) ?: null)->all(),
+            'drafts' => $this->drafts($plan['tasks'], $context, $user, $count),
+        ];
     }
 
     private function instructions(): string
     {
         return 'Bạn là trợ lý lập kế hoạch công việc của Trường TH-THCS Thanh Đàm (Hà Nội). '
-            .'Đọc kỹ văn bản (công văn, kế hoạch, thông báo, yêu cầu báo cáo…) và xác định các công việc nhà trường cần giao để thực hiện văn bản. '
+            .'Đọc kỹ các văn bản (công văn, kế hoạch, thông báo, yêu cầu báo cáo, phụ lục, mẫu biểu…) — có thể gồm nhiều tài liệu liên quan nhau — và xác định các công việc nhà trường cần giao để thực hiện. '
+            .'Không tạo trùng việc khi nhiều tài liệu nói cùng một nội dung; phụ lục/mẫu biểu là căn cứ của việc chứ không phải việc riêng. '
             .'Mỗi công việc phải cụ thể, giao được cho người/tổ cụ thể, có hạn hoàn thành bám theo mốc trong văn bản (hạn nội bộ nên sớm hơn hạn nộp lên cấp trên 1–3 ngày làm việc). '
             .'Chỉ chọn người thực hiện, tổ/nhóm, người duyệt và loại nhiệm vụ từ danh sách id được cung cấp; không bịa id. '
             .'Ưu tiên giao cho tổ/nhóm khi việc áp dụng cho cả tổ; dùng all_homeroom=true khi việc dành cho tất cả giáo viên chủ nhiệm. '
@@ -79,8 +95,12 @@ class TaskDraftAnalyzer
         return [
             'type' => 'object',
             'additionalProperties' => false,
-            'required' => ['document', 'tasks'],
+            'required' => ['document', 'files', 'tasks'],
             'properties' => [
+                'files' => ['type' => 'array', 'items' => [
+                    'type' => 'object', 'additionalProperties' => false, 'required' => ['number', 'kind'],
+                    'properties' => ['number' => ['type' => 'integer'], 'kind' => ['type' => 'string', 'description' => 'Loại của từng tài liệu: Công văn, Kế hoạch, Phụ lục, Mẫu biểu…']],
+                ]],
                 'document' => [
                     'type' => 'object',
                     'additionalProperties' => false,
@@ -101,10 +121,11 @@ class TaskDraftAnalyzer
                 'tasks' => ['type' => 'array', 'items' => [
                     'type' => 'object',
                     'additionalProperties' => false,
-                    'required' => ['title', 'requirements', 'unit_ids', 'employee_ids', 'all_homeroom', 'reviewer_user_id', 'start_date', 'due_date', 'category_id', 'priority', 'reason'],
+                    'required' => ['title', 'requirements', 'document_numbers', 'unit_ids', 'employee_ids', 'all_homeroom', 'reviewer_user_id', 'start_date', 'due_date', 'category_id', 'priority', 'reason'],
                     'properties' => [
                         'title' => ['type' => 'string'],
                         'requirements' => ['type' => 'array', 'items' => ['type' => 'string']],
+                        'document_numbers' => ['type' => 'array', 'items' => ['type' => 'integer']],
                         'unit_ids' => $ids,
                         'employee_ids' => $ids,
                         'all_homeroom' => ['type' => 'boolean'],
@@ -206,11 +227,12 @@ class TaskDraftAnalyzer
         ];
     }
 
-    private function drafts(array $tasks, array $context, User $user): Collection
+    private function drafts(array $tasks, array $context, User $user, int $documentCount): Collection
     {
         $today = CarbonImmutable::today();
 
-        return collect($tasks)->take(self::MAX_TASKS)->map(function (array $task) use ($context, $user, $today) {
+        return collect($tasks)->take(self::MAX_TASKS)->map(function (array $task) use ($context, $user, $today, $documentCount) {
+            $numbers = collect($task['document_numbers'] ?? [])->map(fn ($n) => (int) $n)->filter(fn ($n) => $n >= 1 && $n <= $documentCount)->unique()->sort()->values();
             $employeeIds = collect($task['employee_ids'] ?? [])->map(fn ($id) => (int) $id)
                 ->merge(($task['all_homeroom'] ?? false) ? $context['homeroom'] : [])
                 ->filter(fn ($id) => $context['employees']->has($id))->unique()->values();
@@ -237,6 +259,7 @@ class TaskDraftAnalyzer
                 'category_id' => in_array($category, $context['categories'], true) ? $category : null,
                 'share_submissions' => true,
                 'ai_reason' => trim((string) ($task['reason'] ?? '')) ?: null,
+                'source_numbers' => ($numbers->isEmpty() ? collect(range(1, $documentCount)) : $numbers)->all(),
             ];
         })->values();
     }

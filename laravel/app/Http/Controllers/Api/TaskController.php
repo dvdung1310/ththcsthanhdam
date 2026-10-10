@@ -941,7 +941,7 @@ class TaskController extends Controller
         if (! $id) {
             return null;
         }
-        $draft = TaskDraft::with('batch.sourceNode')->find($id);
+        $draft = TaskDraft::with('batch.sources.node')->find($id);
         abort_unless($draft && $draft->batch->created_by === $request->user()->id, 404, 'Bản nháp không còn tồn tại.');
 
         return $draft;
@@ -950,11 +950,15 @@ class TaskController extends Controller
     private function consumeDraft(Task $task, TaskDraft $draft): void
     {
         $batch = $draft->batch;
-        if ($batch->source_file_id && ! DB::table('file_attachments')->where('attachable_type', Task::class)->where('attachable_id', $task->id)->where('file_id', $batch->source_file_id)->exists()) {
-            DB::table('file_attachments')->insert(['file_id' => $batch->source_file_id, 'attachable_type' => Task::class, 'attachable_id' => $task->id, 'purpose' => 'attachment', 'created_at' => now(), 'updated_at' => now()]);
-        }
-        if ($batch->sourceNode && $batch->sourceNode->parent_id === $this->sharedFolderId()) {
-            $task->libraryFiles()->syncWithoutDetaching([$batch->sourceNode->id]);
+        $wanted = collect($draft->payload['source_ids'] ?? null);
+        $sources = $batch->sources->when(array_key_exists('source_ids', $draft->payload), fn ($all) => $all->whereIn('id', $wanted));
+        foreach ($sources as $source) {
+            if ($source->file_id && ! DB::table('file_attachments')->where('attachable_type', Task::class)->where('attachable_id', $task->id)->where('file_id', $source->file_id)->exists()) {
+                DB::table('file_attachments')->insert(['file_id' => $source->file_id, 'attachable_type' => Task::class, 'attachable_id' => $task->id, 'purpose' => 'attachment', 'created_at' => now(), 'updated_at' => now()]);
+            }
+            if ($source->node && $source->node->parent_id === $this->sharedFolderId()) {
+                $task->libraryFiles()->syncWithoutDetaching([$source->node->id]);
+            }
         }
         $draft->delete();
         if (! $batch->drafts()->exists()) {
