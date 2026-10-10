@@ -310,13 +310,40 @@
   outline-offset: 2px;
 }
 
-.matrix-note {
-  margin: 12px 0 0;
+.matrix th.locked {
+  background: #f3f4f7;
+}
+
+.matrix th b svg {
+  vertical-align: -1px;
+  color: var(--c-muted);
+}
+
+.matrix td.cell.locked {
+  background: #fafbfc;
+}
+
+.matrix tbody tr:not(.module-row):hover td.cell.locked {
+  background: #f3f5f9;
+}
+
+.matrix td.cell input:disabled,
+.role-switch-row input:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.role-switch-row.locked {
+  cursor: default;
+}
+
+.role-locked-note {
+  margin: 4px 0 0;
   display: flex;
   align-items: center;
   gap: 6px;
   color: var(--c-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 @media (max-width: 720px) {

@@ -38,6 +38,8 @@ const PERMISSION_INFO = {
   "ai.tasks": { hint: "Tạo công việc từ tài liệu bằng AI.", requires: ["tasks.assign"] },
 };
 
+const LOCKED_HINT = "Quản trị viên luôn có toàn bộ quyền, không thể chỉnh sửa.";
+
 const SCOPE_LABELS = { system: "Toàn hệ thống", school: "Toàn trường", self: "Cá nhân" };
 const scopeLabel = (role) =>
   role.scope === "unit" ? (role.unit_type === "nhom" ? "Theo nhóm" : "Theo tổ") : SCOPE_LABELS[role.scope];
@@ -95,7 +97,7 @@ export default function RolePermissionMatrix() {
   const dirtyRoles = editable.filter((role) => !sameSet(draft[role.id] ?? [], role.permission_ids));
   const modules = [...new Set(permissions.map((permission) => permission.module))];
   const byCode = Object.fromEntries(permissions.map((permission) => [permission.code, permission]));
-  const activeRole = editable.find((role) => role.id === activeRoleId) ?? editable[0];
+  const activeRole = roles.find((role) => role.id === activeRoleId) ?? editable[0];
 
   useEffect(() => {
     if (!dirtyRoles.length) return undefined;
@@ -209,9 +211,11 @@ export default function RolePermissionMatrix() {
             <thead>
               <tr>
                 <th className="perm-col">Quyền</th>
-                {editable.map((role) => (
-                  <th key={role.id} className={dirtyRoles.includes(role) ? "dirty" : ""}>
-                    <b>{role.name}</b>
+                {roles.map((role) => (
+                  <th key={role.id} className={role.locked ? "locked" : dirtyRoles.includes(role) ? "dirty" : ""} title={role.locked ? LOCKED_HINT : undefined}>
+                    <b>
+                      {role.locked && <Lock size={12} />} {role.name}
+                    </b>
                     <small>{scopeLabel(role)}</small>
                     <em>{role.users_count} người</em>
                   </th>
@@ -220,7 +224,7 @@ export default function RolePermissionMatrix() {
             </thead>
             <tbody>
               {grouped.map((group) => (
-                <ModuleRows key={group.module} group={group} roles={editable} draft={draft} onToggle={toggle} byCode={byCode} />
+                <ModuleRows key={group.module} group={group} roles={roles} draft={draft} onToggle={toggle} byCode={byCode} />
               ))}
             </tbody>
           </table>
@@ -234,9 +238,14 @@ export default function RolePermissionMatrix() {
               label="Vai trò"
               value={activeRole?.id ?? ""}
               onChange={(value) => setActiveRoleId(Number(value))}
-              options={editable.map((role) => ({ value: role.id, label: role.name, hint: `${scopeLabel(role)} · ${role.users_count} người${dirtyRoles.includes(role) ? " · chưa lưu" : ""}` }))}
+              options={roles.map((role) => ({ value: role.id, label: role.name, hint: role.locked ? "luôn đủ quyền" : `${scopeLabel(role)} · ${role.users_count} người${dirtyRoles.includes(role) ? " · chưa lưu" : ""}` }))}
             />
           </div>
+          {activeRole?.locked && (
+            <p className="role-locked-note">
+              <Lock size={13} /> {LOCKED_HINT}
+            </p>
+          )}
           {activeRole &&
             grouped.map((group) => (
               <section key={group.module} className="role-group">
@@ -245,19 +254,15 @@ export default function RolePermissionMatrix() {
                   const checked = (draft[activeRole.id] ?? []).includes(permission.id);
                   const changed = checked !== activeRole.permission_ids.includes(permission.id);
                   return (
-                    <label key={permission.id} className={`role-switch-row ${changed ? "changed" : ""}`}>
+                    <label key={permission.id} className={`role-switch-row ${changed ? "changed" : ""} ${activeRole.locked ? "locked" : ""}`}>
                       <PermissionText permission={permission} byCode={byCode} />
-                      <input type="checkbox" role="switch" checked={checked} onChange={() => toggle(activeRole, permission)} />
+                      <input type="checkbox" role="switch" checked={checked} disabled={activeRole.locked} onChange={() => toggle(activeRole, permission)} />
                     </label>
                   );
                 })}
               </section>
             ))}
         </div>
-
-        <p className="matrix-note">
-          <Lock size={13} /> Quản trị viên luôn có toàn bộ quyền nên không hiện trong bảng.
-        </p>
 
         {(dirtyRoles.length > 0 || notice) && (
           <div className="matrix-savebar">
@@ -315,11 +320,13 @@ function ModuleRows({ group, roles, draft, onToggle, byCode }) {
             const checked = (draft[role.id] ?? []).includes(permission.id);
             const changed = checked !== role.permission_ids.includes(permission.id);
             return (
-              <td key={role.id} className={`cell ${changed ? "changed" : ""}`}>
+              <td key={role.id} className={`cell ${changed ? "changed" : ""} ${role.locked ? "locked" : ""}`}>
                 <input
                   type="checkbox"
                   aria-label={`${permission.name} — ${role.name}`}
-                  checked={checked}
+                  checked={role.locked || checked}
+                  disabled={role.locked}
+                  title={role.locked ? LOCKED_HINT : undefined}
                   onChange={() => onToggle(role, permission)}
                 />
               </td>
