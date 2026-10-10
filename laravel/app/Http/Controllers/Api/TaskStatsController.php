@@ -62,6 +62,7 @@ class TaskStatsController extends Controller
             return [
                 'employee_id' => $employee->id, 'employee' => $employee->user?->name, 'employee_code' => $employee->employee_code,
                 'department' => $employee->departments->map(fn ($d) => Department::pathLabel($d->id))->join(', '),
+                'units' => $employee->departments->map(fn ($d) => ['id' => $d->id, 'name' => $d->name, 'path' => Department::pathLabel($d->id)])->values(),
                 ...$metrics($own),
                 'tasks' => $own->map(fn (Task $t) => [
                     'id' => $t->id, 'code' => $t->code, 'title' => $t->title, 'category' => $t->category?->name,
