@@ -9,207 +9,172 @@ use App\Models\Evaluation;
 use App\Models\EvaluationPeriod;
 use App\Models\EvaluationTemplate;
 use App\Models\LeaveRecord;
+use App\Models\LibraryNode;
 use App\Models\Task;
-use App\Models\TaskDraft;
-use App\Models\User;
-use App\Services\EvaluationAccess;
 use Carbon\CarbonImmutable;
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
-    private const LIST_LIMIT = 6;
-
-    private const EVALUATION_STATUS = [
-        Evaluation::DRAFT => 'Chưa nộp', Evaluation::SUBMITTED => 'Đã nộp, chờ chấm',
-        Evaluation::UNIT_SCORED => 'Đã chấm', Evaluation::PUBLISHED => 'Đã công bố',
-    ];
-
-    public function index(Request $request): JsonResponse
+    public function index(): JsonResponse
     {
-        $user = $request->user();
-        $unitIds = $user->managedUnitIds();
-        $scope = $unitIds === null ? 'school' : ($unitIds ? 'department' : 'self');
+        $today = CarbonImmutable::today();
+        $employees = Employee::with(['user.roles', 'departments' => fn ($q) => $q->wherePivotNull('ends_on')])->where('employment_status', 'working')->get();
+        $leave = LeaveRecord::with('employee.user:id,name')->overlapping($today, $today->addDays(6))->orderBy('starts_on')->get();
+        $absentToday = $leave->filter(fn (LeaveRecord $r) => $r->starts_on->lte($today) && $r->ends_on->gte($today))->values();
+        $tasks = $this->monthTasks();
         $period = EvaluationPeriod::whereIn('status', [EvaluationPeriod::OPEN, EvaluationPeriod::DISCLOSED])->orderByDesc('year')->orderByDesc('month')->first();
+        $evaluation = $period ? $this->periodProgress($period) : null;
+        $units = $this->units($employees, $tasks['by_unit']);
 
         return response()->json([
-            'scope' => $scope,
-            'today' => now()->format('Y-m-d'),
-            'name' => $user->name,
-            'personal' => $user->employee ? $this->personal($user, $period) : null,
-            'queue' => $this->queue($user, $period),
-            'health' => $scope === 'self' ? null : $this->health($user, $scope, $unitIds, $period),
-            'people' => $this->people($user, $scope, $unitIds, $period),
+            'today' => $today->toDateString(),
+            'personnel' => [
+                'total' => $employees->count(),
+                'by_audience' => collect(EvaluationTemplate::AUDIENCES)->map(fn ($label, $audience) => [
+                    'audience' => $audience, 'label' => $label,
+                    'count' => $employees->filter(fn (Employee $e) => EvaluationTemplate::audienceOf($e->user) === $audience)->count(),
+                ])->values(),
+                'absent_today' => $absentToday->count(),
+                'absent_week' => $leave->pluck('employee_id')->unique()->count(),
+                'absent' => $absentToday->map(fn (LeaveRecord $r) => [
+                    'name' => $r->employee?->user?->name, 'type' => $r->type, 'type_label' => LeaveRecord::TYPES[$r->type] ?? $r->type,
+                    'until' => $r->ends_on->toDateString(),
+                ]),
+                'units' => $units,
+            ],
+            'tasks' => $tasks['summary'],
+            'evaluation' => $evaluation,
+            'library' => $this->library($today),
+            'results' => $this->results(),
+            'attention' => $this->attention($tasks['summary'], $evaluation, $units, $today),
         ]);
     }
 
-    private function personal(User $user, ?EvaluationPeriod $period): array
-    {
-        $employee = $user->employee;
-        $tasks = $this->assignedTo($employee)->whereIn('status', [...Task::OPEN])->orderByRaw('due_at is null')->orderBy('due_at')->get(['id', 'code', 'title', 'status', 'due_at']);
-        $working = $tasks->where('status', '!=', Task::WAITING_APPROVAL);
-        $overdue = $working->filter(fn (Task $t) => $t->due_at?->isPast());
-        $soon = $working->filter(fn (Task $t) => $t->due_at && $t->due_at->isFuture() && $t->due_at->lte(now()->addDays(3)));
-        $sheet = $period && $user->hasPermission('evaluation.view') ? Evaluation::where('period_id', $period->id)->where('teacher_id', $employee->id)->first() : null;
-        $month = CarbonImmutable::now()->startOfMonth();
-        $leave = LeaveRecord::where('employee_id', $employee->id)->overlapping($month, $month->endOfMonth())->orderBy('starts_on')->get();
-
-        return [
-            'employee_id' => $employee->id,
-            'tasks' => [
-                'open' => $working->count(), 'overdue' => $overdue->count(), 'soon' => $soon->count(),
-                'waiting' => $tasks->where('status', Task::WAITING_APPROVAL)->count(),
-                'items' => $working->take(self::LIST_LIMIT)->map(fn (Task $t) => $this->taskItem($t))->values(),
-            ],
-            'evaluation' => $sheet ? [
-                'id' => $sheet->id, 'period' => $period->label(), 'status' => $sheet->status,
-                'status_label' => self::EVALUATION_STATUS[$sheet->status] ?? $sheet->status,
-                'self_due_on' => $period->self_due_on?->toDateString(),
-                'period_status' => $period->status,
-            ] : null,
-            'leave' => [
-                'month' => $month->format('m/Y'),
-                'excused_sessions' => $leave->where('type', LeaveRecord::EXCUSED)->sum(fn (LeaveRecord $r) => $r->sessionsWithin($month, $month->endOfMonth())),
-                'unexcused' => $leave->where('type', LeaveRecord::UNEXCUSED)->count(),
-                'regime_sessions' => $leave->where('type', LeaveRecord::REGIME)->sum(fn (LeaveRecord $r) => $r->sessionsWithin($month, $month->endOfMonth())),
-            ],
-        ];
-    }
-
-    private function queue(User $user, ?EvaluationPeriod $period): array
-    {
-        $employeeId = $user->employee?->id ?? 0;
-        $schoolWide = $user->isSchoolWide() && $user->hasPermission('tasks.assign');
-        $review = Task::with('employees.user:id,name')->where('status', Task::WAITING_APPROVAL)
-            ->where(fn ($q) => $q->whereHas('reviewers', fn ($r) => $r->where('users.id', $user->id))->orWhere(function ($b) use ($user, $employeeId, $schoolWide) {
-                $b->whereNot(fn ($own) => $own->where('created_by', $user->id)->doesntHave('departments')->whereHas('employees', fn ($t) => $t->where('employees.id', $employeeId))->has('employees', '=', 1));
-                if (! $schoolWide) {
-                    $b->where('created_by', $user->id);
-                }
-            }))
-            ->orderBy('due_at')->get(['id', 'code', 'title', 'status', 'due_at']);
-
-        $scoring = collect();
-        if ($period && ($user->hasPermission('evaluation.score') || $user->hasPermission('evaluation.manage') || $period->scorers()->where('users.id', $user->id)->exists())) {
-            $access = new EvaluationAccess($user);
-            $scoring = Evaluation::with(['teacher.user:id,name', 'teacher.departments', 'assignedScorers:id'])->where('period_id', $period->id)
-                ->whereIn('status', [Evaluation::SUBMITTED, Evaluation::UNIT_SCORED])->get()
-                ->map(function (Evaluation $e) use ($access) {
-                    if ($e->status === Evaluation::SUBMITTED && $access->canScore($e)) {
-                        return ['id' => $e->id, 'name' => $e->teacher->user?->name, 'column' => $e->scoredByLeadership() ? 'BGH đánh giá' : 'Tổ chấm'];
-                    }
-                    if ($e->status === Evaluation::UNIT_SCORED && $e->awaitsLeader() && $access->canScoreLeader($e)) {
-                        return ['id' => $e->id, 'name' => $e->teacher->user?->name, 'column' => 'BGH đánh giá'];
-                    }
-
-                    return null;
-                })->filter()->sortBy('name')->values();
-        }
-
-        return [
-            'review' => ['count' => $review->count(), 'items' => $review->take(self::LIST_LIMIT)->map(fn (Task $t) => [...$this->taskItem($t), 'assignees' => $t->employees->pluck('user.name')->filter()->take(2)->values()])->values()],
-            'scoring' => $period && $scoring->isNotEmpty() ? ['period_id' => $period->id, 'period' => $period->label(), 'count' => $scoring->count(), 'items' => $scoring->take(self::LIST_LIMIT)] : null,
-            'drafts' => $user->hasPermission('ai.tasks') ? TaskDraft::whereHas('batch', fn ($q) => $q->where('created_by', $user->id))->count() : null,
-        ];
-    }
-
-    private function health(User $user, string $scope, ?array $unitIds, ?EvaluationPeriod $period): array
+    private function monthTasks(): array
     {
         $start = now()->startOfMonth();
-        $tasks = $this->scopedTasks($user, $scope, $unitIds)->whereBetween('due_at', [$start, $start->copy()->endOfMonth()])->get(['id', 'status', 'due_at']);
+        $tasks = Task::with(['employees:id', 'departments:id'])->where('status', '!=', Task::CANCELLED)
+            ->whereBetween('due_at', [$start, $start->copy()->endOfMonth()])->get(['id', 'status', 'due_at']);
+        $isOverdue = fn (Task $t) => in_array($t->status, [Task::NOT_STARTED, Task::IN_PROGRESS], true) && $t->due_at->isPast();
         $completed = $tasks->where('status', Task::COMPLETED)->count();
         $due = $tasks->filter(fn (Task $t) => $t->due_at->lte(now()) || $t->status === Task::COMPLETED)->count();
-        $waiting = $tasks->where('status', Task::WAITING_APPROVAL)->count();
-        $overdue = $tasks->filter(fn (Task $t) => in_array($t->status, [Task::NOT_STARTED, Task::IN_PROGRESS], true) && $t->due_at->isPast())->count();
-
-        $evaluation = null;
-        if ($period && ($user->hasPermission('evaluation.manage') || $user->hasPermission('evaluation.score'))) {
-            $sheets = $period->evaluations()->when($scope === 'department', fn ($q) => $q->whereHas('teacher', fn ($t) => $t->inUnits($unitIds)))->get(['id', 'status', 'audience', 'leader_scored_at']);
-            $evaluation = [
-                'id' => $period->id, 'label' => $period->label(), 'status' => $period->status,
-                'status_label' => $period->status === EvaluationPeriod::DISCLOSED ? 'Chờ giải trình' : 'Đang chấm',
-                'self_due_on' => $period->self_due_on?->toDateString(), 'unit_due_on' => $period->unit_due_on?->toDateString(),
-                'total' => $sheets->count(),
-                'submitted' => $sheets->where('status', '!=', Evaluation::DRAFT)->count(),
-                'scored' => $sheets->whereIn('status', [Evaluation::UNIT_SCORED, Evaluation::PUBLISHED])->count(),
-                'awaiting_leader' => $sheets->filter(fn (Evaluation $e) => $e->audience === EvaluationTemplate::TEACHER && $e->status === Evaluation::UNIT_SCORED && ! $e->leader_scored_at)->count(),
-            ];
-        }
+        $staleWaiting = Task::where('status', Task::WAITING_APPROVAL)->whereHas('submissions', fn ($q) => $q->where('submitted_at', '<', now()->subDays(3)))->count();
 
         return [
-            'period' => $start->format('m/Y'),
-            'tasks' => [
-                'assigned' => $tasks->count(), 'completed' => $completed, 'waiting' => $waiting, 'overdue' => $overdue,
-                'open' => max(0, $tasks->count() - $completed - $waiting - $overdue),
+            'summary' => [
+                'period' => $start->format('m/Y'),
+                'assigned' => $tasks->count(), 'completed' => $completed,
+                'waiting' => $tasks->where('status', Task::WAITING_APPROVAL)->count(),
+                'overdue' => $tasks->filter($isOverdue)->count(),
+                'overdue_all' => Task::whereIn('status', [Task::NOT_STARTED, Task::IN_PROGRESS])->where('due_at', '<', now())->count(),
+                'stale_waiting' => $staleWaiting,
                 'completion_rate' => $due ? round($completed / $due * 100, 1) : null,
             ],
-            'evaluation' => $evaluation,
+            'by_unit' => $tasks,
         ];
     }
 
-    private function people(User $user, string $scope, ?array $unitIds, ?EvaluationPeriod $period): array
+    private function units(Collection $employees, Collection $tasks): Collection
     {
-        $today = CarbonImmutable::today();
-        $leave = null;
-        if ($scope !== 'self' && ($user->hasPermission('leave.view') || $user->hasPermission('leave.manage'))) {
-            $visible = Employee::query()->when($scope === 'department', fn ($q) => $q->inUnits($unitIds))->select('employees.id');
-            $records = LeaveRecord::with('employee.user:id,name')->whereIn('employee_id', $visible)->overlapping($today, $today->addDays(6))->orderBy('starts_on')->get();
-            $current = $records->filter(fn (LeaveRecord $r) => $r->starts_on->lte($today) && $r->ends_on->gte($today));
-            $leave = [
-                'today' => $current->map(fn (LeaveRecord $r) => [
-                    'name' => $r->employee?->user?->name, 'type' => $r->type, 'type_label' => LeaveRecord::TYPES[$r->type] ?? $r->type,
-                    'until' => $r->ends_on->toDateString(), 'sessions' => $r->sessions,
-                ])->values(),
-                'week' => $records->pluck('employee_id')->unique()->count(),
-            ];
-        }
+        return Department::ordered()->whereNull('parent_id')->map(function ($unit) use ($employees, $tasks) {
+            $ids = Department::withDescendants([$unit['id']]);
+            $members = $employees->filter(fn (Employee $e) => array_intersect($e->unitIds(), $ids) !== []);
+            $memberIds = $members->pluck('id');
+            $own = $tasks->filter(fn (Task $t) => $t->employees->pluck('id')->intersect($memberIds)->isNotEmpty() || $t->departments->pluck('id')->intersect($ids)->isNotEmpty());
+            $due = $own->filter(fn (Task $t) => $t->due_at->lte(now()) || $t->status === Task::COMPLETED)->count();
 
-        $tasks = $scope === 'self' && $user->employee ? $this->assignedTo($user->employee) : $this->scopedTasks($user, $scope, $unitIds);
-        $upcoming = $tasks->whereIn('status', [Task::NOT_STARTED, Task::IN_PROGRESS])->whereBetween('due_at', [now(), $today->addDays(7)->endOfDay()])
-            ->orderBy('due_at')->limit(30)->get(['id', 'code', 'title', 'status', 'due_at'])
-            ->map(fn (Task $t) => ['kind' => 'task', 'date' => $t->due_at->toDateString(), ...$this->taskItem($t)]);
-        if ($period && $period->status === EvaluationPeriod::OPEN) {
-            foreach (['self_due_on' => 'Hạn tự chấm', 'unit_due_on' => 'Hạn chấm phiếu'] as $field => $label) {
-                if ($period->{$field} && $period->{$field}->between($today, $today->addDays(7))) {
-                    $upcoming->push(['kind' => 'evaluation', 'date' => $period->{$field}->toDateString(), 'title' => "{$label} {$period->label()}", 'period_id' => $period->id]);
-                }
+            return [
+                'id' => $unit['id'], 'name' => $unit['name'], 'members' => $members->count(),
+                'tasks' => $own->count(),
+                'completion_rate' => $due ? round($own->where('status', Task::COMPLETED)->count() / $due * 100, 1) : null,
+                'due' => $due,
+            ];
+        })->filter(fn ($unit) => $unit['members'] > 0)->sortByDesc('members')->values();
+    }
+
+    private function periodProgress(EvaluationPeriod $period): array
+    {
+        $sheets = $period->evaluations()->get(['id', 'status', 'audience', 'leader_scored_at']);
+
+        return [
+            'id' => $period->id, 'label' => $period->label(), 'status' => $period->status,
+            'status_label' => $period->status === EvaluationPeriod::DISCLOSED ? 'Chờ giải trình' : 'Đang chấm',
+            'self_due_on' => $period->self_due_on?->toDateString(), 'unit_due_on' => $period->unit_due_on?->toDateString(),
+            'total' => $sheets->count(),
+            'submitted' => $sheets->where('status', '!=', Evaluation::DRAFT)->count(),
+            'scored' => $sheets->whereIn('status', [Evaluation::UNIT_SCORED, Evaluation::PUBLISHED])->count(),
+            'awaiting_leader' => $sheets->filter(fn (Evaluation $e) => $e->audience === EvaluationTemplate::TEACHER && $e->status === Evaluation::UNIT_SCORED && ! $e->leader_scored_at)->count(),
+        ];
+    }
+
+    private function library(CarbonImmutable $today): array
+    {
+        $files = LibraryNode::where('type', LibraryNode::FILE);
+
+        return [
+            'files' => (clone $files)->count(),
+            'bytes' => (int) DB::table('library_nodes')->join('files', 'files.id', '=', 'library_nodes.file_id')->where('library_nodes.type', LibraryNode::FILE)->sum('files.size'),
+            'new_week' => (clone $files)->where('created_at', '>=', $today->subDays(6))->count(),
+            'folders' => LibraryNode::where('type', LibraryNode::FOLDER)->count(),
+        ];
+    }
+
+    private function results(): ?array
+    {
+        $periods = EvaluationPeriod::where('status', EvaluationPeriod::PUBLISHED)->orderByDesc('year')->orderByDesc('month')->limit(2)->get();
+        if ($periods->isEmpty()) {
+            return null;
+        }
+        $summary = function (EvaluationPeriod $period) {
+            $sheets = $period->evaluations()->with('template:id,grades')->get(['id', 'template_id', 'grade', 'total_score', 'no_grade_reason']);
+            $names = $sheets->mapWithKeys(fn (Evaluation $e) => collect($e->template?->grades ?? [])->pluck('name', 'code')->all());
+            $order = $sheets->flatMap(fn (Evaluation $e) => collect($e->template?->grades ?? [])->pluck('code'))->unique()->values();
+            $counts = $sheets->whereNotNull('grade')->countBy('grade');
+            $scored = $sheets->whereNotNull('total_score');
+
+            return [
+                'id' => $period->id, 'label' => $period->label(), 'total' => $sheets->count(),
+                'grades' => $order->map(fn ($code) => ['code' => $code, 'name' => $names[$code] ?? $code, 'count' => $counts->get($code, 0)])->values(),
+                'no_grade' => $sheets->whereNull('grade')->count(),
+                'average' => $scored->isEmpty() ? null : round($scored->avg(fn (Evaluation $e) => (float) $e->total_score), 1),
+            ];
+        };
+
+        return ['current' => $summary($periods[0]), 'previous' => isset($periods[1]) ? $summary($periods[1]) : null];
+    }
+
+    private function attention(array $tasks, ?array $evaluation, Collection $units, CarbonImmutable $today): array
+    {
+        $items = [];
+        if ($tasks['overdue_all'] > 0) {
+            $items[] = ['tone' => 'bad', 'text' => "{$tasks['overdue_all']} công việc đã quá hạn nhưng chưa nộp", 'link' => ['tasks' => ['action' => 'overdue']]];
+        }
+        if ($tasks['stale_waiting'] > 0) {
+            $items[] = ['tone' => 'warn', 'text' => "{$tasks['stale_waiting']} công việc đã nộp quá 3 ngày vẫn chờ duyệt", 'link' => ['tasks' => ['status' => 'waiting_approval']]];
+        }
+        if ($evaluation) {
+            $left = $evaluation['self_due_on'] ? $today->diffInDays(CarbonImmutable::parse($evaluation['self_due_on']), false) : null;
+            $missing = $evaluation['total'] - $evaluation['submitted'];
+            if ($evaluation['status'] === EvaluationPeriod::OPEN && $missing > 0 && $left !== null && $left <= 3) {
+                $items[] = ['tone' => $left < 0 ? 'bad' : 'warn', 'text' => ($left < 0 ? 'Đã quá hạn tự chấm' : "Còn {$left} ngày tới hạn tự chấm")." {$evaluation['label']}, {$missing} phiếu chưa nộp", 'link' => ['route' => "/evaluations?tab=board&period={$evaluation['id']}&status=draft"]];
+            }
+            if ($evaluation['awaiting_leader'] > 0) {
+                $items[] = ['tone' => 'warn', 'text' => "{$evaluation['awaiting_leader']} phiếu giáo viên đang chờ Ban giám hiệu chấm", 'link' => ['route' => "/evaluations?tab=board&period={$evaluation['id']}"]];
             }
         }
-
-        return [
-            'leave' => $leave,
-            'upcoming' => $upcoming->sortBy([['date', 'asc'], ['kind', 'desc']])->values(),
-        ];
-    }
-
-    private function assignedTo(Employee $employee): Builder
-    {
-        $units = $employee->unitIds() ?: [0];
-
-        return Task::query()->where('status', '!=', Task::CANCELLED)
-            ->where(fn ($q) => $q->whereHas('employees', fn ($t) => $t->where('employees.id', $employee->id))->orWhereHas('departments', fn ($d) => $d->whereIn('departments.id', $units)));
-    }
-
-    private function scopedTasks(User $user, string $scope, ?array $unitIds): Builder
-    {
-        $query = Task::query()->where('status', '!=', Task::CANCELLED);
-        if ($scope === 'school') {
-            return $query;
+        $month = $today->startOfMonth();
+        $unexcused = LeaveRecord::where('type', LeaveRecord::UNEXCUSED)->overlapping($month, $month->endOfMonth())->count();
+        if ($unexcused > 0) {
+            $items[] = ['tone' => 'bad', 'text' => "{$unexcused} lượt nghỉ không phép trong tháng", 'link' => ['route' => '/personnel/leave']];
         }
-        $employeeIds = $scope === 'department' ? Employee::inUnits($unitIds)->pluck('id') : collect([$user->employee?->id ?? 0]);
-        $taskUnits = $scope === 'department' ? Department::withAncestors($unitIds) : $user->memberUnitIds();
+        $weakest = $units->filter(fn ($u) => $u['due'] >= 3 && $u['completion_rate'] !== null)->sortBy('completion_rate')->first();
+        if ($weakest && $tasks['completion_rate'] !== null && $weakest['completion_rate'] <= $tasks['completion_rate'] - 10) {
+            $items[] = ['tone' => 'warn', 'text' => "{$weakest['name']} có tỷ lệ hoàn thành thấp nhất: {$weakest['completion_rate']}% (toàn trường {$tasks['completion_rate']}%)", 'link' => ['route' => '/stats']];
+        }
 
-        return $query->where(fn ($q) => $q->whereHas('employees', fn ($t) => $t->whereIn('employees.id', $employeeIds))->orWhereHas('departments', fn ($d) => $d->whereIn('departments.id', $taskUnits ?: [0])));
-    }
-
-    private function taskItem(Task $task): array
-    {
-        return [
-            'id' => $task->id, 'code' => $task->code, 'title' => $task->title, 'status' => $task->status,
-            'due_at' => $task->due_at?->toIso8601String(),
-            'overdue' => in_array($task->status, [Task::NOT_STARTED, Task::IN_PROGRESS], true) && (bool) $task->due_at?->isPast(),
-        ];
+        return $items;
     }
 }
