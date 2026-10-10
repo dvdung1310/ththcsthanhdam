@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
+import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
 import {
   Activity,
   Award,
@@ -63,7 +63,7 @@ import TaskAiWorkspace from "./TaskAiWorkspace";
 import Avatar from "./Avatar";
 
 const navTree = [
-  { key: "dashboard", label: "Tổng quan", icon: LayoutDashboard, path: "/" },
+  { key: "dashboard", label: "Tổng quan", icon: LayoutDashboard, path: "/", permission: "dashboard.view" },
   { key: "stats", label: "Thống kê", icon: ChartNoAxesColumnIncreasing, path: "/stats", permission: "kpi.view" },
   {
     key: "tasks-group",
@@ -158,7 +158,7 @@ function RouteNotice({ kind }) {
       <span>{forbidden ? <ShieldCheck size={30} /> : <Search size={30} />}</span>
       <h2>{forbidden ? "Bạn không có quyền xem trang này" : "Không tìm thấy trang"}</h2>
       <p>{forbidden ? "Tài khoản của bạn chưa được cấp quyền cho chức năng này. Liên hệ quản trị viên nếu bạn cần truy cập." : "Đường dẫn không tồn tại hoặc đã bị thay đổi."}</p>
-      <Link className="primary-btn" to="/">Về trang Tổng quan</Link>
+      <Link className="primary-btn" to="/">Về trang chủ</Link>
     </section>
   );
 }
@@ -480,6 +480,7 @@ function App() {
   const can = (permission) => permission.split("|").some((code) => authUser.permissions.includes(code));
   const canConfigureTasks = authUser.access_scope === "school" && authUser.permissions.includes("tasks.assign");
   const allowed = (leaf) => (leaf.schoolOnly && !canConfigureTasks ? false : !leaf.permission || can(leaf.permission));
+  const homePath = navLeaves.find((leaf) => leaf.path !== "/" && allowed(leaf))?.path ?? "/profile";
   const guard = (key, element) => (allowed(navLeaves.find((leaf) => leaf.key === key)) ? element : <RouteNotice kind="forbidden" />);
   const toggleGroup = (key) => setOpenGroups((groups) => (groups.includes(key) ? groups.filter((g) => g !== key) : [...groups, key]));
   const closeSidebar = () => setSidebarOpen(false);
@@ -598,7 +599,7 @@ function App() {
 
         <PageErrorBoundary resetKey={location.pathname}>
         <Routes>
-          <Route path="/" element={<ManagementDashboard onTask={openTask} onKpi={() => navigate("/stats")} />} />
+          <Route path="/" element={can("dashboard.view") ? <ManagementDashboard onTask={openTask} onKpi={() => navigate("/stats")} /> : <Navigate to={homePath} replace />} />
           <Route path="/stats" element={guard("stats", <TaskStats onTask={openTask} />)} />
           <Route path="/tasks/ai" element={can("tasks.assign") && can("ai.tasks") ? <TaskAiWorkspace /> : <RouteNotice kind="forbidden" />} />
           <Route path="/tasks/:taskCode?" element={guard("tasks", <TaskRoute canAssign={can("tasks.assign")} canUpdate={can("tasks.update")} canAi={can("tasks.assign") && can("ai.tasks")} selectedTask={selectedTask} />)} />
