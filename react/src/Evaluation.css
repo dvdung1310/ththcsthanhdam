@@ -3682,3 +3682,192 @@
 .ev-history .dd-trigger {
   height: 32px;
 }
+
+.ev-leave-hint {
+  margin-top: 8px;
+  padding: 9px 11px;
+  display: grid;
+  gap: 5px;
+  border: 1px solid #d9e4fb;
+  border-radius: 8px;
+  background: #f5f8fe;
+  font-size: 12px;
+}
+
+.ev-leave-hint.empty {
+  border-color: #e7e9f0;
+  background: #fafbfc;
+}
+
+.ev-leave-hint > b {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #2d3756;
+  font-size: 12px;
+}
+
+.ev-leave-hint ul {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 3px;
+  list-style: none;
+}
+
+.ev-leave-hint li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--c-text-2);
+}
+
+.ev-leave-hint li em {
+  margin-left: auto;
+  color: var(--c-muted);
+  font-style: normal;
+}
+
+.ev-leave-type {
+  padding: 1px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.ev-leave-type.excused { color: #2b63d9; background: #e8effd; }
+.ev-leave-type.unexcused { color: var(--c-danger); background: #fdecee; }
+.ev-leave-type.regime { color: #1b8a52; background: #e3f5ec; }
+
+.ev-leave-hint p {
+  margin: 0;
+  color: #2d3756;
+}
+
+.ev-leave-hint p.warn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #b25e09;
+}
+
+.ev-leave-hint small {
+  color: var(--c-muted);
+  font-size: 11px;
+}
+
+@media print {
+  .ev-leave-hint {
+    display: none;
+  }
+}
+
+.ev-tag.audience {
+  color: #7a4ad9;
+  background: #f0eafd;
+}
+
+.ev-period-template em {
+  margin-right: 10px;
+  font-style: normal;
+}
+
+.ev-period-scorers {
+  display: grid;
+  gap: 10px;
+}
+
+.ev-period-scorers.missing {
+  border-color: #f5c2c7;
+  background: #fff8f8;
+}
+
+.ev-period-scorers header {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: var(--c-primary);
+}
+
+.ev-period-scorers header span {
+  display: grid;
+  gap: 2px;
+}
+
+.ev-period-scorers header b {
+  color: #2d3756;
+  font-size: 13px;
+}
+
+.ev-period-scorers header small {
+  color: var(--c-muted);
+  font-size: 12px;
+}
+
+.ev-scorer-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ev-scorer {
+  padding: 6px 10px 6px 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #e3e6ee;
+  border-radius: 10px;
+  color: var(--c-text-2);
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ev-scorer img,
+.ev-scorer > span:first-child {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.ev-scorer > span:not(:first-child) {
+  display: grid;
+}
+
+.ev-scorer b {
+  color: #2d3756;
+  font-size: 12.5px;
+}
+
+.ev-scorer small {
+  color: var(--c-muted);
+  font-size: 11px;
+}
+
+.ev-scorer.active {
+  border-color: var(--c-primary);
+  background: var(--c-primary-tint);
+  color: var(--c-primary);
+}
+
+.ev-scorer:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.ev-tpl-audiences {
+  margin: 0 0 12px;
+  align-self: flex-start;
+}
+
+.ev-tpl-audiences button em {
+  margin-left: 4px;
+  font-style: normal;
+  opacity: 0.7;
+}
+
+.ev-tpl-audiences button svg {
+  margin-left: 4px;
+  vertical-align: -1px;
+}
