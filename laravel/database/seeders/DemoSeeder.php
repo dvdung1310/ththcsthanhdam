@@ -98,14 +98,23 @@ class DemoSeeder extends Seeder
         $ids = [];
         foreach ([...DemoRoster::UNITS, DemoRoster::OFFICE => []] as $toName => $groups) {
             $to = Department::firstOrCreate(['name' => $toName, 'parent_id' => null], ['code' => strtoupper(Str::slug($toName, '_')), 'type' => Department::TYPE_TO, 'is_active' => true]);
+            $this->describe($to);
             $ids[$toName] = $to->id;
             foreach ($groups as $groupName) {
                 $group = Department::firstOrCreate(['name' => $groupName, 'parent_id' => $to->id], ['code' => strtoupper(Str::slug($groupName, '_')), 'type' => Department::TYPE_NHOM, 'is_active' => true]);
+                $this->describe($group);
                 $ids[$groupName] = $group->id;
             }
         }
 
         return $ids;
+    }
+
+    private function describe(Department $unit): void
+    {
+        if (! $unit->description && isset(DemoRoster::DESCRIPTIONS[$unit->name])) {
+            $unit->update(['description' => DemoRoster::DESCRIPTIONS[$unit->name]]);
+        }
     }
 
     private function assignRole(User $user, int $roleId, ?int $unitId, User $admin): void

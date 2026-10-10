@@ -24,6 +24,27 @@ class DemoRoster
         'Tổ Năng khiếu' => [],
     ];
 
+    public const DESCRIPTIONS = [
+        'Tổ Tự nhiên' => "Giáo viên Toán, Vật lý, Hóa học, Sinh học, Tin học và Công nghệ khối THCS (lớp 6–9).\nPhụ trách phòng thí nghiệm, phòng tin học, bồi dưỡng học sinh giỏi khối tự nhiên, cuộc thi Khoa học kỹ thuật và giáo dục STEM.",
+        'Nhóm Toán' => 'Dạy Toán lớp 6–9; bồi dưỡng HSG và ôn thi vào lớp 10 môn Toán; ra đề kiểm tra định kỳ môn Toán.',
+        'Nhóm Vật lý' => 'Dạy Vật lý (KHTN phân môn Vật lý) lớp 6–9; quản lý dụng cụ thí nghiệm Vật lý; bồi dưỡng HSG Vật lý.',
+        'Nhóm Hóa học' => 'Dạy Hóa học (KHTN phân môn Hóa) lớp 8–9; quản lý hóa chất và phòng thí nghiệm Hóa; an toàn phòng thí nghiệm.',
+        'Nhóm Sinh học' => 'Dạy Sinh học (KHTN phân môn Sinh) lớp 6–9; giáo dục giới tính, sức khỏe sinh sản và bảo vệ môi trường.',
+        'Nhóm Tin học – Công nghệ' => "Dạy Tin học và Công nghệ lớp 6–9; quản lý phòng máy tính.\nHỗ trợ chuyển đổi số, phần mềm quản lý nhà trường, cổng thông tin và CSDL ngành.",
+        'Tổ Xã hội' => "Giáo viên Ngữ văn, Lịch sử – Địa lý, Tiếng Anh và GDCD khối THCS (lớp 6–9).\nPhụ trách bồi dưỡng HSG khối xã hội, thư viện và văn hóa đọc, giáo dục truyền thống, hoạt động ngoại khóa ngoại ngữ.",
+        'Nhóm Ngữ văn' => 'Dạy Ngữ văn lớp 6–9; ôn thi vào lớp 10 môn Ngữ văn; phát triển văn hóa đọc, cuộc thi viết và Đại sứ văn hóa đọc.',
+        'Nhóm Lịch sử – Địa lý' => 'Dạy Lịch sử và Địa lý lớp 6–9; giáo dục truyền thống, ngày lễ lớn, nội dung giáo dục địa phương Hà Nội.',
+        'Nhóm Tiếng Anh' => 'Dạy Tiếng Anh tiểu học và THCS; tổ chức thi Olympic Tiếng Anh, câu lạc bộ tiếng Anh; ôn thi vào lớp 10 môn Tiếng Anh.',
+        'Nhóm GDCD' => 'Dạy GDCD lớp 6–9; giáo dục pháp luật, an toàn giao thông, kỹ năng sống và phòng chống tệ nạn xã hội.',
+        'Tổ Khối 1' => 'Giáo viên chủ nhiệm và dạy các môn lớp 1; phụ trách học sinh lớp 1 làm quen nề nếp, đánh giá theo Thông tư 27, tiếp nhận học sinh vào lớp 1.',
+        'Tổ Khối 2' => 'Giáo viên chủ nhiệm và dạy các môn lớp 2; đánh giá học sinh theo Thông tư 27, giao lưu Tiếng Việt, rèn chữ viết.',
+        'Tổ Khối 3' => 'Giáo viên chủ nhiệm và dạy các môn lớp 3; đánh giá học sinh theo Thông tư 27, Tin học và Tiếng Anh lớp 3.',
+        'Tổ Khối 4' => 'Giáo viên chủ nhiệm và dạy các môn lớp 4; đánh giá học sinh theo Thông tư 27, giao lưu Toán tuổi thơ.',
+        'Tổ Khối 5' => 'Giáo viên chủ nhiệm và dạy các môn lớp 5; hoàn thành chương trình tiểu học, xét hoàn thành và bàn giao học sinh lên lớp 6.',
+        'Tổ Năng khiếu' => "Giáo viên Thể dục, Âm nhạc, Mỹ thuật toàn trường.\nPhụ trách Hội khỏe Phù Đổng, giải thể thao, văn nghệ, trang trí các ngày lễ, câu lạc bộ năng khiếu.",
+        'Tổ Văn phòng' => "Kế toán, thủ quỹ, văn thư, y tế học đường, thư viện, thiết bị.\nPhụ trách tài chính – ngân sách, hồ sơ công văn đi/đến, sức khỏe và bảo hiểm y tế học sinh, thư viện, kiểm kê tài sản – thiết bị.",
+    ];
+
     public const STAFF = [
         ['Trịnh Thu Trang', 'trang.tt', '0900000001'],
         ['Lê Thị Kim Oanh', 'oanh.ltk', '0900000002'],
