@@ -27,6 +27,7 @@ import OrgStructure from "./OrgStructure";
 import "./PersonnelManagement.css";
 import Avatar from "./Avatar";
 import { PageButtons } from "./TablePagination";
+import Dropdown from "./Dropdown";
 
 const LEADER_ROLES = ["hieu_truong", "pho_hieu_truong", "ban_giam_hieu", "thu_ky", "to_truong", "to_pho", "nhom_truong"];
 
@@ -115,6 +116,18 @@ export default function PersonnelManagement({ view = "people" }) {
   const orphanUnits = data.units.filter(
     (unit) => unit.parent_id && !data.units.some((root) => root.id === unit.parent_id),
   );
+  const unitOptions = [
+    { value: "", label: "Tất cả tổ, nhóm" },
+    { divider: true },
+    ...unitGroups.flatMap(({ root, children }) =>
+      children.length
+        ? [{ divider: true }, { value: root.id, label: root.name, hint: "cả tổ" }, ...children.map((child) => ({ value: child.id, label: child.name, indent: true })), { divider: true }]
+        : [{ value: root.id, label: root.name }],
+    ),
+    ...orphanUnits.map((unit) => ({ value: unit.id, label: unit.label })),
+    { divider: true },
+    { value: "none", label: "Chưa thuộc tổ, nhóm" },
+  ].filter((option, index, list) => !option.divider || (index > 0 && !list[index - 1].divider));
 
   const matched = data.data.filter((person) => {
     const text = [person.name, person.email, person.employee_code, person.phone].join(" ").toLowerCase();
@@ -148,6 +161,10 @@ export default function PersonnelManagement({ view = "people" }) {
   };
   const filterChange = (setter) => (event) => {
     setter(event.target.value);
+    setPage(1);
+  };
+  const filterTo = (setter) => (value) => {
+    setter(String(value));
     setPage(1);
   };
   const afterSave = async (message) => {
@@ -260,51 +277,33 @@ export default function PersonnelManagement({ view = "people" }) {
                 <Search size={17} />
                 <input value={keyword} onChange={filterChange(setKeyword)} placeholder="Tìm theo tên, mã, email, số điện thoại..." />
               </label>
-              <label>
-                <Building2 size={15} />
-                <select value={unitFilter} onChange={filterChange(setUnitFilter)}>
-                  <option value="">Tất cả tổ, nhóm</option>
-                  {unitGroups.map(({ root, children }) => (
-                    <optgroup key={root.id} label={root.name}>
-                      <option value={root.id}>Cả {root.name}</option>
-                      {children.map((child) => (
-                        <option key={child.id} value={child.id}>
-                          {child.name}
-                        </option>
-                      ))}
-                    </optgroup>
-                  ))}
-                  {orphanUnits.map((unit) => (
-                    <option key={unit.id} value={unit.id}>
-                      {unit.label}
-                    </option>
-                  ))}
-                  <option value="none">Giáo viên chưa thuộc tổ, nhóm</option>
-                </select>
-              </label>
-              <label>
-                <ShieldCheck size={15} />
-                <select value={roleFilter} onChange={filterChange(setRoleFilter)}>
-                  <option value="">Tất cả vai trò</option>
-                  {data.roles.map((role) => (
-                    <option key={role.id} value={role.code}>
-                      {role.name}
-                    </option>
-                  ))}
-                  <option value="none">Chưa có vai trò</option>
-                </select>
-              </label>
-              <label>
-                <UserCheck size={15} />
-                <select value={statusFilter} onChange={filterChange(setStatusFilter)}>
-                  <option value="">Tất cả trạng thái</option>
-                  {Object.entries(STATUS_LABELS).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <Dropdown
+                label="Tổ, nhóm"
+                icon={Building2}
+                value={unitFilter}
+                onChange={filterTo(setUnitFilter)}
+                options={unitOptions}
+              />
+              <Dropdown
+                label="Vai trò"
+                icon={ShieldCheck}
+                value={roleFilter}
+                onChange={filterTo(setRoleFilter)}
+                options={[
+                  { value: "", label: "Tất cả vai trò" },
+                  { divider: true },
+                  ...data.roles.map((role) => ({ value: role.code, label: role.name })),
+                  { divider: true },
+                  { value: "none", label: "Chưa có vai trò" },
+                ]}
+              />
+              <Dropdown
+                label="Trạng thái"
+                icon={UserCheck}
+                value={statusFilter}
+                onChange={filterTo(setStatusFilter)}
+                options={[{ value: "", label: "Tất cả trạng thái" }, { divider: true }, ...Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))]}
+              />
               <button className="reset-btn" onClick={resetFilters}>
                 <RotateCcw size={15} /> Đặt lại
               </button>
