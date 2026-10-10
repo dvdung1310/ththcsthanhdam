@@ -24,6 +24,7 @@ import { useConfirm } from "./ConfirmDialog";
 import Dropdown from "./Dropdown";
 import FilePreview from "./FilePreview";
 import ActionMenu from "./ActionMenu";
+import TitleInput from "./TitleInput";
 import { CompactAssignees, ReviewerPicker, RichTextEditor } from "./TaskManagement";
 import { SharedFilePicker } from "./TaskDocuments";
 import { formatBytes } from "./fileUtils";
@@ -492,7 +493,7 @@ function BatchView({ batch, refs, confirm, onChange, onDeleted, onError, onSucce
         {created.length > 0 && (
           <div className="ai-created">
             <b><CheckCircle2 size={15} /> Đã tạo {created.length} công việc</b>
-            <ul>{created.map((item) => <li key={item.code}><Link to={`/tasks/${item.code}`}>{item.code}</Link> {item.title}</li>)}</ul>
+            <ul>{created.map((item) => <li key={item.code} title={item.title}><Link to={`/tasks/${item.code}`}>{item.code}</Link> {item.title.length > 160 ? `${item.title.slice(0, 160)}…` : item.title}</li>)}</ul>
             {!batch.drafts.length && <Link className="primary-btn" to="/tasks">Về danh sách công việc</Link>}
           </div>
         )}
@@ -545,7 +546,7 @@ function DraftCard({ index, draft, refs, sources, state, problems, selected, onS
       <header>
         <input type="checkbox" checked={selected} onChange={onSelect} aria-label="Chọn bản nháp" />
         <span className="ai-index">{index + 1}</span>
-        <input className="ai-title" value={payload.title} placeholder="Tên công việc" onChange={(event) => onEdit({ title: event.target.value })} />
+        <TitleInput className="ai-title" value={payload.title} placeholder="Tên công việc" onChange={(event) => onEdit({ title: event.target.value })} />
         <span className="ai-save">{state.publishing ? <LoaderCircle size={14} className="spin" /> : state.saving ? "Đang lưu…" : state.saved ? "Đã lưu" : ""}</span>
         <ActionMenu
           items={[

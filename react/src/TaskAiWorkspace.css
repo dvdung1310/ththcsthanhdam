@@ -477,8 +477,20 @@
 
 .ai-draft header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
+}
+
+.ai-draft header > input[type="checkbox"] {
+  margin-top: 9px;
+}
+
+.ai-draft header > .ai-index {
+  margin-top: 6px;
+}
+
+.ai-draft header > .ai-save {
+  margin-top: 8px;
 }
 
 .ai-index {
@@ -494,9 +506,7 @@
   font-weight: 700;
 }
 
-.ai-title {
-  flex: 1;
-  min-width: 0;
+.ai-title textarea {
   padding: 6px 8px;
   border: 1px solid transparent;
   border-radius: 7px;
@@ -507,11 +517,11 @@
   font-weight: 700;
 }
 
-.ai-title:hover {
+.ai-title textarea:hover {
   border-color: #e6e9f0;
 }
 
-.ai-title:focus {
+.ai-title textarea:focus {
   border-color: var(--c-primary-line);
   outline: 0;
   background: #fff;
