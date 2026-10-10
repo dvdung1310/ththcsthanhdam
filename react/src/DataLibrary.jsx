@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Link } from "react-router";
 import { createPortal } from "react-dom";
 import {
   CheckCircle2,
@@ -1010,7 +1011,7 @@ function MyFiles({ onError, onSuccess, error, onOpenLocation }) {
     setter(event.target.value);
     setPage(1);
   };
-  const rowKey = (file) => `${file.id}-${file.source}`;
+  const rowKey = (file) => String(file.id);
   const url = (file) => `/api/my-files/${file.id}/download`;
   const [preview, setPreview] = useState(null);
   const openFile = (file) => {
@@ -1112,11 +1113,11 @@ function MyFiles({ onError, onSuccess, error, onOpenLocation }) {
                     <span className="dl-node-icon file"><Icon size={17} /></span>
                     <span className="dl-name-text">
                       <b title={file.name}>{file.name}</b>
-                      <small><span className={`dl-source ${file.source}`}>{SOURCE_LABELS[file.source]}</span></small>
+                      <small>{(file.sources?.length ? file.sources : [file.source]).map((source) => <span key={source} className={`dl-source ${source}`}>{SOURCE_LABELS[source]}</span>)}</small>
                     </span>
                   </td>
-                  <td className="dl-col-optional dl-task-cell" title={file.task ? `${file.task.code} · ${file.task.title}` : undefined}>
-                    {file.task ? <><b>{file.task.code}</b> · {file.task.title}</> : <span className="dl-muted">Công việc đã bị xóa</span>}
+                  <td className="dl-col-optional dl-task-cell" onClick={(e) => e.stopPropagation()}>
+                    <FileTasks tasks={file.tasks ?? (file.task ? [file.task] : [])} />
                   </td>
                   <td className="dl-col-optional dl-muted">{formatBytes(file.size)}</td>
                   <td onClick={(e) => e.stopPropagation()}>
@@ -1197,6 +1198,37 @@ function MyFiles({ onError, onSuccess, error, onOpenLocation }) {
   );
 }
 
+function FileTasks({ tasks }) {
+  const [open, setOpen] = useState(false);
+  if (!tasks.length) return <span className="dl-muted">Công việc đã bị xóa</span>;
+  const [first, ...others] = tasks;
+  return (
+    <span className="dl-file-tasks" onMouseLeave={() => setOpen(false)}>
+      <Link to={`/tasks/${first.code}`} className="dl-file-task" title={`${first.code} · ${first.title}`}>
+        <b>{first.code}</b> · {first.title}
+      </Link>
+      {others.length > 0 && (
+        <>
+          <button type="button" className="dl-location-more" aria-expanded={open} onClick={() => setOpen(!open)} onMouseEnter={() => setOpen(true)}>
+            +{others.length} công việc
+          </button>
+          {open && (
+            <span className="dl-file-tasks-pop" role="tooltip">
+              <small>Dùng trong {tasks.length} công việc</small>
+              {tasks.map((task) => (
+                <Link key={`${task.id}-${task.source}`} to={`/tasks/${task.code}`} title={task.title}>
+                  <b>{task.code}</b>
+                  <span>{task.title}</span>
+                </Link>
+              ))}
+            </span>
+          )}
+        </>
+      )}
+    </span>
+  );
+}
+
 function MyFileDetail({ file, onClose, onOpen, onDownload, onShare, onOpenLocation }) {
   return (
     <aside className="dl-detail" aria-label={`Chi tiết ${file.name}`}>
@@ -1210,7 +1242,7 @@ function MyFileDetail({ file, onClose, onOpen, onDownload, onShare, onOpenLocati
         <div className="dl-detail-head"><h4>Thông tin</h4></div>
         <InfoRows
           rows={[
-            ["Nguồn", <span className={`dl-source ${file.source}`}>{SOURCE_LABELS[file.source]}</span>],
+            ["Nguồn", <span className="dl-sources">{(file.sources?.length ? file.sources : [file.source]).map((source) => <span key={source} className={`dl-source ${source}`}>{SOURCE_LABELS[source]}</span>)}</span>],
             ["Loại", fileKind(file.name, file.mime_type)],
             ["Dung lượng", formatBytes(file.size)],
             ["Ngày tải lên", fullDate(file.created_at)],
@@ -1218,13 +1250,15 @@ function MyFileDetail({ file, onClose, onOpen, onDownload, onShare, onOpenLocati
         />
       </section>
       <section>
-        <div className="dl-detail-head"><h4>Công việc</h4></div>
-        {file.task ? (
-          <div className="dl-detail-task">
-            <b>{file.task.code}</b>
-            <span>{file.task.title}</span>
-            <small className={`dl-task-status ${file.task.status}`}>{TASK_STATUS[file.task.status] ?? file.task.status}</small>
-          </div>
+        <div className="dl-detail-head"><h4>Công việc{file.tasks?.length > 1 ? ` · ${file.tasks.length}` : ""}</h4></div>
+        {(file.tasks ?? (file.task ? [file.task] : [])).length ? (
+          (file.tasks ?? [file.task]).map((task) => (
+            <Link key={`${task.id}-${task.source}`} to={`/tasks/${task.code}`} className="dl-detail-task">
+              <b>{task.code}</b>
+              <span>{task.title}</span>
+              <small className={`dl-task-status ${task.status}`}>{TASK_STATUS[task.status] ?? task.status}{task.source === "submission" ? " · bài nộp" : ""}</small>
+            </Link>
+          ))
         ) : (
           <p className="dl-detail-note">Công việc chứa file này đã bị xóa.</p>
         )}
