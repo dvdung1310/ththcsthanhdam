@@ -103,7 +103,7 @@ class EvaluationController extends Controller
                 'active' => ($active = EvaluationTemplate::where('is_active', true)->where('audience', $audience)->first()) ? ['id' => $active->id, 'name' => $active->name] : null,
             ])->values(),
             'scorer_ids' => $period ? $period->scorers()->pluck('users.id') : [],
-            'scorer_candidates' => $this->scorerCandidates(),
+            'scorer_candidates' => $this->scorerCandidates($period),
             'assignable_scorers' => $this->assignableScorers(),
             'units' => Department::orderBy('name')->get(['id', 'name', 'type', 'parent_id', 'is_active'])
                 ->filter(fn (Department $unit) => $unit->is_active || $teachers->contains(fn ($t) => $t->departments->contains('id', $unit->id)))
@@ -150,6 +150,7 @@ class EvaluationController extends Controller
         $teachers = $this->eligibleOnly($data['teacher_ids']);
         $templates = $this->templatesFor($teachers);
         $this->assertScorers($teachers, $data['scorer_ids'] ?? []);
+        $this->assertBoardMembers($data['scorer_ids'] ?? []);
 
         $period = DB::transaction(function () use ($data, $templates, $request, $teachers) {
             $period = EvaluationPeriod::create([
@@ -189,6 +190,7 @@ class EvaluationController extends Controller
         $templates = $this->templatesFor($added);
         $kept = Employee::with('user.roles')->whereIn('id', $wanted)->get();
         $this->assertScorers($kept, $data['scorer_ids'] ?? $period->scorers()->pluck('users.id')->all());
+        $this->assertBoardMembers($data['scorer_ids'] ?? [], $period);
         $dueChanged = array_key_exists('self_due_on', $data) && ($data['self_due_on'] ?? null) !== $period->self_due_on?->toDateString();
 
         DB::transaction(function () use ($period, $data, $added, $removed, $templates) {
@@ -673,6 +675,12 @@ class EvaluationController extends Controller
         abort_if($employees->isNotEmpty() && $scorerIds === [], 422, 'Chọn ít nhất một người chấm cột “BGH đánh giá”.');
     }
 
+    private function assertBoardMembers(array $scorerIds, ?EvaluationPeriod $period = null): void
+    {
+        $outside = collect($scorerIds)->map(fn ($id) => (int) $id)->diff($this->scorerCandidates($period)->pluck('id'));
+        abort_if($outside->isNotEmpty(), 422, 'Người chấm cột “BGH đánh giá” của kỳ phải có vai trò Ban giám hiệu.');
+    }
+
     private function syncSheetScorers(EvaluationPeriod $period, array $rows): void
     {
         $sheets = $period->evaluations()->with('teacher')->get()->keyBy('teacher_id');
@@ -702,14 +710,17 @@ class EvaluationController extends Controller
             ->values();
     }
 
-    private function scorerCandidates(): Collection
+    private function scorerCandidates(?EvaluationPeriod $period = null): Collection
     {
+        $current = $period ? $period->scorers()->pluck('users.id')->all() : [];
+
         return User::with('roles')->where('status', 'active')
-            ->whereHas('roles', fn ($r) => $r->whereIn('code', [Role::HIEU_TRUONG, Role::PHO_HIEU_TRUONG, Role::BAN_GIAM_HIEU, Role::THU_KY]))
+            ->where(fn ($q) => $q->whereHas('roles', fn ($r) => $r->where('code', Role::BAN_GIAM_HIEU))->orWhereIn('id', $current))
             ->orderBy('name')->get()
             ->map(fn (User $user) => [
                 'id' => $user->id, 'name' => $user->name, 'avatar_url' => $this->avatar($user), 'roles' => $user->roleLabels(),
                 'employee_id' => $user->employee?->id, 'suggested' => $user->roles->contains('code', Role::BAN_GIAM_HIEU),
+                'outside' => ! $user->roles->contains('code', Role::BAN_GIAM_HIEU),
             ])->values();
     }
 
