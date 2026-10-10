@@ -5,7 +5,7 @@ import "./RolePermissionMatrix.css";
 
 const MODULE_LABELS = {
   dashboard: "Tổng quan",
-  teachers: "Nhân sự",
+  personnel: "Nhân sự",
   tasks: "Công việc",
   library: "Kho dữ liệu",
   evaluation: "Đánh giá thi đua",

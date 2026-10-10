@@ -14,7 +14,7 @@ import "./TaskActionToolbar.css";
 export const emptyActionFilters = {
   search: "",
   status: "",
-  teacher_id: "",
+  employee_id: "",
   deadline: "",
   priority: "",
   category_id: "",
@@ -151,9 +151,9 @@ export default function TaskActionFilters({
         </label>
         {select("status", "Trạng thái", Object.entries(statuses))}
         {select(
-          "teacher_id",
+          "employee_id",
           "Người thực hiện",
-          (refs.filter_teachers || []).map((t) => [t.id, t.name]),
+          (refs.filter_employees || []).map((t) => [t.id, t.name]),
         )}
         {select("deadline", "Thời hạn", [
           ["today", "Hôm nay"],

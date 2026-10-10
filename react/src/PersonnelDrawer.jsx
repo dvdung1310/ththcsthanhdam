@@ -93,8 +93,8 @@ export default function PersonnelDrawer({
 
   const schoolRoles = roles.filter((role) => role.scope !== "unit");
   const giaoVienId = roles.find((role) => role.code === "giao_vien")?.id;
-  const lockedTeacher = !isNew && person.is_teacher;
-  const isTeacher = canAssignRoles ? form.roles.some((row) => row.role_id === giaoVienId) : isNew || person.is_teacher;
+  const lockedTeacher = !isNew && person.is_employee;
+  const isTeacher = canAssignRoles ? form.roles.some((row) => row.role_id === giaoVienId) : isNew || person.is_employee;
   const toggleRole = (role) =>
     set(
       "roles",
@@ -305,7 +305,7 @@ export default function PersonnelDrawer({
                 <h4>Thông tin giáo viên</h4>
                 <div className="drawer-grid">
                   <label>
-                    Mã giáo viên
+                    Mã nhân sự
                     <input
                       value={form.employee_code}
                       placeholder="Để trống để tự tạo"
@@ -345,10 +345,10 @@ export default function PersonnelDrawer({
               </section>
             )}
 
-            {canViewEvaluations && person?.teacher_id && (
+            {canViewEvaluations && person?.employee_id && (
               <section>
                 <h4>Thi đua</h4>
-                <EvaluationTeacherHistory teacherId={person.teacher_id} />
+                <EvaluationTeacherHistory teacherId={person.employee_id} />
               </section>
             )}
           </div>

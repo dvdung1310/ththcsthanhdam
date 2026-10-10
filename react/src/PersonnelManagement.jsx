@@ -35,14 +35,14 @@ const byName = (a, b) => collator.compare(givenName(a.name), givenName(b.name)) 
 const STATUS_ORDER = { working: 0, on_leave: 1, suspended: 2, locked: 3, terminated: 4 };
 const SORTERS = {
   name: byName,
-  code: (a, b) => (a.is_teacher ? 0 : 1) - (b.is_teacher ? 0 : 1) || collator.compare(a.employee_code ?? "", b.employee_code ?? "", { numeric: true }),
+  code: (a, b) => (a.is_employee ? 0 : 1) - (b.is_employee ? 0 : 1) || collator.compare(a.employee_code ?? "", b.employee_code ?? "", { numeric: true }),
   unit: (a, b) => (a.units.length ? 0 : 1) - (b.units.length ? 0 : 1) || collator.compare(a.units[0]?.label ?? "", b.units[0]?.label ?? ""),
   status: (a, b) => (STATUS_ORDER[statusOf(a)] ?? 9) - (STATUS_ORDER[statusOf(b)] ?? 9),
 };
 
 const statusOf = (person) => {
   if (!person.is_active) return person.employment_status === "terminated" ? "terminated" : "locked";
-  return person.is_teacher ? person.employment_status : "working";
+  return person.is_employee ? person.employment_status : "working";
 };
 
 const STATUS_LABELS = { ...EMPLOYMENT_LABELS, locked: "Đã khóa" };
@@ -120,7 +120,7 @@ export default function PersonnelManagement({ view = "people" }) {
     return (
       text.includes(keyword.toLowerCase()) &&
       (unitFilter === "" ||
-        (unitFilter === "none" ? person.is_teacher && !person.unit_ids.length : person.unit_path_ids.includes(Number(unitFilter)))) &&
+        (unitFilter === "none" ? person.is_employee && !person.unit_ids.length : person.unit_path_ids.includes(Number(unitFilter)))) &&
       (roleFilter === "" || (roleFilter === "none" ? !person.roles.length : person.roles.some((role) => role.code === roleFilter))) &&
       (statusFilter === "" || statusOf(person) === statusFilter)
     );
@@ -132,7 +132,7 @@ export default function PersonnelManagement({ view = "people" }) {
 
   const stats = {
     total: data.data.length,
-    teachers: data.data.filter((person) => person.is_teacher).length,
+    teachers: data.data.filter((person) => person.is_employee).length,
     leaders: data.data.filter((person) => person.roles.some((role) => LEADER_ROLES.includes(role.code))).length,
     working: data.data.filter((person) => statusOf(person) === "working").length,
   };
@@ -318,7 +318,7 @@ export default function PersonnelManagement({ view = "people" }) {
               <table className="personnel-table">
                 <thead>
                   <tr>
-                    {[["name", "Nhân sự"], ["code", "Mã GV"], ["contact", "Liên hệ"], ["unit", "Tổ / nhóm"], ["roles", "Vai trò"], ["status", "Trạng thái"]].map(([key, label]) =>
+                    {[["name", "Nhân sự"], ["code", "Mã NS"], ["contact", "Liên hệ"], ["unit", "Tổ / nhóm"], ["roles", "Vai trò"], ["status", "Trạng thái"]].map(([key, label]) =>
                       SORTERS[key] ? (
                         <th
                           key={key}
@@ -355,7 +355,7 @@ export default function PersonnelManagement({ view = "people" }) {
                           </div>
                         </td>
                         <td>
-                          {person.is_teacher ? <code>{person.employee_code}</code> : <span className="staff-badge">Tài khoản trường</span>}
+                          {person.is_employee ? <code>{person.employee_code}</code> : <span className="staff-badge">Tài khoản trường</span>}
                         </td>
                         <td>
                           <div className="contact-cell">
@@ -379,7 +379,7 @@ export default function PersonnelManagement({ view = "people" }) {
                               ))}
                             </div>
                           ) : (
-                            <span className="muted-cell">{person.is_teacher ? "Chưa thuộc tổ/nhóm" : "—"}</span>
+                            <span className="muted-cell">{person.is_employee ? "Chưa thuộc tổ/nhóm" : "—"}</span>
                           )}
                         </td>
                         <td>

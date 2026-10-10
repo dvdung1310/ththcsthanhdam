@@ -149,7 +149,7 @@ export default function PeoplePicker({
       <div className="pp-top">
         <label className="pp-search">
           <Search size={15} />
-          <input autoFocus value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm theo tên hoặc mã giáo viên..." />
+          <input autoFocus value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm theo tên hoặc mã nhân sự..." />
         </label>
         {onClose && (
           <button type="button" className="pp-close" onClick={onClose} title="Đóng" aria-label="Đóng">

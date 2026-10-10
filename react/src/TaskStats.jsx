@@ -20,7 +20,7 @@ export default function TaskStats({ onTask }) {
     year: now.getFullYear(),
     month: now.getMonth() + 1,
     department_id: "",
-    teacher_id: "",
+    employee_id: "",
     category_id: "",
     compare: "previous",
   });
@@ -54,7 +54,7 @@ export default function TaskStats({ onTask }) {
     setFilters((f) => ({
       ...f,
       [key]: value,
-      ...(key === "department_id" ? { teacher_id: "" } : {}),
+      ...(key === "department_id" ? { employee_id: "" } : {}),
     }));
   const refs = report?.references || {},
     current = report?.current || {},
@@ -139,9 +139,9 @@ export default function TaskStats({ onTask }) {
         </label>
         {options("department_id", "Tổ / nhóm", refs.departments)}
         {options(
-          "teacher_id",
-          "Giáo viên",
-          refs.teachers?.filter(
+          "employee_id",
+          "Nhân sự",
+          refs.employees?.filter(
             (t) =>
               !filters.department_id ||
               t.department_ids.includes(+filters.department_id),
@@ -172,8 +172,8 @@ export default function TaskStats({ onTask }) {
               {refs.departments?.find((d) => d.id === +filters.department_id)
                 ?.name || "Tất cả đơn vị trong phạm vi"}{" "}
               ·{" "}
-              {refs.teachers?.find((t) => t.id === +filters.teacher_id)?.name ||
-                "Tất cả giáo viên"}
+              {refs.employees?.find((t) => t.id === +filters.employee_id)?.name ||
+                "Tất cả nhân sự"}
               {previous && " · So với " + report.comparison_period}
               {report.no_deadline_open > 0 &&
                 ` · ${report.no_deadline_open} việc không thời hạn đang mở (không tính vào thống kê tháng)`}
@@ -279,7 +279,7 @@ export default function TaskStats({ onTask }) {
                     <span>
                       {d.name}
                       <small>
-                        {d.teachers} giáo viên · {d.completed}/{d.assigned} việc hoàn thành
+                        {d.employees} nhân sự · {d.completed}/{d.assigned} việc hoàn thành
                         {d.overdue > 0 && ` · ${d.overdue} quá hạn`}
                       </small>
                     </span>
@@ -295,9 +295,9 @@ export default function TaskStats({ onTask }) {
             </article>
             <section className="kpi-table-card">
               <div className="kpi-filters">
-                <h3>Theo giáo viên</h3>
+                <h3>Theo nhân sự</h3>
                 <span className="kpi-result-count">
-                  {report.data.length} giáo viên
+                  {report.data.length} nhân sự
                 </span>
               </div>
               <div className="kpi-table-wrap">
@@ -316,13 +316,13 @@ export default function TaskStats({ onTask }) {
                   </thead>
                   <tbody>
                     {report.data.map((r) => (
-                      <tr key={r.teacher_id}>
+                      <tr key={r.employee_id}>
                         <td>
                           <button
                             className="kpi-teacher-link"
                             onClick={() => setSelected(r)}
                           >
-                            <b>{r.teacher}</b>
+                            <b>{r.employee}</b>
                             <small>{r.employee_code} · Xem công việc</small>
                           </button>
                         </td>
@@ -342,7 +342,7 @@ export default function TaskStats({ onTask }) {
                     {!report.data.length && (
                       <tr>
                         <td colSpan="8" className="kpi-empty">
-                          Không có giáo viên phù hợp.
+                          Không có nhân sự phù hợp.
                         </td>
                       </tr>
                     )}
@@ -365,11 +365,11 @@ export default function TaskStats({ onTask }) {
             className="kpi-task-modal"
             role="dialog"
             aria-modal="true"
-            aria-label={"Công việc của " + selected.teacher}
+            aria-label={"Công việc của " + selected.employee}
           >
             <header>
               <div>
-                <h3>Công việc của {selected.teacher}</h3>
+                <h3>Công việc của {selected.employee}</h3>
                 <p>
                   Tháng {report.period} · {selected.tasks.length} công việc
                 </p>

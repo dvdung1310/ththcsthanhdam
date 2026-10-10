@@ -88,8 +88,8 @@ const navTree = [
     label: "Nhân sự",
     icon: Users,
     children: [
-      { key: "personnel", label: "Danh sách nhân sự", title: "Nhân sự", path: "/personnel", permission: "teachers.view" },
-      { key: "structure", label: "Cơ cấu tổ chức", path: "/personnel/structure", permission: "teachers.view" },
+      { key: "personnel", label: "Danh sách nhân sự", title: "Nhân sự", path: "/personnel", permission: "personnel.view" },
+      { key: "structure", label: "Cơ cấu tổ chức", path: "/personnel/structure", permission: "personnel.view" },
     ],
   },
   { key: "roles", label: "Vai trò & quyền", icon: ShieldCheck, path: "/roles", permission: "roles.manage" },
