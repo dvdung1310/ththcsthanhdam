@@ -9,6 +9,7 @@ import "./KpiTaskDetails.css";
 import "./KpiAnalytics.css";
 import "./Evaluation.css";
 import "./TaskStatsOverview.css";
+import "./Skeleton.css";
 import TaskStatsPeople, { PersonTasksDialog } from "./TaskStatsPeople";
 import TaskStatsUnits from "./TaskStatsUnits";
 
@@ -48,7 +49,7 @@ export default function TaskStats({ onTask }) {
     setError("");
     setSelected(null);
     const params = new URLSearchParams(Object.entries(filters).filter(([, v]) => v !== ""));
-    apiFetch("/api/task-stats?" + params, { signal: controller.signal })
+    apiFetch("/api/task-stats?" + params, { signal: controller.signal, silent: true })
       .then(async (r) => {
         const p = await r.json();
         if (!r.ok) throw new Error(p.message || "Không thể tải thống kê");
@@ -161,7 +162,7 @@ export default function TaskStats({ onTask }) {
 
       {error && <div className="kpi-error">{error}</div>}
       {loading && !report ? (
-        <p role="status">Đang tải thống kê…</p>
+        <StatsSkeleton />
       ) : (
         !error &&
         report && (
@@ -305,5 +306,57 @@ function Trend({ trend, selected, onPick }) {
         ))}
       </ul>
     </section>
+  );
+}
+
+function StatsSkeleton() {
+  const bar = (width, height = 12, extra = {}) => <i className="sk" style={{ width, height, ...extra }} />;
+  return (
+    <div className="tso-skeleton" aria-busy="true" aria-label="Đang tải thống kê">
+      <div className="tso-chips">
+        {bar(150, 28, { borderRadius: 99 })}
+        {bar(190, 28, { borderRadius: 99 })}
+      </div>
+      <section className="tso-cards">
+        {Array.from({ length: 4 }, (_, index) => (
+          <article key={index}>
+            {bar("55%", 13)}
+            {bar("40%", 28)}
+            {bar("70%")}
+            {bar("80%")}
+          </article>
+        ))}
+      </section>
+      <section className="kpi-analysis-panel tso-strip">
+        {bar(220, 16)}
+        {bar("100%", 14, { borderRadius: 99 })}
+        <div className="tso-sk-row">{Array.from({ length: 5 }, (_, index) => <span key={index}>{bar("70%")}{bar("40%", 18)}</span>)}</div>
+      </section>
+      <section className="kpi-analysis-panel tso-trend">
+        {bar(160, 16)}
+        <div className="tso-sk-columns">
+          {[55, 85, 45, 115, 75, 150].map((height, index) => (
+            <span key={index}>
+              {bar(56, height, { borderRadius: "7px 7px 3px 3px" })}
+              {bar(48, 11)}
+            </span>
+          ))}
+        </div>
+      </section>
+      {[0, 1].map((table) => (
+        <section key={table} className="kpi-table-card tso-sk-table">
+          <header>{bar(180, 16)}{bar(240, 32, { borderRadius: 9 })}</header>
+          {Array.from({ length: 6 }, (_, row) => (
+            <div key={row} className="tso-sk-line">
+              {bar("22%", 14)}
+              {bar("12%")}
+              {bar("30%", 10, { borderRadius: 99 })}
+              {bar("10%")}
+              {bar("8%")}
+            </div>
+          ))}
+        </section>
+      ))}
+    </div>
   );
 }
