@@ -3,6 +3,7 @@ import { Camera, CheckCircle2, Eye, EyeOff, KeyRound, Mail, ShieldCheck, UserRou
 import { apiFetch } from "./api";
 import "./PersonalProfile.css";
 import Avatar from "./Avatar";
+import DeviceNotificationsCard from "./DeviceNotificationsCard";
 
 export default function PersonalProfile({ user, onUserChanged }) {
   const fileRef = useRef(null);
@@ -84,6 +85,7 @@ export default function PersonalProfile({ user, onUserChanged }) {
           {passwordMessage && <p className="personal-success"><CheckCircle2 size={15}/>{passwordMessage}</p>}
         </form>
       </section>
+      <DeviceNotificationsCard />
     </div>
   </div>;
 }
