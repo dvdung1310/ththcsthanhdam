@@ -58,6 +58,7 @@ import "./PermissionStates.css";
 import "./SystemTypography.css";
 import "./GlobalLoading.css";
 import "./NotificationTaskStates.css";
+import LeaveTracking from "./LeaveTracking";
 import Avatar from "./Avatar";
 
 const navTree = [
@@ -90,6 +91,7 @@ const navTree = [
     children: [
       { key: "personnel", label: "Danh sách nhân sự", title: "Nhân sự", path: "/personnel", permission: "personnel.view" },
       { key: "structure", label: "Cơ cấu tổ chức", path: "/personnel/structure", permission: "personnel.view" },
+      { key: "leave", label: "Theo dõi nghỉ", path: "/personnel/leave" },
     ],
   },
   { key: "roles", label: "Vai trò & quyền", icon: ShieldCheck, path: "/roles", permission: "roles.manage" },
@@ -607,6 +609,7 @@ function App() {
           <Route path="/evaluations/templates/:templateId?" element={guard("evaluation-templates", <EvaluationTemplates />)} />
           <Route path="/personnel" element={guard("personnel", <PersonnelManagement view="people" />)} />
           <Route path="/personnel/structure" element={guard("structure", <PersonnelManagement view="structure" />)} />
+          <Route path="/personnel/leave" element={guard("leave", <LeaveTracking />)} />
           <Route path="/task-settings" element={guard("task-settings", <TaskConfiguration />)} />
           <Route path="/roles" element={guard("roles", <RolePermissionMatrix />)} />
           <Route path="/profile" element={<PersonalProfile user={authUser} onUserChanged={setAuthUser} />} />
