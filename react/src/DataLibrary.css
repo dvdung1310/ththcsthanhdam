@@ -424,7 +424,7 @@ body.dl-resizing {
   bottom: 0;
   z-index: 70;
   width: min(440px, 100%);
-  padding: 20px 22px 24px;
+  padding: 20px 22px calc(24px + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   gap: 18px;

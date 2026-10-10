@@ -285,7 +285,7 @@
 }
 
 .task-drawer-foot {
-  padding: 12px 22px;
+  padding: 12px 22px calc(12px + env(safe-area-inset-bottom));
   display: flex;
   justify-content: flex-start;
   border-top: 1px solid #eceef3;

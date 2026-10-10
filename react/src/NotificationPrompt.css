@@ -1,7 +1,7 @@
 .notify-prompt {
   position: fixed;
   right: 20px;
-  bottom: 20px;
+  bottom: calc(20px + env(safe-area-inset-bottom));
   z-index: 150;
   width: min(380px, calc(100vw - 24px));
   padding: 16px 16px 14px;
@@ -106,7 +106,7 @@
 @media (max-width: 640px) {
   .notify-prompt {
     right: 12px;
-    bottom: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom));
     left: 12px;
     width: auto;
   }
