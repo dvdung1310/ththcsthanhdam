@@ -25,7 +25,7 @@ class Evaluation extends Model
     }
 
     public function period() { return $this->belongsTo(EvaluationPeriod::class, 'period_id'); }
-    public function teacher() { return $this->belongsTo(Teacher::class); }
+    public function teacher() { return $this->belongsTo(Employee::class, 'teacher_id'); }
     public function scores() { return $this->hasMany(EvaluationScore::class); }
     public function comments() { return $this->hasMany(EvaluationComment::class)->orderBy('id'); }
     public function unitScorer() { return $this->belongsTo(User::class, 'unit_scored_by'); }

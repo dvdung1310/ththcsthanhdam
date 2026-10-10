@@ -10,7 +10,7 @@ use App\Models\EvaluationScore;
 use App\Models\EvaluationTemplate;
 use App\Models\Role;
 use App\Models\StoredFile;
-use App\Models\Teacher;
+use App\Models\Employee;
 use App\Models\User;
 use App\Services\EvaluationScoring;
 use Carbon\CarbonImmutable;
@@ -70,7 +70,7 @@ class EvaluationHistorySeeder extends Seeder
         $this->sections = $this->criteria->whereNull('parent_id')->sortBy('position')->values();
         $this->grades = $template->grades ?? [];
         $this->buildProfiles();
-        $teachers = Teacher::with('user', 'departments')->whereIn('employee_code', array_keys($this->profiles))->get()->keyBy('employee_code');
+        $teachers = Employee::with('user', 'departments')->whereIn('employee_code', array_keys($this->profiles))->get()->keyBy('employee_code');
 
         $today = CarbonImmutable::now();
         for ($ago = self::MONTHS_BACK; $ago >= 0; $ago--) {
@@ -122,7 +122,7 @@ class EvaluationHistorySeeder extends Seeder
         }
     }
 
-    private function seedSheet(EvaluationPeriod $period, Teacher $teacher, CarbonImmutable $month, int $ago, string $stage, float $deduction, float $bonusChance, bool $homeroom): void
+    private function seedSheet(EvaluationPeriod $period, Employee $teacher, CarbonImmutable $month, int $ago, string $stage, float $deduction, float $bonusChance, bool $homeroom): void
     {
         $code = $teacher->employee_code;
         $violation = in_array([$code, $ago], $this->violations, true);
@@ -295,15 +295,15 @@ class EvaluationHistorySeeder extends Seeder
         return strtr($pool[mt_rand(0, count($pool) - 1)], ['{d}' => mt_rand(2, 26), '{m}' => $month->month, '{w}' => mt_rand(1, 4)]);
     }
 
-    private function duties(Teacher $teacher, bool $homeroom): string
+    private function duties(Employee $teacher, bool $homeroom): string
     {
-        $subject = DB::table('teacher_subject')->join('subjects', 'subjects.id', '=', 'teacher_subject.subject_id')->where('teacher_id', $teacher->id)->value('subjects.name') ?? 'chuyên môn';
+        $subject = DB::table('employee_subject')->join('subjects', 'subjects.id', '=', 'employee_subject.subject_id')->where('employee_id', $teacher->id)->value('subjects.name') ?? 'chuyên môn';
 
         return "- Giảng dạy môn {$subject} theo phân công.\n- Sinh hoạt chuyên môn tổ, dự giờ đồng nghiệp."
             .($homeroom ? "\n- Chủ nhiệm lớp, theo dõi nền nếp và liên hệ phụ huynh." : '');
     }
 
-    private function leaderFor(Teacher $teacher): User
+    private function leaderFor(Employee $teacher): User
     {
         $person = collect(DemoRoster::people())->firstWhere('code', $teacher->employee_code);
         $leader = $person ? DemoRoster::holder(Role::TO_TRUONG, $person['tổ']) : null;
@@ -317,7 +317,7 @@ class EvaluationHistorySeeder extends Seeder
     private function buildProfiles(): void
     {
         foreach (DemoRoster::people() as $handle => $person) {
-            if ($handle === DemoRoster::principal()) {
+            if (array_intersect(array_column($person['roles'], 0), Role::NOT_EVALUATED)) {
                 continue;
             }
             mt_srand(crc32('profile'.$person['code']));

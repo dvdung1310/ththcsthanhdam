@@ -6,15 +6,15 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class Teacher extends Model
+class Employee extends Model
 {
     use SoftDeletes;
 
     protected $fillable = ['user_id', 'employee_code', 'employment_status'];
 
     public function user() { return $this->belongsTo(User::class); }
-    public function departments() { return $this->belongsToMany(Department::class, 'teacher_department')->withPivot(['is_primary', 'starts_on', 'ends_on'])->withTimestamps(); }
-    public function subjects() { return $this->belongsToMany(Subject::class, 'teacher_subject')->withPivot(['is_primary', 'starts_on', 'ends_on'])->withTimestamps(); }
+    public function departments() { return $this->belongsToMany(Department::class, 'department_employee')->withPivot(['is_primary', 'starts_on', 'ends_on'])->withTimestamps(); }
+    public function subjects() { return $this->belongsToMany(Subject::class, 'employee_subject')->withPivot(['is_primary', 'starts_on', 'ends_on'])->withTimestamps(); }
 
     public function directUnitIds(): array
     {
@@ -30,10 +30,20 @@ class Teacher extends Model
         return Department::withAncestors($this->directUnitIds());
     }
 
+    public function scopeTeachers(Builder $query): Builder
+    {
+        return $query->whereHas('user.roles', fn ($r) => $r->where('code', Role::GIAO_VIEN));
+    }
+
+    public function isTeacher(): bool
+    {
+        return (bool) $this->user?->hasRole(Role::GIAO_VIEN);
+    }
+
     public function scopeInUnits(Builder $query, iterable $unitIds): Builder
     {
         $ids = Department::withDescendants($unitIds);
 
-        return $query->whereHas('departments', fn ($d) => $d->whereIn('departments.id', $ids ?: [0])->whereNull('teacher_department.ends_on'));
+        return $query->whereHas('departments', fn ($d) => $d->whereIn('departments.id', $ids ?: [0])->whereNull('department_employee.ends_on'));
     }
 }

@@ -17,7 +17,7 @@ trait DemoLookup
     {
         $email = $handle === 'admin' ? config('app.admin.email') : DemoRoster::email($handle);
 
-        return $this->usersByHandle[$handle] ??= User::with('teacher')->where('email', $email)->firstOrFail();
+        return $this->usersByHandle[$handle] ??= User::with('employee')->where('email', $email)->firstOrFail();
     }
 
     protected function unitId(string $name): int

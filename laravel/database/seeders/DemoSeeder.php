@@ -5,7 +5,7 @@ namespace Database\Seeders;
 use App\Models\Department;
 use App\Models\Role;
 use App\Models\Subject;
-use App\Models\Teacher;
+use App\Models\Employee;
 use App\Models\User;
 use Database\Seeders\Demo\DemoFiles;
 use Database\Seeders\Demo\DemoRoster;
@@ -42,20 +42,40 @@ class DemoSeeder extends Seeder
                     $user->update(['avatar_path' => DemoFiles::avatar($handle, $index)]);
                 }
                 $index++;
-                $teacher = Teacher::firstOrCreate(['user_id' => $user->id], ['employee_code' => $person['code'], 'employment_status' => $person['status']]);
+                $employee = Employee::firstOrCreate(['user_id' => $user->id], ['employee_code' => $person['code'], 'employment_status' => $person['status']]);
                 $subject = Subject::firstOrCreate(['name' => $person['subject']], ['code' => strtoupper(Str::slug($person['subject'], '_')), 'is_active' => true]);
                 $startsOn = in_array('new', $person['flags'], true) ? now()->subMonths(5)->startOfMonth()->toDateString() : self::JOINED_ON;
 
-                DB::table('teacher_department')->updateOrInsert(
-                    ['teacher_id' => $teacher->id, 'department_id' => $units[$person['unit']], 'starts_on' => $startsOn],
+                DB::table('department_employee')->updateOrInsert(
+                    ['employee_id' => $employee->id, 'department_id' => $units[$person['unit']], 'starts_on' => $startsOn],
                     ['is_primary' => true, 'ends_on' => null, 'created_at' => now(), 'updated_at' => now()],
                 );
-                DB::table('teacher_subject')->updateOrInsert(
-                    ['teacher_id' => $teacher->id, 'subject_id' => $subject->id, 'starts_on' => $startsOn],
+                DB::table('employee_subject')->updateOrInsert(
+                    ['employee_id' => $employee->id, 'subject_id' => $subject->id, 'starts_on' => $startsOn],
                     ['is_primary' => true, 'ends_on' => null, 'created_at' => now(), 'updated_at' => now()],
                 );
 
                 $this->assignRole($user, $roles[Role::GIAO_VIEN], null, $admin);
+                if ($person['homeroom']) {
+                    $this->assignRole($user, $roles[Role::GVCN], null, $admin);
+                }
+                foreach ($person['roles'] as [$roleCode, $roleUnit]) {
+                    $this->assignRole($user, $roles[$roleCode], $roleUnit ? $units[$roleUnit] : null, $admin);
+                }
+            }
+
+            foreach (DemoRoster::staff() as $handle => $person) {
+                $user = $this->account($person['name'], $handle, $person['phone'], true);
+                if (in_array('avatar', $person['flags'], true) && ! $user->avatar_path) {
+                    $user->update(['avatar_path' => DemoFiles::avatar($handle, $index)]);
+                }
+                $index++;
+                $employee = Employee::firstOrCreate(['user_id' => $user->id], ['employee_code' => $person['code'], 'employment_status' => $person['status']]);
+                DB::table('department_employee')->updateOrInsert(
+                    ['employee_id' => $employee->id, 'department_id' => $units[DemoRoster::OFFICE], 'starts_on' => self::JOINED_ON],
+                    ['is_primary' => true, 'ends_on' => null, 'created_at' => now(), 'updated_at' => now()],
+                );
+                $this->assignRole($user, $roles[Role::NHAN_VIEN], null, $admin);
                 foreach ($person['roles'] as [$roleCode, $roleUnit]) {
                     $this->assignRole($user, $roles[$roleCode], $roleUnit ? $units[$roleUnit] : null, $admin);
                 }
@@ -76,7 +96,7 @@ class DemoSeeder extends Seeder
     private function seedUnits(): array
     {
         $ids = [];
-        foreach (DemoRoster::UNITS as $toName => $groups) {
+        foreach ([...DemoRoster::UNITS, DemoRoster::OFFICE => []] as $toName => $groups) {
             $to = Department::firstOrCreate(['name' => $toName, 'parent_id' => null], ['code' => strtoupper(Str::slug($toName, '_')), 'type' => Department::TYPE_TO, 'is_active' => true]);
             $ids[$toName] = $to->id;
             foreach ($groups as $groupName) {

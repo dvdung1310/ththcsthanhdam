@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Department;
 use App\Models\Role;
-use App\Models\Teacher;
+use App\Models\Employee;
 use App\Models\User;
 use App\Services\RoleAssignments;
 use Illuminate\Http\JsonResponse;
@@ -24,15 +24,15 @@ class PersonnelController extends Controller
     {
         $actor = $request->user();
         $unitIds = $actor->managedUnitIds();
-        $users = User::with(['roles', 'teacher' => fn ($q) => $q->withTrashed(), 'teacher.departments' => fn ($q) => $q->wherePivotNull('ends_on')])
-            ->when($unitIds !== null, fn ($q) => $q->whereHas('teacher', fn ($t) => $t->inUnits($unitIds)))
+        $users = User::with(['roles', 'employee' => fn ($q) => $q->withTrashed(), 'employee.departments' => fn ($q) => $q->wherePivotNull('ends_on')])
+            ->when($unitIds !== null, fn ($q) => $q->whereHas('employee', fn ($t) => $t->inUnits($unitIds)))
             ->orderBy('name')->get();
 
         return response()->json([
             'data' => $users->map(fn (User $user) => $this->serialize($user))->values(),
-            'roles' => Role::all()->sortBy(fn (Role $role) => $this->roleOrder($role->code))->map(fn (Role $role) => $role->only(['id', 'code', 'name', 'scope', 'unit_type']))->values(),
+            'roles' => Role::all()->sortBy(fn (Role $role) => Role::rank($role->code))->map(fn (Role $role) => $role->only(['id', 'code', 'name', 'scope', 'unit_type']))->values(),
             'units' => Department::ordered($unitIds)->values(),
-            'can_manage' => $actor->hasPermission('teachers.manage'),
+            'can_manage' => $actor->hasPermission('personnel.manage'),
             'can_assign_roles' => $this->canAssignRoles($actor),
             'can_view_evaluations' => $actor->hasPermission('evaluation.manage'),
             'management_scope' => $unitIds === null ? 'school' : 'department',
@@ -50,12 +50,12 @@ class PersonnelController extends Controller
                 'name' => $data['name'], 'email' => $data['email'], 'phone' => $data['phone'] ?? null,
                 'password' => $data['password'], 'status' => $data['is_active'] ? 'active' : 'inactive', 'must_change_password' => true,
             ]);
-            if ($data['is_teacher']) {
-                Teacher::create(['user_id' => $user->id, 'employee_code' => filled($data['employee_code'] ?? null) ? $data['employee_code'] : $this->nextEmployeeCode(), 'employment_status' => $data['employment_status']]);
+            if ($data['is_employee']) {
+                Employee::create(['user_id' => $user->id, 'employee_code' => filled($data['employee_code'] ?? null) ? $data['employee_code'] : $this->nextEmployeeCode(), 'employment_status' => $data['employment_status']]);
             }
             $roles = array_key_exists('roles', $data)
                 ? $data['roles']
-                : ($data['is_teacher'] ? [['role_id' => Role::where('code', Role::GIAO_VIEN)->value('id')]] : []);
+                : ($data['is_employee'] ? [['role_id' => Role::where('code', Role::GIAO_VIEN)->value('id')]] : []);
 
             return [$user, $this->applyRolesAndUnits($actor, $user, $data, $roles)];
         });
@@ -77,12 +77,12 @@ class PersonnelController extends Controller
             if (! $data['is_active']) {
                 $user->update(['api_token' => null]);
             }
-            if ($data['is_teacher']) {
-                $teacher = Teacher::withTrashed()->firstOrNew(['user_id' => $user->id]);
-                $code = filled($data['employee_code'] ?? null) ? $data['employee_code'] : ($teacher->employee_code ?: $this->nextEmployeeCode());
-                $teacher->fill(['employee_code' => $code, 'employment_status' => $data['employment_status']])->save();
-                if ($teacher->trashed()) {
-                    $teacher->restore();
+            if ($data['is_employee']) {
+                $employee = Employee::withTrashed()->firstOrNew(['user_id' => $user->id]);
+                $code = filled($data['employee_code'] ?? null) ? $data['employee_code'] : ($employee->employee_code ?: $this->nextEmployeeCode());
+                $employee->fill(['employee_code' => $code, 'employment_status' => $data['employment_status']])->save();
+                if ($employee->trashed()) {
+                    $employee->restore();
                 }
             }
             $roles = array_key_exists('roles', $data) ? $data['roles'] : null;
@@ -104,9 +104,9 @@ class PersonnelController extends Controller
         }
 
         DB::transaction(function () use ($user) {
-            if ($teacher = $user->teacher) {
-                $teacher->update(['employment_status' => 'terminated']);
-                $teacher->delete();
+            if ($employee = $user->employee) {
+                $employee->update(['employment_status' => 'terminated']);
+                $employee->delete();
             }
             $user->update(['status' => 'inactive', 'api_token' => null]);
         });
@@ -117,44 +117,44 @@ class PersonnelController extends Controller
     private function applyRolesAndUnits(User $actor, User $user, array $data, ?array $roles): array
     {
         if ($roles !== null) {
-            $assignments = $this->assignments->normalize($roles, $data['is_teacher']);
+            $assignments = $this->assignments->normalize($roles, $data['is_employee']);
             $this->assignments->ensureOnePositionPerUnit($assignments);
             $this->assignments->guardAdmin($actor, $user, $assignments->pluck('role_id'));
             $this->assignments->resolveSingleHolders($user, $assignments, (bool) ($data['replace_holders'] ?? false));
             $this->assignments->sync($user, $assignments, $actor);
         }
-        if (! $data['is_teacher']) {
+        if (! $data['is_employee']) {
             return [];
         }
 
-        $teacher = $user->teacher()->first();
+        $employee = $user->employee()->first();
         $roleUnits = $user->roles()->whereNotNull('role_user.department_id')->pluck('role_user.department_id')->map(fn ($id) => (int) $id)->all();
         $managed = $actor->managedUnitIds();
-        $outOfScope = $managed === null ? [] : array_diff($teacher->directUnitIds(), $managed);
+        $outOfScope = $managed === null ? [] : array_diff($employee->directUnitIds(), $managed);
         $units = array_values(array_unique([...$data['unit_ids'], ...$outOfScope]));
         $missing = array_values(array_diff(array_unique($roleUnits), Department::withAncestors($units)));
-        $added = $roles === null ? [] : array_values(array_diff($missing, Department::withAncestors($teacher->directUnitIds())));
-        $this->syncUnits($teacher, [...$units, ...$missing]);
+        $added = $roles === null ? [] : array_values(array_diff($missing, Department::withAncestors($employee->directUnitIds())));
+        $this->syncUnits($employee, [...$units, ...$missing]);
 
         return array_map(fn ($id) => Department::pathLabel((int) $id), $added);
     }
 
     private function nextEmployeeCode(): string
     {
-        $highest = Teacher::withTrashed()->where('employee_code', 'like', 'GV%')->lockForUpdate()->pluck('employee_code')
-            ->map(fn (string $code) => preg_match('/^GV(\d+)$/', $code, $match) ? (int) $match[1] : 0)
+        $highest = Employee::withTrashed()->where('employee_code', 'like', 'NS%')->lockForUpdate()->pluck('employee_code')
+            ->map(fn (string $code) => preg_match('/^NS(\d+)$/', $code, $match) ? (int) $match[1] : 0)
             ->max() ?? 0;
 
-        return sprintf('GV%03d', $highest + 1);
+        return sprintf('NS%03d', $highest + 1);
     }
 
     private function validatePerson(Request $request, ?User $user = null): array
     {
-        $teacherId = $user ? Teacher::withTrashed()->where('user_id', $user->id)->value('id') : null;
+        $employeeId = $user ? Employee::withTrashed()->where('user_id', $user->id)->value('id') : null;
         $code = trim((string) $request->input('employee_code'));
-        $retired = $code === '' ? null : Teacher::onlyTrashed()->with('user')->where('employee_code', $code)->where('id', '!=', $teacherId ?? 0)->first();
+        $retired = $code === '' ? null : Employee::onlyTrashed()->with('user')->where('employee_code', $code)->where('id', '!=', $employeeId ?? 0)->first();
         if ($retired) {
-            throw ValidationException::withMessages(['employee_code' => 'Mã '.$code.' đang thuộc hồ sơ giáo viên đã xóa'.($retired->user ? ' của '.$retired->user->name : '').'.']);
+            throw ValidationException::withMessages(['employee_code' => 'Mã '.$code.' đang thuộc hồ sơ nhân sự đã xóa'.($retired->user ? ' của '.$retired->user->name : '').'.']);
         }
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -162,7 +162,7 @@ class PersonnelController extends Controller
             'phone' => ['nullable', 'string', 'max:20', Rule::unique('users', 'phone')->ignore($user?->id)],
             'password' => [$user ? 'nullable' : 'required', 'string', 'min:8'],
             'is_active' => ['required', 'boolean'],
-            'employee_code' => ['nullable', 'string', 'max:30', Rule::unique('teachers', 'employee_code')->ignore($teacherId)],
+            'employee_code' => ['nullable', 'string', 'max:30', Rule::unique('employees', 'employee_code')->ignore($employeeId)],
             'employment_status' => ['nullable', Rule::in(self::EMPLOYMENT_STATUSES)],
             'unit_ids' => ['nullable', 'array'],
             'unit_ids.*' => ['integer', Rule::exists('departments', 'id')->where('is_active', true)],
@@ -171,19 +171,19 @@ class PersonnelController extends Controller
             'roles.*.department_id' => ['nullable', 'exists:departments,id'],
             'replace_holders' => ['nullable', 'boolean'],
         ], [
-            'employee_code.unique' => 'Mã giáo viên đã tồn tại.',
+            'employee_code.unique' => 'Mã nhân sự đã tồn tại.',
             'email.unique' => 'Email đã được sử dụng.',
             'phone.unique' => 'Số điện thoại đã được sử dụng.',
         ]);
         $data['unit_ids'] = collect($data['unit_ids'] ?? [])->map(fn ($id) => (int) $id)->unique()->values()->all();
-        $data['is_teacher'] = array_key_exists('roles', $data)
-            ? collect($data['roles'])->pluck('role_id')->map(fn ($id) => (int) $id)->contains((int) Role::where('code', Role::GIAO_VIEN)->value('id'))
-            : ($user ? (bool) $user->teacher : true);
-        if ($data['is_teacher'] && blank($data['employment_status'] ?? null)) {
+        $data['is_employee'] = array_key_exists('roles', $data)
+            ? Role::whereIn('id', collect($data['roles'])->pluck('role_id'))->whereIn('code', Role::PROFILE_ROLES)->exists()
+            : ($user ? (bool) $user->employee : true);
+        if ($data['is_employee'] && blank($data['employment_status'] ?? null)) {
             throw ValidationException::withMessages(['employment_status' => 'Vui lòng chọn trạng thái công tác.']);
         }
-        abort_if($user?->teacher && ! $data['is_teacher'], 422, 'Không thể bỏ vai trò Giáo viên của nhân sự đã có dữ liệu công việc. Hãy cho nghỉ việc thay vì vậy.');
-        abort_if(! $data['is_teacher'] && $data['unit_ids'] !== [], 422, 'Chỉ giáo viên mới thuộc tổ, nhóm.');
+        abort_if($user?->employee && ! $data['is_employee'], 422, 'Nhân sự đã có hồ sơ phải giữ vai trò Giáo viên hoặc Nhân viên. Hãy cho nghỉ việc thay vì bỏ cả hai.');
+        abort_if(! $data['is_employee'] && $data['unit_ids'] !== [], 422, 'Chỉ giáo viên và nhân viên mới thuộc tổ, nhóm.');
 
         return $data;
     }
@@ -207,8 +207,8 @@ class PersonnelController extends Controller
         if ($managed === null) {
             return;
         }
-        abort_unless($data['is_teacher'], 403, 'Bạn chỉ được quản lý giáo viên trong đơn vị của mình.');
-        abort_if($data['unit_ids'] === [] || array_diff($data['unit_ids'], $managed) !== [], 403, 'Bạn chỉ được phân giáo viên vào đơn vị mình quản lý.');
+        abort_unless($data['is_employee'], 403, 'Bạn chỉ được quản lý nhân sự trong đơn vị của mình.');
+        abort_if($data['unit_ids'] === [] || array_diff($data['unit_ids'], $managed) !== [], 403, 'Bạn chỉ được phân nhân sự vào đơn vị mình quản lý.');
     }
 
     private function ensureTargetInScope(User $actor, User $target): void
@@ -217,8 +217,8 @@ class PersonnelController extends Controller
         if ($managed === null) {
             return;
         }
-        $teacher = $target->teacher;
-        abort_unless($teacher && array_intersect($teacher->directUnitIds(), $managed) !== [], 403, 'Bạn chỉ được quản lý giáo viên trong đơn vị của mình.');
+        $employee = $target->employee;
+        abort_unless($employee && array_intersect($employee->directUnitIds(), $managed) !== [], 403, 'Bạn chỉ được quản lý nhân sự trong đơn vị của mình.');
     }
 
     private function canAssignRoles(User $actor): bool
@@ -226,17 +226,17 @@ class PersonnelController extends Controller
         return $actor->hasPermission('roles.manage') && $actor->managedUnitIds() === null;
     }
 
-    private function syncUnits(Teacher $teacher, array $unitIds): void
+    private function syncUnits(Employee $employee, array $unitIds): void
     {
-        $current = DB::table('teacher_department')->where('teacher_id', $teacher->id)->whereNull('ends_on')->pluck('department_id')->map(fn ($id) => (int) $id)->all();
+        $current = DB::table('department_employee')->where('employee_id', $employee->id)->whereNull('ends_on')->pluck('department_id')->map(fn ($id) => (int) $id)->all();
         $today = now()->toDateString();
         $removed = array_diff($current, $unitIds);
         if ($removed) {
-            DB::table('teacher_department')->where('teacher_id', $teacher->id)->whereIn('department_id', $removed)->whereNull('ends_on')->update(['ends_on' => $today, 'updated_at' => now()]);
+            DB::table('department_employee')->where('employee_id', $employee->id)->whereIn('department_id', $removed)->whereNull('ends_on')->update(['ends_on' => $today, 'updated_at' => now()]);
         }
         foreach (array_values(array_diff($unitIds, $current)) as $index => $unitId) {
-            DB::table('teacher_department')->updateOrInsert(
-                ['teacher_id' => $teacher->id, 'department_id' => $unitId, 'starts_on' => $today],
+            DB::table('department_employee')->updateOrInsert(
+                ['employee_id' => $employee->id, 'department_id' => $unitId, 'starts_on' => $today],
                 ['is_primary' => $current === [] && $index === 0, 'ends_on' => null, 'created_at' => now(), 'updated_at' => now()],
             );
         }
@@ -244,13 +244,13 @@ class PersonnelController extends Controller
 
     private function reload(User $user): User
     {
-        return User::with(['roles', 'teacher' => fn ($q) => $q->withTrashed(), 'teacher.departments' => fn ($q) => $q->wherePivotNull('ends_on')])->findOrFail($user->id);
+        return User::with(['roles', 'employee' => fn ($q) => $q->withTrashed(), 'employee.departments' => fn ($q) => $q->wherePivotNull('ends_on')])->findOrFail($user->id);
     }
 
     private function serialize(User $user): array
     {
-        $teacher = $user->teacher;
-        $units = $teacher ? $teacher->departments->map(fn ($d) => ['id' => $d->id, 'label' => Department::pathLabel($d->id)])->values() : collect();
+        $employee = $user->employee;
+        $units = $employee ? $employee->departments->map(fn ($d) => ['id' => $d->id, 'label' => Department::pathLabel($d->id)])->values() : collect();
 
         return [
             'id' => $user->id,
@@ -259,14 +259,15 @@ class PersonnelController extends Controller
             'phone' => $user->phone,
             'is_active' => $user->status === 'active',
             'avatar_url' => $user->avatar_path ? route('avatars.show', ['filename' => basename($user->avatar_path)]) : null,
-            'is_teacher' => (bool) $teacher,
-            'teacher_id' => $teacher?->id,
-            'employee_code' => $teacher?->employee_code,
-            'employment_status' => $teacher?->employment_status,
+            'is_employee' => (bool) $employee,
+            'kind' => $employee ? ($user->roles->contains('code', Role::NHAN_VIEN) ? 'staff' : 'teacher') : null,
+            'employee_id' => $employee?->id,
+            'employee_code' => $employee?->employee_code,
+            'employment_status' => $employee?->employment_status,
             'units' => $units,
             'unit_ids' => $units->pluck('id'),
-            'unit_path_ids' => $teacher ? $teacher->unitIds() : [],
-            'roles' => $user->roles->sortBy(fn (Role $role) => $this->roleOrder($role->code))->map(fn (Role $role) => [
+            'unit_path_ids' => $employee ? $employee->unitIds() : [],
+            'roles' => $user->roles->sortBy(fn (Role $role) => Role::rank($role->code))->map(fn (Role $role) => [
                 'role_id' => $role->id, 'code' => $role->code, 'name' => $role->name,
                 'department_id' => $role->pivot->department_id,
                 'label' => $role->pivot->department_id ? $role->name.' — '.Department::pathLabel((int) $role->pivot->department_id) : $role->name,
@@ -277,10 +278,5 @@ class PersonnelController extends Controller
     private function savedMessage(string $message, array $added): string
     {
         return $added ? $message.' Đã tự thêm vào: '.implode(', ', $added).'.' : $message;
-    }
-
-    private function roleOrder(string $code): int
-    {
-        return (int) array_search($code, [Role::ADMIN, Role::HIEU_TRUONG, Role::THU_KY, Role::TO_TRUONG, Role::TO_PHO, Role::NHOM_TRUONG, Role::GIAO_VIEN], true);
     }
 }

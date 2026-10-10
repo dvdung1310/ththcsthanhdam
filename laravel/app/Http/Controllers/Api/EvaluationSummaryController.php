@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Evaluation;
 use App\Models\EvaluationCriterion;
 use App\Models\EvaluationPeriod;
-use App\Models\Teacher;
+use App\Models\Employee;
 use App\Models\User;
 use App\Services\EvaluationDirectory;
 use App\Services\XlsxWriter;
@@ -42,7 +42,7 @@ class EvaluationSummaryController extends Controller
         ]);
     }
 
-    public function teacher(Request $request, Teacher $teacher): JsonResponse
+    public function teacher(Request $request, Employee $teacher): JsonResponse
     {
         $summary = $this->build($this->filters($request) + ['teacher_id' => $teacher->id]);
 

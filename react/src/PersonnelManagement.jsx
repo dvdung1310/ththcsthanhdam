@@ -27,7 +27,7 @@ import OrgStructure from "./OrgStructure";
 import "./PersonnelManagement.css";
 import Avatar from "./Avatar";
 
-const LEADER_ROLES = ["hieu_truong", "thu_ky", "to_truong", "to_pho", "nhom_truong"];
+const LEADER_ROLES = ["hieu_truong", "pho_hieu_truong", "ban_giam_hieu", "thu_ky", "to_truong", "to_pho", "nhom_truong"];
 
 const collator = new Intl.Collator("vi");
 const givenName = (name) => (name ?? "").trim().split(/\s+/).at(-1);
@@ -35,14 +35,14 @@ const byName = (a, b) => collator.compare(givenName(a.name), givenName(b.name)) 
 const STATUS_ORDER = { working: 0, on_leave: 1, suspended: 2, locked: 3, terminated: 4 };
 const SORTERS = {
   name: byName,
-  code: (a, b) => (a.is_teacher ? 0 : 1) - (b.is_teacher ? 0 : 1) || collator.compare(a.employee_code ?? "", b.employee_code ?? "", { numeric: true }),
+  code: (a, b) => (a.is_employee ? 0 : 1) - (b.is_employee ? 0 : 1) || collator.compare(a.employee_code ?? "", b.employee_code ?? "", { numeric: true }),
   unit: (a, b) => (a.units.length ? 0 : 1) - (b.units.length ? 0 : 1) || collator.compare(a.units[0]?.label ?? "", b.units[0]?.label ?? ""),
   status: (a, b) => (STATUS_ORDER[statusOf(a)] ?? 9) - (STATUS_ORDER[statusOf(b)] ?? 9),
 };
 
 const statusOf = (person) => {
   if (!person.is_active) return person.employment_status === "terminated" ? "terminated" : "locked";
-  return person.is_teacher ? person.employment_status : "working";
+  return person.is_employee ? person.employment_status : "working";
 };
 
 const STATUS_LABELS = { ...EMPLOYMENT_LABELS, locked: "Đã khóa" };
@@ -120,7 +120,7 @@ export default function PersonnelManagement({ view = "people" }) {
     return (
       text.includes(keyword.toLowerCase()) &&
       (unitFilter === "" ||
-        (unitFilter === "none" ? person.is_teacher && !person.unit_ids.length : person.unit_path_ids.includes(Number(unitFilter)))) &&
+        (unitFilter === "none" ? person.is_employee && !person.unit_ids.length : person.unit_path_ids.includes(Number(unitFilter)))) &&
       (roleFilter === "" || (roleFilter === "none" ? !person.roles.length : person.roles.some((role) => role.code === roleFilter))) &&
       (statusFilter === "" || statusOf(person) === statusFilter)
     );
@@ -132,7 +132,8 @@ export default function PersonnelManagement({ view = "people" }) {
 
   const stats = {
     total: data.data.length,
-    teachers: data.data.filter((person) => person.is_teacher).length,
+    teachers: data.data.filter((person) => person.kind === "teacher").length,
+    staff: data.data.filter((person) => person.kind === "staff").length,
     leaders: data.data.filter((person) => person.roles.some((role) => LEADER_ROLES.includes(role.code))).length,
     working: data.data.filter((person) => statusOf(person) === "working").length,
   };
@@ -214,7 +215,7 @@ export default function PersonnelManagement({ view = "people" }) {
               <span>
                 <b>{stats.teachers}</b>
                 <small>Giáo viên</small>
-                <em>Có hồ sơ giảng dạy</em>
+                <em>{stats.staff ? `Và ${stats.staff} nhân viên` : "Có hồ sơ giảng dạy"}</em>
               </span>
             </article>
             <article>
@@ -224,7 +225,7 @@ export default function PersonnelManagement({ view = "people" }) {
               <span>
                 <b>{stats.leaders}</b>
                 <small>Cán bộ quản lý</small>
-                <em>Hiệu trưởng, thư ký, tổ/nhóm trưởng</em>
+                <em>Ban giám hiệu, thư ký, tổ/nhóm trưởng</em>
               </span>
             </article>
             <article>
@@ -318,7 +319,7 @@ export default function PersonnelManagement({ view = "people" }) {
               <table className="personnel-table">
                 <thead>
                   <tr>
-                    {[["name", "Nhân sự"], ["code", "Mã GV"], ["contact", "Liên hệ"], ["unit", "Tổ / nhóm"], ["roles", "Vai trò"], ["status", "Trạng thái"]].map(([key, label]) =>
+                    {[["name", "Nhân sự"], ["code", "Mã NS"], ["contact", "Liên hệ"], ["unit", "Tổ / nhóm"], ["roles", "Vai trò"], ["status", "Trạng thái"]].map(([key, label]) =>
                       SORTERS[key] ? (
                         <th
                           key={key}
@@ -355,7 +356,7 @@ export default function PersonnelManagement({ view = "people" }) {
                           </div>
                         </td>
                         <td>
-                          {person.is_teacher ? <code>{person.employee_code}</code> : <span className="staff-badge">Tài khoản trường</span>}
+                          {person.is_employee ? <code>{person.employee_code}</code> : <span className="staff-badge">Tài khoản trường</span>}
                         </td>
                         <td>
                           <div className="contact-cell">
@@ -379,7 +380,7 @@ export default function PersonnelManagement({ view = "people" }) {
                               ))}
                             </div>
                           ) : (
-                            <span className="muted-cell">{person.is_teacher ? "Chưa thuộc tổ/nhóm" : "—"}</span>
+                            <span className="muted-cell">{person.is_employee ? "Chưa thuộc tổ/nhóm" : "—"}</span>
                           )}
                         </td>
                         <td>

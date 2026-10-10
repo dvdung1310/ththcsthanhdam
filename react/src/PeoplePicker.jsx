@@ -4,8 +4,10 @@ import { Check, CheckCircle2, ChevronRight, Search, Users, X } from "lucide-reac
 import "./PeoplePicker.css";
 import Avatar from "./Avatar";
 
-const SCHOOL_ROLES = ["admin", "hieu_truong", "thu_ky"];
-const RANK = { admin: 0, hieu_truong: 1, thu_ky: 2, to_truong: 3, to_pho: 4, nhom_truong: 5 };
+const SCHOOL_ROLES = ["admin", "hieu_truong", "pho_hieu_truong", "ban_giam_hieu", "thu_ky"];
+const RANK = { admin: 0, hieu_truong: 1, pho_hieu_truong: 2, ban_giam_hieu: 3, thu_ky: 4, to_truong: 5, to_pho: 6, nhom_truong: 7 };
+const HOMEROOM = "gvcn";
+const isHomeroom = (person) => (person.roles || []).some((role) => role.code === HOMEROOM);
 
 const rankOf = (person) =>
   Math.min(9, ...(person.roles || []).map((role) => RANK[role.code] ?? 9));
@@ -24,7 +26,9 @@ export function roleChips(person, unitId, units) {
         tone: "unit",
       })),
   ];
+  if (roles.some((r) => r.code === HOMEROOM)) chips.push({ label: "GVCN", tone: "plain" });
   if (!chips.length && roles.some((r) => r.code === "giao_vien")) chips.push({ label: "Giáo viên", tone: "plain" });
+  if (!chips.length && roles.some((r) => r.code === "nhan_vien")) chips.push({ label: "Nhân viên", tone: "plain" });
   return chips;
 }
 
@@ -90,11 +94,13 @@ export default function PeoplePicker({
   const toggleExpanded = (id) => setExpanded((current) => (current.includes(id) ? current.filter((x) => x !== id) : [...current, id]));
   const countIn = (id) => people.filter((p) => p.department_ids?.includes(id)).length;
   const focusedUnit = units.find((u) => u.id === focus);
+  const homeroomPeople = people.filter(isHomeroom);
+  const inFocus = (p) => (focus === HOMEROOM ? isHomeroom(p) : p.department_ids?.includes(focus));
   const keyword = search.trim().toLowerCase();
   const list = useMemo(
     () =>
       people
-        .filter((p) => keyword || !focus || p.department_ids?.includes(focus))
+        .filter((p) => keyword || !focus || inFocus(p))
         .filter((p) => !keyword || `${p.name} ${p.code || ""}`.toLowerCase().includes(keyword))
         .sort((a, b) => rankOf(a) - rankOf(b) || a.name.localeCompare(b.name, "vi")),
     [people, focus, keyword],
@@ -149,7 +155,7 @@ export default function PeoplePicker({
       <div className="pp-top">
         <label className="pp-search">
           <Search size={15} />
-          <input autoFocus value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm theo tên hoặc mã giáo viên..." />
+          <input autoFocus value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm theo tên hoặc mã nhân sự..." />
         </label>
         {onClose && (
           <button type="button" className="pp-close" onClick={onClose} title="Đóng" aria-label="Đóng">
@@ -165,12 +171,20 @@ export default function PeoplePicker({
               <small>{people.length}</small>
             </button>
           </div>
+          {onToggleUnit && homeroomPeople.length > 0 && (
+            <div className={`pp-unit ${focus === HOMEROOM ? "focused" : ""}`}>
+              <button type="button" className="pp-unit-name" onClick={() => setFocus(HOMEROOM)}>
+                <span>Giáo viên chủ nhiệm</span>
+                <small>{homeroomPeople.length}</small>
+              </button>
+            </div>
+          )}
           {roots.map((root) => [unitRow(root, false), ...(expanded.includes(root.id) ? childrenOf(root.id).map((u) => unitRow(u, true)) : [])])}
           {!units.length && <p className="pp-empty">Chưa có tổ / nhóm.</p>}
         </nav>
         <div className="pp-people">
           <header>
-            <b>{keyword ? "Kết quả tìm kiếm" : focusedUnit ? focusedUnit.name : "Tất cả nhân sự"}</b>
+            <b>{keyword ? "Kết quả tìm kiếm" : focusedUnit ? focusedUnit.name : focus === HOMEROOM ? "Giáo viên chủ nhiệm" : "Tất cả nhân sự"}</b>
             <small>{list.length} người</small>
           </header>
           {focusedUnit && onToggleUnit && !keyword && (
@@ -187,6 +201,20 @@ export default function PeoplePicker({
               {selectedUnits.includes(focusedUnit.id) && <CheckCircle2 size={16} />}
             </button>
           )}
+          {focus === HOMEROOM && !keyword && (() => {
+            const all = homeroomPeople.every((p) => selectedPeople.includes(p.id));
+            return (
+              <button
+                type="button"
+                className={`pp-whole-unit ${all ? "checked" : ""}`}
+                onClick={() => homeroomPeople.filter((p) => selectedPeople.includes(p.id) === all).forEach((p) => onTogglePerson(p.id))}
+              >
+                <Users size={15} />
+                <span>{all ? "Bỏ chọn tất cả GVCN" : `Chọn tất cả ${homeroomPeople.length} GVCN`}</span>
+                {all && <CheckCircle2 size={16} />}
+              </button>
+            );
+          })()}
           <div className="pp-list">
             {list.map((person) => {
               const selected = selectedPeople.includes(person.id);

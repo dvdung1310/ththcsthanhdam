@@ -31,7 +31,7 @@ class DemoRoster
 
     // name, unit, subject, extra roles [role, unit], employment status, homeroom, flags
     public const TEACHERS = [
-        ['Nguyễn Thị Mai', 'Nhóm Ngữ văn', 'Ngữ văn', [[Role::HIEU_TRUONG, null]], 'working', false, []],
+        ['Nguyễn Thị Mai', 'Nhóm Ngữ văn', 'Ngữ văn', [[Role::HIEU_TRUONG, null], [Role::BAN_GIAM_HIEU, null]], 'working', false, []],
         ['Trần Văn Nam', 'Nhóm Toán', 'Toán học', [[Role::TO_TRUONG, 'Tổ Tự nhiên'], [Role::NHOM_TRUONG, 'Nhóm Toán']], 'working', false, ['avatar']],
         ['Lương Hoài An', 'Nhóm Toán', 'Toán học', [], 'on_leave', true, []],
         ['Nguyễn Thị Thu Hằng', 'Nhóm Toán', 'Toán học', [], 'working', true, ['avatar']],
@@ -78,9 +78,25 @@ class DemoRoster
         ['Cao Thị Hoa', 'Tổ Năng khiếu', 'Âm nhạc', [], 'working', false, []],
         ['Tạ Minh Khoa', 'Tổ Năng khiếu', 'Âm nhạc', [], 'working', false, ['new']],
         ['Kiều Thị Diệu Linh', 'Tổ Năng khiếu', 'Mỹ thuật', [], 'working', false, ['avatar']],
+        ['Đinh Quang Khải', 'Nhóm Toán', 'Toán học', [[Role::PHO_HIEU_TRUONG, null], [Role::BAN_GIAM_HIEU, null]], 'working', false, ['avatar']],
+        ['Ngô Thị Phương Thảo', 'Tổ Khối 3', 'Giáo dục tiểu học', [[Role::PHO_HIEU_TRUONG, null], [Role::BAN_GIAM_HIEU, null]], 'working', false, []],
+    ];
+
+    public const OFFICE = 'Tổ Văn phòng';
+
+    // name, position, extra roles [role, unit], employment status, flags
+    public const EMPLOYEES = [
+        ['Phạm Thị Hồng Nhung', 'Kế toán', [[Role::TO_TRUONG, self::OFFICE]], 'working', ['avatar']],
+        ['Lê Văn Hải', 'Văn thư', [], 'working', []],
+        ['Nguyễn Thị Thu Hiền', 'Y tế học đường', [], 'working', ['avatar']],
+        ['Trần Thị Bích Ngọc', 'Thủ quỹ', [], 'working', []],
+        ['Võ Thị Mỹ Duyên', 'Thư viện', [], 'on_leave', []],
+        ['Đặng Văn Sơn', 'Thiết bị', [], 'working', []],
     ];
 
     private static ?array $people = null;
+
+    private static ?array $staff = null;
 
     public static function handle(string $name): string
     {
@@ -110,13 +126,41 @@ class DemoRoster
             }
             $used[] = $handle;
             $people[$handle] = [
-                'handle' => $handle, 'name' => $name, 'code' => sprintf('GV%03d', $index + 1), 'unit' => $unit, 'tổ' => self::rootOf($unit),
+                'handle' => $handle, 'name' => $name, 'code' => sprintf('NS%03d', $index + 1), 'unit' => $unit, 'tổ' => self::rootOf($unit),
                 'subject' => $subject, 'roles' => $roles, 'status' => $status, 'homeroom' => $homeroom, 'flags' => $flags,
                 'phone' => '09'.str_pad((string) ((12345678 + $index * 7919) % 100000000), 8, '0', STR_PAD_LEFT),
             ];
         }
 
         return self::$people = $people;
+    }
+
+    public static function staff(): array
+    {
+        if (self::$staff !== null) {
+            return self::$staff;
+        }
+        $staff = [];
+        $used = [...array_column(self::STAFF, 1), ...array_keys(self::people())];
+        foreach (self::EMPLOYEES as $index => [$name, $position, $roles, $status, $flags]) {
+            $handle = self::handle($name);
+            for ($n = 2; in_array($handle, $used, true); $n++) {
+                $handle = self::handle($name).$n;
+            }
+            $used[] = $handle;
+            $staff[$handle] = [
+                'handle' => $handle, 'name' => $name, 'code' => sprintf('NS%03d', count(self::TEACHERS) + $index + 1), 'unit' => self::OFFICE, 'tổ' => self::OFFICE,
+                'position' => $position, 'roles' => $roles, 'status' => $status, 'flags' => $flags,
+                'phone' => '09'.str_pad((string) ((23456789 + $index * 6151) % 100000000), 8, '0', STR_PAD_LEFT),
+            ];
+        }
+
+        return self::$staff = $staff;
+    }
+
+    public static function vicePrincipals(): array
+    {
+        return array_keys(array_filter(self::people(), fn ($person) => in_array([Role::PHO_HIEU_TRUONG, null], $person['roles'], true)));
     }
 
     public static function rootOf(string $unit): string
@@ -137,7 +181,7 @@ class DemoRoster
 
     public static function holder(string $role, ?string $unit): ?string
     {
-        foreach (self::people() as $handle => $person) {
+        foreach ([...self::people(), ...self::staff()] as $handle => $person) {
             foreach ($person['roles'] as [$code, $roleUnit]) {
                 if ($code === $role && $roleUnit === $unit) {
                     return $handle;
@@ -162,7 +206,7 @@ class DemoRoster
 
     public static function membersOf(string $unit, bool $workingOnly = true): array
     {
-        return array_keys(array_filter(self::people(), fn ($person) => ($person['unit'] === $unit || $person['tổ'] === $unit)
+        return array_keys(array_filter([...self::people(), ...self::staff()], fn ($person) => ($person['unit'] === $unit || $person['tổ'] === $unit)
             && (! $workingOnly || $person['status'] === 'working')));
     }
 

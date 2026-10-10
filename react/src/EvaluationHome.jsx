@@ -576,7 +576,7 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
       <div className="ev-filters ev-board-filters ev-summary-toolbar">
         <label className="ev-search">
           <Search size={15} />
-          <input value={search} onChange={(e) => update({ q: e.target.value })} placeholder="Tìm tên hoặc mã giáo viên..." />
+          <input value={search} onChange={(e) => update({ q: e.target.value })} placeholder="Tìm tên hoặc mã nhân sự..." />
         </label>
         {teams.length > 1 && <UnitPicker teams={teams} groups={groups} team={team} group={group} onChange={(next) => update(next)} />}
         <div className="ev-segmented" role="group" aria-label="Chủ nhiệm">

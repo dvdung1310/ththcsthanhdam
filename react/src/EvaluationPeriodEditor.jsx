@@ -256,7 +256,7 @@ export default function EvaluationPeriodEditor() {
             </select>
             <label className="ev-search">
               <Search size={15} />
-              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm theo tên hoặc mã giáo viên..." />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm theo tên hoặc mã nhân sự..." />
             </label>
             {scope !== "excluded" && (
               <div className="ev-segment" role="group" aria-label="Lọc">

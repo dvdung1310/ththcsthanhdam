@@ -399,7 +399,7 @@ function MemberList({ members, groups }) {
         <h4>Thành viên <em>{members.length}</em></h4>
         <label className="org-search">
           <Search size={14} />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Tìm tên hoặc mã GV..." />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Tìm tên hoặc mã nhân sự..." />
         </label>
       </div>
       {chips.length > 0 && (
@@ -416,7 +416,7 @@ function MemberList({ members, groups }) {
           <thead>
             <tr>
               <th>Giáo viên</th>
-              <th>Mã GV</th>
+              <th>Mã NS</th>
               <th>Vai trò</th>
               <th>Trạng thái</th>
             </tr>
@@ -505,7 +505,7 @@ function LeaderPicker({ unit, slot, replacing, holders, onClose, onDone }) {
         <div className="org-picker-tools">
           <label className="org-search">
             <Search size={14} />
-            <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Tìm tên hoặc mã GV..." />
+            <input autoFocus value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Tìm tên hoặc mã nhân sự..." />
           </label>
           <label className="org-check">
             <input type="checkbox" checked={onlyMembers} onChange={(e) => setOnlyMembers(e.target.checked)} />
@@ -533,7 +533,7 @@ function LeaderPicker({ unit, slot, replacing, holders, onClose, onDone }) {
                   <small>{person.units.join(", ") || "Chưa thuộc tổ/nhóm nào"}</small>
                 </span>
                 <span className="chip-list">
-                  {holds ? <span className="current">Đang giữ</span> : person.roles.filter((role) => role !== "Giáo viên").slice(0, 2).map((role) => <span key={role}>{role}</span>)}
+                  {holds ? <span className="current">Đang giữ</span> : person.roles.filter((role) => !["Giáo viên", "Nhân viên", "Giáo viên chủ nhiệm"].includes(role)).slice(0, 2).map((role) => <span key={role}>{role}</span>)}
                 </span>
               </button>
             );

@@ -283,9 +283,9 @@ class LibraryController extends Controller
         $activeRoles = fn ($q) => $q->where(fn ($r) => $r->whereNull('role_user.expires_at')->orWhere('role_user.expires_at', '>', now()));
 
         return response()->json([
-            'people' => User::with(['roles' => $activeRoles, 'teacher.departments' => fn ($q) => $q->wherePivotNull('ends_on')])->where('status', 'active')->orderBy('name')->get()->map(fn (User $u) => [
-                'id' => $u->id, 'name' => $u->name, 'code' => $u->teacher?->employee_code, 'avatar_url' => $avatar($u),
-                'department_ids' => $u->teacher?->unitIds() ?? [],
+            'people' => User::with(['roles' => $activeRoles, 'employee.departments' => fn ($q) => $q->wherePivotNull('ends_on')])->where('status', 'active')->orderBy('name')->get()->map(fn (User $u) => [
+                'id' => $u->id, 'name' => $u->name, 'code' => $u->employee?->employee_code, 'avatar_url' => $avatar($u),
+                'department_ids' => $u->employee?->unitIds() ?? [],
                 'roles' => $u->roles->map(fn ($role) => ['code' => $role->code, 'name' => $role->name, 'department_id' => $role->pivot->department_id])->values(),
             ]),
             'units' => Department::ordered()->map(fn ($unit) => ['id' => $unit['id'], 'name' => $unit['label'], 'short_name' => $unit['name'], 'parent_id' => $unit['parent_id'], 'type' => $unit['type']])->values(),

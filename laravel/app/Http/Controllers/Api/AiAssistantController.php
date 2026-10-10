@@ -4,10 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Task;
-use App\Models\Teacher;
+use App\Models\Employee;
 use App\Models\Department;
 use App\Models\LibraryNode;
-use App\Models\Role;
 use App\Services\LibraryAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -82,16 +81,16 @@ class AiAssistantController extends Controller
     private function schoolContext(): array
     {
         $recent = Task::with(['creator:id,name', 'reviewers:id,name', 'category:id,name'])->latest()->limit(20)->get()->map(fn ($task) => ['code' => $task->code, 'title' => $task->title, 'type' => $task->category?->name, 'status' => $task->status, 'due_at' => $task->due_at?->toIso8601String(), 'completed_at' => $task->completed_at?->toIso8601String(), 'creator' => $task->creator?->name, 'reviewers' => $task->reviewers->pluck('name')->join(', ')]);
-        $teachers = Teacher::with(['user', 'departments' => fn ($q) => $q->wherePivotNull('ends_on')])->where('employment_status', 'working')->get()->map(fn ($teacher) => ['name' => $teacher->user?->name, 'department' => $teacher->departments->map(fn ($d) => Department::pathLabel($d->id))->join(', '), 'roles' => $teacher->user?->roleLabels() ?? []]);
-        $workload = DB::table('task_teacher_assignees as a')->join('tasks as t', 't.id', '=', 'a.task_id')->join('teachers as te', 'te.id', '=', 'a.teacher_id')->join('users as u', 'u.id', '=', 'te.user_id')->whereNull('t.deleted_at')
+        $employees = Employee::with(['user', 'departments' => fn ($q) => $q->wherePivotNull('ends_on')])->where('employment_status', 'working')->get()->map(fn ($employee) => ['name' => $employee->user?->name, 'department' => $employee->departments->map(fn ($d) => Department::pathLabel($d->id))->join(', '), 'roles' => $employee->user?->roleLabels() ?? []]);
+        $workload = DB::table('task_employee_assignees as a')->join('tasks as t', 't.id', '=', 'a.task_id')->join('employees as te', 'te.id', '=', 'a.employee_id')->join('users as u', 'u.id', '=', 'te.user_id')->whereNull('t.deleted_at')
             ->select('u.name', DB::raw("SUM(t.status IN ('not_started','in_progress','waiting_approval')) as open_tasks"), DB::raw("SUM(t.status = 'completed') as completed_tasks"), DB::raw("SUM(t.status IN ('not_started','in_progress') AND t.due_at < NOW()) as overdue_tasks"))
             ->groupBy('u.id', 'u.name')->orderByDesc('open_tasks')->limit(20)->get();
 
-        return ['generated_at' => now()->toIso8601String(), 'task_stats' => ['total' => Task::count(), 'not_started' => Task::where('status', Task::NOT_STARTED)->count(), 'in_progress' => Task::where('status', Task::IN_PROGRESS)->count(), 'waiting_approval' => Task::where('status', Task::WAITING_APPROVAL)->count(), 'completed' => Task::where('status', Task::COMPLETED)->count(), 'overdue' => Task::whereIn('status', [Task::NOT_STARTED, Task::IN_PROGRESS])->where('due_at', '<', now())->count()], 'recent_tasks' => $recent, 'working_teachers' => $teachers, 'teacher_count' => $teachers->count(), 'teacher_workload' => $workload];
+        return ['generated_at' => now()->toIso8601String(), 'task_stats' => ['total' => Task::count(), 'not_started' => Task::where('status', Task::NOT_STARTED)->count(), 'in_progress' => Task::where('status', Task::IN_PROGRESS)->count(), 'waiting_approval' => Task::where('status', Task::WAITING_APPROVAL)->count(), 'completed' => Task::where('status', Task::COMPLETED)->count(), 'overdue' => Task::whereIn('status', [Task::NOT_STARTED, Task::IN_PROGRESS])->where('due_at', '<', now())->count()], 'recent_tasks' => $recent, 'working_employees' => $employees, 'employee_count' => $employees->count(), 'employee_workload' => $workload];
     }
 
     private function ensurePrincipal(Request $request): void
     {
-        abort_unless($request->user()->hasRole(Role::HIEU_TRUONG),403,'Trợ lý AI chỉ dành cho Hiệu trưởng.');
+        abort_unless($request->user()->hasPermission('ai.assistant'),403,'Bạn chưa được cấp quyền dùng Trợ lý AI.');
     }
 }

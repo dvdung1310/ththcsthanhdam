@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Department;
 use App\Models\Role;
-use App\Models\Teacher;
+use App\Models\Employee;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,12 +18,12 @@ class UnitController extends Controller
     public function index(Request $request): JsonResponse
     {
         $unitIds = $request->user()->managedUnitIds();
-        $memberships = DB::table('teacher_department')->whereNull('ends_on')->get(['teacher_id', 'department_id']);
-        $members = fn (int $id) => $memberships->whereIn('department_id', Department::withDescendants([$id]))->pluck('teacher_id')->unique()->count();
+        $memberships = DB::table('department_employee')->whereNull('ends_on')->get(['employee_id', 'department_id']);
+        $members = fn (int $id) => $memberships->whereIn('department_id', Department::withDescendants([$id]))->pluck('employee_id')->unique()->count();
 
         return response()->json([
             'units' => Department::ordered($unitIds, false)->map(fn ($unit) => [...$unit, 'members' => $members($unit['id'])])->values(),
-            'can_configure' => $unitIds === null && $request->user()->hasPermission('teachers.manage'),
+            'can_configure' => $unitIds === null && $request->user()->hasPermission('personnel.manage'),
         ]);
     }
 
@@ -41,21 +41,21 @@ class UnitController extends Controller
         $scope = Department::withDescendants([$unit->id]);
         $held = DB::table('role_user')->where('department_id', $unit->id)->join('roles', 'roles.id', '=', 'role_user.role_id')->pluck('roles.code', 'role_user.user_id');
 
-        $teachers = Teacher::with(['user.roles', 'departments' => fn ($q) => $q->wherePivotNull('ends_on')])
+        $employees = Employee::with(['user.roles', 'departments' => fn ($q) => $q->wherePivotNull('ends_on')])
             ->where('employment_status', 'working')->whereHas('user', fn ($q) => $q->where('status', 'active'))->get()
-            ->map(fn (Teacher $teacher) => [
-                'user_id' => $teacher->user_id,
-                'name' => $teacher->user->name,
-                'employee_code' => $teacher->employee_code,
-                'avatar_url' => $this->avatar($teacher->user),
-                'units' => $teacher->departments->map(fn ($d) => Department::pathLabel($d->id))->values(),
-                'roles' => $teacher->user->roleLabels(),
-                'in_unit' => $teacher->departments->pluck('id')->intersect($scope)->isNotEmpty(),
-                'unit_role' => $held[$teacher->user_id] ?? null,
+            ->map(fn (Employee $employee) => [
+                'user_id' => $employee->user_id,
+                'name' => $employee->user->name,
+                'employee_code' => $employee->employee_code,
+                'avatar_url' => $this->avatar($employee->user),
+                'units' => $employee->departments->map(fn ($d) => Department::pathLabel($d->id))->values(),
+                'roles' => $employee->user->roleLabels(),
+                'in_unit' => $employee->departments->pluck('id')->intersect($scope)->isNotEmpty(),
+                'unit_role' => $held[$employee->user_id] ?? null,
             ])
             ->sortBy(fn (array $row) => [! $row['in_unit'], $row['name']])->values();
 
-        return response()->json(['data' => $teachers]);
+        return response()->json(['data' => $employees]);
     }
 
     public function assignLeader(Request $request, Department $unit): JsonResponse
@@ -67,9 +67,9 @@ class UnitController extends Controller
             'user_id' => ['required', 'integer', 'exists:users,id'],
             'replace_user_id' => ['nullable', 'integer', 'exists:users,id'],
         ], ['role_code.in' => 'Chức vụ này không áp dụng cho đơn vị đã chọn.']);
-        $user = User::with('teacher')->findOrFail($data['user_id']);
-        abort_unless($user->teacher, 422, 'Chỉ giáo viên mới giữ được chức vụ trong tổ, nhóm.');
-        abort_if($user->teacher->employment_status !== 'working' || $user->status !== 'active', 422, "{$user->name} hiện không làm việc hoặc tài khoản bị khóa.");
+        $user = User::with('employee')->findOrFail($data['user_id']);
+        abort_unless($user->employee, 422, 'Chỉ giáo viên hoặc nhân viên mới giữ được chức vụ trong tổ, nhóm.');
+        abort_if($user->employee->employment_status !== 'working' || $user->status !== 'active', 422, "{$user->name} hiện không làm việc hoặc tài khoản bị khóa.");
         $role = Role::where('code', $data['role_code'])->firstOrFail();
         $unitRoleIds = Role::whereIn('code', $slots->keys())->pluck('id');
 
@@ -85,7 +85,7 @@ class UnitController extends Controller
                 ['role_id' => $role->id, 'user_id' => $user->id, 'department_id' => $unit->id],
                 ['assigned_by' => $request->user()->id, 'expires_at' => null, 'created_at' => now(), 'updated_at' => now()],
             );
-            $this->ensureMembership($user->teacher, $unit);
+            $this->ensureMembership($user->employee, $unit);
         });
 
         return response()->json(['message' => "Đã giao {$role->name} {$unit->name} cho {$user->name}.", 'data' => $this->detail($unit->fresh(), $request->user())]);
@@ -108,22 +108,22 @@ class UnitController extends Controller
     private function detail(Department $unit, User $actor): array
     {
         $scope = Department::withDescendants([$unit->id]);
-        $leaders = User::with(['teacher', 'roles' => fn ($q) => $q->where('role_user.department_id', $unit->id)])
+        $leaders = User::with(['employee', 'roles' => fn ($q) => $q->where('role_user.department_id', $unit->id)])
             ->whereHas('roles', fn ($q) => $q->where('role_user.department_id', $unit->id))->orderBy('name')->get()
             ->flatMap(fn (User $user) => $user->roles->map(fn (Role $role) => [
                 'user_id' => $user->id, 'name' => $user->name, 'role' => $role->name, 'role_code' => $role->code,
-                'employee_code' => $user->teacher?->employee_code, 'avatar_url' => $this->avatar($user),
+                'employee_code' => $user->employee?->employee_code, 'avatar_url' => $this->avatar($user),
             ]))->values();
-        $members = Teacher::with(['user.roles', 'departments' => fn ($q) => $q->wherePivotNull('ends_on')])->inUnits([$unit->id])->orderBy('employee_code')->get()
-            ->map(fn (Teacher $teacher) => [
-                'user_id' => $teacher->user_id,
-                'name' => $teacher->user->name,
-                'employee_code' => $teacher->employee_code,
-                'avatar_url' => $this->avatar($teacher->user),
-                'employment_status' => $teacher->employment_status,
-                'roles' => $teacher->user->roleLabels(),
-                'group_ids' => $teacher->departments->pluck('id')->intersect($scope)->reject(fn ($id) => $id === $unit->id)->values(),
-                'via' => $teacher->departments->pluck('id')->contains($unit->id) ? null : $teacher->departments->filter(fn ($d) => $d->parent_id === $unit->id)->map(fn ($d) => $d->name)->join(', '),
+        $members = Employee::with(['user.roles', 'departments' => fn ($q) => $q->wherePivotNull('ends_on')])->inUnits([$unit->id])->orderBy('employee_code')->get()
+            ->map(fn (Employee $employee) => [
+                'user_id' => $employee->user_id,
+                'name' => $employee->user->name,
+                'employee_code' => $employee->employee_code,
+                'avatar_url' => $this->avatar($employee->user),
+                'employment_status' => $employee->employment_status,
+                'roles' => $employee->user->roleLabels(),
+                'group_ids' => $employee->departments->pluck('id')->intersect($scope)->reject(fn ($id) => $id === $unit->id)->values(),
+                'via' => $employee->departments->pluck('id')->contains($unit->id) ? null : $employee->departments->filter(fn ($d) => $d->parent_id === $unit->id)->map(fn ($d) => $d->name)->join(', '),
             ])->values();
 
         return [
@@ -143,16 +143,16 @@ class UnitController extends Controller
             ->map(fn (Role $role) => ['code' => $role->code, 'name' => $role->name, 'single' => in_array($role->code, Role::SINGLE_HOLDER, true)])->values()->all();
     }
 
-    private function ensureMembership(Teacher $teacher, Department $unit): void
+    private function ensureMembership(Employee $employee, Department $unit): void
     {
         $scope = Department::withDescendants([$unit->id]);
-        $inScope = DB::table('teacher_department')->where('teacher_id', $teacher->id)->whereNull('ends_on')->whereIn('department_id', $scope)->exists();
+        $inScope = DB::table('department_employee')->where('employee_id', $employee->id)->whereNull('ends_on')->whereIn('department_id', $scope)->exists();
         if ($inScope) {
             return;
         }
-        $hasPrimary = DB::table('teacher_department')->where('teacher_id', $teacher->id)->whereNull('ends_on')->where('is_primary', true)->exists();
-        DB::table('teacher_department')->insert([
-            'teacher_id' => $teacher->id, 'department_id' => $unit->id, 'is_primary' => ! $hasPrimary,
+        $hasPrimary = DB::table('department_employee')->where('employee_id', $employee->id)->whereNull('ends_on')->where('is_primary', true)->exists();
+        DB::table('department_employee')->insert([
+            'employee_id' => $employee->id, 'department_id' => $unit->id, 'is_primary' => ! $hasPrimary,
             'starts_on' => now()->toDateString(), 'created_at' => now(), 'updated_at' => now(),
         ]);
     }
@@ -199,7 +199,7 @@ class UnitController extends Controller
     {
         $this->ensureSchoolManager($request);
         abort_if($unit->children()->exists(), 422, 'Không thể xóa tổ đang có nhóm. Hãy xóa hoặc chuyển các nhóm trước.');
-        abort_if(DB::table('teacher_department')->where('department_id', $unit->id)->whereNull('ends_on')->exists(), 422, 'Không thể xóa đơn vị đang có giáo viên.');
+        abort_if(DB::table('department_employee')->where('department_id', $unit->id)->whereNull('ends_on')->exists(), 422, 'Không thể xóa đơn vị đang có thành viên.');
         abort_if(DB::table('task_department_assignees')->where('department_id', $unit->id)->exists(), 422, 'Đơn vị đã được giao công việc. Hãy ngưng hoạt động thay vì xóa.');
         abort_if(DB::table('role_user')->where('department_id', $unit->id)->exists(), 422, 'Đơn vị đang được dùng trong phân quyền. Hãy gỡ vai trò trước.');
         $unit->delete();

@@ -280,11 +280,11 @@ export default function ManagementDashboard({ onTask, onKpi }) {
                 </button>
                 {expanded === dept.id && (
                   <div className="department-teacher-list">
-                    {dept.teachers.map((teacher) => (
-                      <div key={teacher.id}>
-                        <span>{teacher.name}</span>
+                    {dept.employees.map((employee) => (
+                      <div key={employee.id}>
+                        <span>{employee.name}</span>
                         <b>
-                          {teacher.completed}/{teacher.assigned} việc
+                          {employee.completed}/{employee.assigned} việc
                         </b>
                       </div>
                     ))}

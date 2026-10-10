@@ -95,7 +95,7 @@ const emptyTask = {
   starts_at: new Date().toISOString().slice(0, 16),
   due_at: "",
   reviewer_ids: [],
-  teacher_ids: [],
+  employee_ids: [],
   department_ids: [],
   library_file_ids: [],
   attachments: [],
@@ -124,11 +124,11 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
   const [refs, setRefs] = useState({
       categories: [],
       filter_categories: [],
-      teachers: [],
+      employees: [],
       departments: [],
       reviewers: [],
       library_files: [],
-      current_teacher: null,
+      current_employee: null,
     }),
     [filters, setFilters] = useState(emptyActionFilters),
     [page, setPage] = useState(1),
@@ -235,19 +235,19 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
       setPage(1);
     },
     openCreate = () => {
-      const teacherId = refs.current_teacher?.id;
-      const canSelf = canUpdate && Boolean(teacherId);
+      const employeeId = refs.current_employee?.id;
+      const canSelf = canUpdate && Boolean(employeeId);
       const remembered = localStorage.getItem(COMPOSE_MODE_KEY);
       const assignmentMode = !canAssign ? "self" : !canSelf ? "assign" : remembered === "self" ? "self" : "assign";
       setEditing({
         ...emptyTask,
         assignment_mode: assignmentMode,
-        teacher_ids: assignmentMode === "self" && teacherId ? [teacherId] : [],
+        employee_ids: assignmentMode === "self" && employeeId ? [employeeId] : [],
       });
     };
   const switchMode = async (mode) => {
     if (mode === editing.assignment_mode) return;
-    const picked = editing.teacher_ids.length + editing.department_ids.length;
+    const picked = editing.employee_ids.length + editing.department_ids.length;
     if (
       mode === "self" &&
       picked &&
@@ -263,7 +263,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
     setEditing((current) => ({
       ...current,
       assignment_mode: mode,
-      teacher_ids: mode === "self" ? [refs.current_teacher.id] : [],
+      employee_ids: mode === "self" ? [refs.current_employee.id] : [],
       department_ids: [],
     }));
   };
@@ -298,11 +298,11 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
         return;
       }
       const f = new FormData(formElement);
-      f.delete("teacher_ids");
+      f.delete("employee_ids");
       f.delete("department_ids");
       f.delete("library_file_ids");
       f.delete("attachments");
-      editing.teacher_ids.forEach((id) => f.append("teacher_ids[]", id));
+      editing.employee_ids.forEach((id) => f.append("employee_ids[]", id));
       editing.department_ids.forEach((id) => f.append("department_ids[]", id));
       editing.library_file_ids.forEach((id) => f.append("library_file_ids[]", id));
       editing.pending_files?.forEach((file) => f.append("attachments[]", file));
@@ -533,7 +533,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
   const formMissing = editing
     ? [
         !formRef.current?.elements.title?.value.trim() && "tên công việc",
-        editing.assignment_mode !== "self" && !editing.teacher_ids.length && !editing.department_ids.length && "người thực hiện",
+        editing.assignment_mode !== "self" && !editing.employee_ids.length && !editing.department_ids.length && "người thực hiện",
       ].filter(Boolean)
     : [];
   const formBlocked = formMissing.length
@@ -579,7 +579,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
   const toggle = (field, id) =>
     setEditing((c) => {
       const adding = !c[field].includes(id);
-      const reviewer = field === "teacher_ids" && adding ? refs.reviewers.find((r) => r.teacher_id === id) : null;
+      const reviewer = field === "employee_ids" && adding ? refs.reviewers.find((r) => r.employee_id === id) : null;
       return {
         ...c,
         [field]: adding ? [...c[field], id] : c[field].filter((x) => x !== id),
@@ -589,7 +589,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
   const taskForm = editing ? (
     <form ref={formRef} className="task-form-pane" onSubmit={save} onInput={() => setFormTick((tick) => tick + 1)} onChange={() => setFormTick((tick) => tick + 1)}>
       <div className="task-form-scroll task-compose-body">
-        {!editing.id && canAssign && canUpdate && refs.current_teacher && (
+        {!editing.id && canAssign && canUpdate && refs.current_employee && (
           <div className="assignment-mode-picker" role="group" aria-label="Cách phân công">
             <button
               type="button"
@@ -626,16 +626,16 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
           <h4>Phân công</h4>
           {editing.assignment_mode === "self" && !editing.id ? (
             <div className="personal-assignee-card">
-              {refs.current_teacher?.avatar_url ? (
+              {refs.current_employee?.avatar_url ? (
                 <img
-                  src={refs.current_teacher.avatar_url}
+                  src={refs.current_employee.avatar_url}
                   alt="Ảnh đại diện"
                 />
               ) : (
-                <Avatar name={refs.current_teacher?.name} size={34} />
+                <Avatar name={refs.current_employee?.name} size={34} />
               )}
               <div>
-                <b>{refs.current_teacher?.name}</b>
+                <b>{refs.current_employee?.name}</b>
                 <small>Bạn là người thực hiện công việc này</small>
               </div>
             </div>
@@ -652,7 +652,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
             </div>
           )}
           <ReviewerPicker
-            reviewers={refs.reviewers.filter((r) => editing.assignment_mode === "self" ? r.id !== refs.current_teacher?.user_id : !editing.teacher_ids.includes(r.teacher_id))}
+            reviewers={refs.reviewers.filter((r) => editing.assignment_mode === "self" ? r.id !== refs.current_employee?.user_id : !editing.employee_ids.includes(r.employee_id))}
             units={refs.units || []}
             value={editing.reviewer_ids || []}
             onChange={(update) =>
@@ -832,7 +832,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
             <p>Chọn nhóm công việc cần xử lý và thực hiện ngay</p>
           </div>
           <div className="task-create-actions">
-            {(canAssign || (canUpdate && refs.current_teacher)) && (
+            {(canAssign || (canUpdate && refs.current_employee)) && (
               <button className="primary-btn" onClick={openCreate}>
                 <Plus size={17} /> Tạo công việc
               </button>
@@ -1300,7 +1300,7 @@ function CompactAssignees({ editing, refs, toggle }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
   const ref = useOutsideClose(open, close);
-  const teachers = refs.teachers.filter((item) => editing.teacher_ids.includes(item.id));
+  const employees = refs.employees.filter((item) => editing.employee_ids.includes(item.id));
   const departments = refs.departments.filter((item) => editing.department_ids.includes(item.id));
   return (
     <div className="compact-assignees" ref={ref}>
@@ -1315,8 +1315,8 @@ function CompactAssignees({ editing, refs, toggle }) {
             <X size={12} />
           </button>
         ))}
-        {teachers.map((item) => (
-          <button type="button" className="assignee-chip" key={`t-${item.id}`} onClick={() => toggle("teacher_ids", item.id)} title="Bấm để bỏ chọn">
+        {employees.map((item) => (
+          <button type="button" className="assignee-chip" key={`t-${item.id}`} onClick={() => toggle("employee_ids", item.id)} title="Bấm để bỏ chọn">
             {item.avatar_url ? <img src={item.avatar_url} alt={`Ảnh của ${item.name}`} /> : <Avatar name={item.name} />}
             {item.name}
             <X size={12} />
@@ -1328,11 +1328,11 @@ function CompactAssignees({ editing, refs, toggle }) {
           title="Chọn người thực hiện"
           anchorRef={ref}
           onClose={close}
-          people={refs.teachers}
+          people={refs.employees}
           units={refs.departments}
-          selectedPeople={editing.teacher_ids}
+          selectedPeople={editing.employee_ids}
           selectedUnits={editing.department_ids}
-          onTogglePerson={(id) => toggle("teacher_ids", id)}
+          onTogglePerson={(id) => toggle("employee_ids", id)}
           onToggleUnit={(id) => toggle("department_ids", id)}
         />
       )}
@@ -1565,13 +1565,13 @@ function PersonCards({ people, empty }) {
 
 function taskFormSnapshot(element, editing) {
   if (!element || !editing) return null;
-  const values = [...new FormData(element).entries()].filter(([key, value]) => typeof value === "string" && !["description", "reviewer_ids", "teacher_ids", "department_ids", "library_file_ids"].includes(key.replace(/\[\]$/, "")));
+  const values = [...new FormData(element).entries()].filter(([key, value]) => typeof value === "string" && !["description", "reviewer_ids", "employee_ids", "department_ids", "library_file_ids"].includes(key.replace(/\[\]$/, "")));
   return JSON.stringify([
     values,
     editing.description || "",
     editing.reviewer_ids || [],
     editing.assignment_mode,
-    editing.teacher_ids,
+    editing.employee_ids,
     editing.department_ids,
     editing.library_file_ids,
     editing.pending_files?.length || 0,
@@ -1785,7 +1785,7 @@ function SubmissionGroups({ task, saving, editingId, onEdit, onUpdate, onPreview
   const submissions = task.submissions || [];
   const groups = [];
   submissions.forEach((submission) => {
-    const key = submission.teacher_id ?? submission.submitter;
+    const key = submission.employee_id ?? submission.submitter;
     const group = groups.find((item) => item.key === key);
     if (group) group.items.push(submission);
     else groups.push({ key, items: [submission] });

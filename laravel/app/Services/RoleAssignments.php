@@ -11,16 +11,23 @@ use Illuminate\Validation\ValidationException;
 
 class RoleAssignments
 {
-    public function normalize(array $rows, bool $isTeacher): Collection
+    public function normalize(array $rows, bool $isEmployee): Collection
     {
         $roles = Role::whereIn('id', collect($rows)->pluck('role_id'))->get()->keyBy('id');
         $units = Department::whereIn('id', collect($rows)->pluck('department_id')->filter())->get()->keyBy('id');
+        $codes = $roles->pluck('code');
+        if ($codes->contains(Role::GIAO_VIEN) && $codes->contains(Role::NHAN_VIEN)) {
+            throw ValidationException::withMessages(['roles' => 'Một nhân sự chỉ là Giáo viên hoặc Nhân viên, không chọn cả hai.']);
+        }
+        if ($codes->contains(Role::GVCN) && ! $codes->contains(Role::GIAO_VIEN)) {
+            throw ValidationException::withMessages(['roles' => 'Vai trò Giáo viên chủ nhiệm cần đi kèm vai trò Giáo viên.']);
+        }
 
-        return collect($rows)->map(function ($row, $index) use ($roles, $units, $isTeacher) {
+        return collect($rows)->map(function ($row, $index) use ($roles, $units, $isEmployee) {
             $role = $roles[$row['role_id']];
             $unitId = $row['department_id'] ?? null;
-            if (! $isTeacher && ($role->requiresUnit() || $role->code === Role::GIAO_VIEN)) {
-                throw ValidationException::withMessages(["roles.$index.role_id" => "Vai trò {$role->name} chỉ dành cho nhân sự là giáo viên."]);
+            if (! $isEmployee && $role->requiresUnit()) {
+                throw ValidationException::withMessages(["roles.$index.role_id" => "Vai trò {$role->name} chỉ dành cho giáo viên hoặc nhân viên."]);
             }
             if ($role->requiresUnit()) {
                 $unit = $unitId ? $units[$unitId] ?? null : null;

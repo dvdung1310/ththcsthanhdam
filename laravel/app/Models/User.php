@@ -57,7 +57,7 @@ class User extends Authenticatable
     private ?Collection $activeRolesCache = null;
 
     public function roles() { return $this->belongsToMany(Role::class, 'role_user')->withPivot(['department_id', 'expires_at', 'assigned_by'])->withTimestamps(); }
-    public function teacher() { return $this->hasOne(Teacher::class); }
+    public function employee() { return $this->hasOne(Employee::class); }
 
     public function activeRoles(): Collection
     {
@@ -114,13 +114,13 @@ class User extends Authenticatable
 
     public function memberUnitIds(): array
     {
-        return $this->teacher?->unitIds() ?? [];
+        return $this->employee?->unitIds() ?? [];
     }
 
     public function roleLabels(): array
     {
         return $this->activeRoles()
-            ->sortBy(fn (Role $role) => array_search($role->code, [Role::ADMIN, Role::HIEU_TRUONG, Role::THU_KY, Role::TO_TRUONG, Role::TO_PHO, Role::NHOM_TRUONG, Role::GIAO_VIEN], true))
+            ->sortBy(fn (Role $role) => Role::rank($role->code))
             ->map(fn (Role $role) => $role->pivot->department_id ? $role->name.' — '.Department::pathLabel((int) $role->pivot->department_id) : $role->name)
             ->values()->all();
     }

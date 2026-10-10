@@ -220,6 +220,44 @@
   font-size: 11px;
 }
 
+.homeroom-choice {
+  margin: 0 12px 11px 33px;
+  padding: 3px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+  border: 1px solid var(--c-primary-line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.homeroom-choice label {
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  color: var(--c-text-2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.homeroom-choice label.active {
+  color: #fff;
+  background: var(--c-primary);
+}
+
+.homeroom-choice input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.homeroom-choice label:has(input:focus-visible) {
+  outline: 2px solid var(--c-primary-line);
+  outline-offset: 1px;
+}
+
 .link-btn {
   justify-self: start;
   padding: 2px 0;

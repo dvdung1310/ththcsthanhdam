@@ -2,7 +2,6 @@
 namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
-use App\Models\Role;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -46,7 +45,7 @@ class AuthController extends Controller {
    'role_labels'=>$labels,
    'permissions'=>$user->permissionCodes(),
    'access_scope'=>$user->accessScope(),
-   'has_ai_assistant'=>$user->hasRole(Role::HIEU_TRUONG),
+   'has_ai_assistant'=>$user->hasPermission('ai.assistant'),
    'current_position'=>$labels[0]??null,
    'avatar_url'=>$user->avatar_path?route('avatars.show', ['filename' => basename($user->avatar_path)]):null,
   ];

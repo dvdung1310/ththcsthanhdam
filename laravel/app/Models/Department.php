@@ -24,7 +24,7 @@ class Department extends Model
 
     public function parent() { return $this->belongsTo(self::class, 'parent_id'); }
     public function children() { return $this->hasMany(self::class, 'parent_id'); }
-    public function teachers() { return $this->belongsToMany(Teacher::class, 'teacher_department')->withPivot(['is_primary', 'starts_on', 'ends_on'])->withTimestamps(); }
+    public function employees() { return $this->belongsToMany(Employee::class, 'department_employee')->withPivot(['is_primary', 'starts_on', 'ends_on'])->withTimestamps(); }
 
     public static function flushTree(): void
     {

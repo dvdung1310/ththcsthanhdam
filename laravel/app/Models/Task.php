@@ -28,7 +28,7 @@ class Task extends Model
     public function category() { return $this->belongsTo(TaskCategory::class, 'category_id'); }
     public function creator() { return $this->belongsTo(User::class, 'created_by'); }
     public function reviewers() { return $this->belongsToMany(User::class, 'task_reviewers')->withTimestamps(); }
-    public function teachers() { return $this->belongsToMany(Teacher::class, 'task_teacher_assignees')->withPivot(['assigned_by', 'assigned_at'])->withTimestamps(); }
+    public function employees() { return $this->belongsToMany(Employee::class, 'task_employee_assignees')->withPivot(['assigned_by', 'assigned_at'])->withTimestamps(); }
     public function departments() { return $this->belongsToMany(Department::class, 'task_department_assignees')->withTimestamps(); }
     public function libraryFiles() { return $this->belongsToMany(LibraryNode::class, 'task_library_files', 'task_id', 'node_id'); }
     public function updates() { return $this->hasMany(TaskUpdate::class); }

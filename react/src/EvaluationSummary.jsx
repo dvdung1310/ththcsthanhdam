@@ -228,7 +228,7 @@ export default function EvaluationSummary() {
         <div className="ev-filters ev-summary-toolbar">
           <label className="ev-search">
             <Search size={15} />
-            <input value={keyword} onChange={(e) => typeSearch(e.target.value)} placeholder="Tìm tên hoặc mã giáo viên..." />
+            <input value={keyword} onChange={(e) => typeSearch(e.target.value)} placeholder="Tìm tên hoặc mã nhân sự..." />
           </label>
           <UnitPicker teams={teams} groups={summary?.facets?.groups ?? []} team={team} group={group} onChange={(next) => update(next)} />
           <div className="ev-segmented" role="group" aria-label="Chủ nhiệm">
