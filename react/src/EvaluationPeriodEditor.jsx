@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { ArrowLeft, Building2, Check, ChevronRight, ListChecks, Lock, Search, ShieldCheck, TriangleAlert, UserX, Users } from "lucide-react";
 import { apiJson } from "./api";
 import { useConfirm } from "./ConfirmDialog";
@@ -32,6 +32,7 @@ export default function EvaluationPeriodEditor() {
   const { periodId } = useParams();
   const editing = Boolean(periodId);
   const navigate = useNavigate();
+  const [query] = useSearchParams();
   const confirm = useConfirm();
   const [roster, setRoster] = useState(null);
   const [form, setForm] = useState(null);
@@ -59,7 +60,9 @@ export default function EvaluationPeriodEditor() {
           setForm({ self_due_on: result.period.self_due_on ?? "", unit_due_on: result.period.unit_due_on ?? "" });
         } else {
           const periods = (await apiJson("/api/evaluation-periods")).data;
-          const next = nextOpenMonth(periods);
+          const wanted = Number(query.get("year")) && Number(query.get("month")) ? new Date(Number(query.get("year")), Number(query.get("month")) - 1, 1) : null;
+          const taken = wanted && periods.some((p) => p.year === wanted.getFullYear() && p.month === wanted.getMonth() + 1);
+          const next = wanted && !taken ? wanted : nextOpenMonth(periods);
           const prefix = `${next.getFullYear()}-${pad(next.getMonth() + 1)}`;
           setForm({ year: next.getFullYear(), month: next.getMonth() + 1, self_due_on: `${prefix}-25`, unit_due_on: `${prefix}-28` });
         }

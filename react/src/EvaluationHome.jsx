@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
-import { AlignJustify, ArrowDown, ArrowUp, Award, CalendarDays, Rows3, CalendarPlus, Check, CheckCircle2, ChevronRight, ClipboardList, Trash2, Megaphone, MessageSquare, RotateCcw, Search, Send, Settings2, TriangleAlert, X } from "lucide-react";
+import { AlignJustify, ArrowDown, ArrowUp, Award, Rows3, CalendarPlus, Check, CheckCircle2, ChevronRight, ClipboardList, Trash2, Megaphone, MessageSquare, RotateCcw, Search, Send, Settings2, TriangleAlert, X } from "lucide-react";
 import { apiJson } from "./api";
 import ActionMenu from "./ActionMenu";
 import { useConfirm } from "./ConfirmDialog";
 import TablePagination, { usePagination } from "./TablePagination";
 import { STATUS_TONES, daysPast, formatDay, formatScore, gradeCode, gradeTone, schoolYearLabel, schoolYearOf } from "./evaluationUtils";
 import Dropdown from "./Dropdown";
+import EvaluationPeriodPicker from "./EvaluationPeriodPicker";
 import UnitPicker from "./UnitPicker";
 import InfoPopover from "./InfoPopover";
 import useFitHeight from "./useFitHeight";
@@ -51,6 +52,10 @@ export default function EvaluationHome() {
   const tab = params.get("tab") === "board" && canBoard ? "board" : !hasOwn && canBoard ? "board" : "mine";
   const periodId = Number(params.get("period")) || overview?.data[0]?.id || null;
   const period = overview?.data.find((item) => item.id === periodId) ?? null;
+
+  const today = new Date();
+  const currentMissing = Boolean(overview) && !overview.data.some((item) => item.year === today.getFullYear() && item.month === today.getMonth() + 1);
+  const openNew = (year, month) => navigate(`/evaluations/periods/new?year=${year}&month=${month}`);
 
   const setParam = (values) =>
     setParams((current) => {
@@ -181,15 +186,12 @@ export default function EvaluationHome() {
         <section className="ev-card">
           <div className={`ev-board-head compact ${overview.data.length ? "" : "empty"}`}>
             {overview.data.length > 0 && (
-              <Dropdown
-                label="Kỳ đánh giá"
-                icon={CalendarDays}
-                value={periodId ?? ""}
-                onChange={(value) => (value === "new" ? navigate("/evaluations/periods/new") : setParam({ period: String(value), status: "", flag: "" }))}
-                options={[
-                  ...overview.data.map((item) => ({ value: item.id, label: item.label, hint: item.status_label })),
-                  ...(abilities.can_manage ? [{ divider: true }, { value: "new", label: "＋ Mở kỳ đánh giá mới" }] : []),
-                ]}
+              <EvaluationPeriodPicker
+                periods={overview.data}
+                value={periodId}
+                canManage={abilities.can_manage}
+                onChange={(id) => setParam({ period: String(id), status: "", flag: "" })}
+                onOpenNew={openNew}
               />
             )}
             {period && (
@@ -203,8 +205,16 @@ export default function EvaluationHome() {
             )}
             <div className="ev-period-actions">
               {templateInfo}
-              {!overview.data.length && abilities.can_manage && (
-                <button className="primary-btn" onClick={() => navigate("/evaluations/periods/new")}><CalendarPlus size={15} /> Mở kỳ đánh giá</button>
+              {abilities.can_manage && (
+                currentMissing ? (
+                  <button className="primary-btn" onClick={() => openNew(today.getFullYear(), today.getMonth() + 1)}>
+                    <CalendarPlus size={15} /> Mở kỳ Tháng {today.getMonth() + 1}/{today.getFullYear()}
+                  </button>
+                ) : (
+                  <button className="secondary-btn icon-only" onClick={() => navigate("/evaluations/periods/new")} title="Mở kỳ đánh giá mới (tháng tiếp theo chưa mở)" aria-label="Mở kỳ đánh giá mới">
+                    <CalendarPlus size={16} />
+                  </button>
+                )
               )}
               {period && abilities.can_manage && (
                 <>

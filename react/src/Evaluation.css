@@ -4086,3 +4086,9 @@
   flex-wrap: nowrap;
   white-space: nowrap;
 }
+
+.ev-period-actions .icon-only {
+  width: 36px;
+  padding: 0;
+  justify-content: center;
+}
