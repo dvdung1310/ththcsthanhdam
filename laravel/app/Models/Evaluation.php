@@ -27,6 +27,7 @@ class Evaluation extends Model
     public function period() { return $this->belongsTo(EvaluationPeriod::class, 'period_id'); }
     public function teacher() { return $this->belongsTo(Employee::class, 'teacher_id'); }
     public function template() { return $this->belongsTo(EvaluationTemplate::class, 'template_id'); }
+    public function assignedScorers() { return $this->belongsToMany(User::class, 'evaluation_scorers')->withTimestamps(); }
 
     public function scoredByLeadership(): bool
     {
