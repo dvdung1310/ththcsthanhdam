@@ -21,6 +21,7 @@ import {
 import { apiJson } from "./api";
 import Avatar from "./Avatar";
 import Dropdown from "./Dropdown";
+import MonthPicker from "./MonthPicker";
 import PeoplePicker from "./PeoplePicker";
 import TablePagination, { usePagination } from "./TablePagination";
 import { useConfirm } from "./ConfirmDialog";
@@ -46,13 +47,6 @@ const shortDate = (value) => {
 };
 const fold = (text) => String(text ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").toLowerCase();
 
-function monthOptions() {
-  const now = new Date();
-  return Array.from({ length: 16 }, (_, index) => {
-    const d = new Date(now.getFullYear(), now.getMonth() + 2 - index, 1);
-    return { value: monthKey(d), label: `Tháng ${d.getMonth() + 1}/${d.getFullYear()}` };
-  });
-}
 
 export function countSessions(start, startSession, end, endSession) {
   if (!start || !end || end < start) return 0;
@@ -225,7 +219,7 @@ export default function LeaveTracking() {
           <span>
             <b>{stats.people}</b>
             <small>{wide ? "Nhân sự có nghỉ" : "Bản ghi của bạn"}</small>
-            <em>{monthOptions().find((o) => o.value === month)?.label ?? month}</em>
+            <em>Tháng {Number(month.slice(5))}/{month.slice(0, 4)}</em>
           </span>
         </article>
       </section>
@@ -245,7 +239,7 @@ export default function LeaveTracking() {
           </div>
         </div>
         <div className="filters leave-filters">
-          <Dropdown label="Tháng" icon={CalendarDays} value={month} options={monthOptions()} onChange={(value) => { setMonth(value); pager.reset(); }} />
+          <MonthPicker value={month} onChange={(value) => { setMonth(value); pager.reset(); }} />
           {wide && (
             <label className="teacher-search">
               <Search size={17} />

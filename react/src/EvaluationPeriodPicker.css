@@ -158,3 +158,18 @@
   align-items: center;
   gap: 5px;
 }
+
+.epp-grid button.today:not(.selected) {
+  border-color: var(--c-primary-line);
+  color: var(--c-primary);
+}
+
+.epp-today {
+  padding: 0;
+  border: 0;
+  color: var(--c-primary);
+  background: none;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
