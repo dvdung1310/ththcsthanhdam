@@ -3,7 +3,7 @@ import { Check, ChevronDown, Search, Users } from "lucide-react";
 
 const fold = (text) => (text ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase();
 
-export default function UnitPicker({ teams, groups, team, group, onChange }) {
+export default function UnitPicker({ teams, groups, team, group, onChange, noneLabel }) {
   const [open, setOpen] = useState(false);
   const [term, setTerm] = useState("");
   const ref = useRef(null);
@@ -27,7 +27,7 @@ export default function UnitPicker({ teams, groups, team, group, onChange }) {
       return { ...item, children: hits, visible: selfHit || hits.length > 0 };
     })
     .filter((item) => item.visible);
-  const label = group ? groups.find((item) => item.id === group)?.name : team ? teams.find((item) => item.id === team)?.name : "Mọi tổ / nhóm";
+  const label = team === "none" ? noneLabel : group ? groups.find((item) => item.id === group)?.name : team ? teams.find((item) => item.id === team)?.name : "Mọi tổ / nhóm";
   const pick = (next) => {
     onChange(next);
     setOpen(false);
@@ -65,6 +65,12 @@ export default function UnitPicker({ teams, groups, team, group, onChange }) {
                 ))}
               </div>
             ))}
+            {noneLabel && !query && (
+              <button type="button" className={`none ${team === "none" ? "selected" : ""}`} onClick={() => pick({ team: "none", group: "" })}>
+                <span>{noneLabel}</span>
+                {team === "none" && <Check size={14} />}
+              </button>
+            )}
             {!tree.length && <p className="ev-muted">Không tìm thấy tổ hoặc nhóm.</p>}
           </div>
         </div>

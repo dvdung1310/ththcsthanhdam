@@ -3408,6 +3408,13 @@
   font-weight: 700;
 }
 
+.ev-unit-list button.none {
+  margin-top: 4px;
+  border-top: 1px solid #eef0f4;
+  border-radius: 0 0 6px 6px;
+  color: var(--c-text-2);
+}
+
 .ev-unit-list button.child {
   padding-left: 26px;
   color: var(--c-text-2);
