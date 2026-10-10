@@ -28,6 +28,7 @@ import { formatBytes } from "./fileUtils";
 import { SCORE_PATTERN, STATUS_TONES, cellScore, computeTotals, formatDay, formatMoment, formatScore, hasZeroCriterion, maxBase, normalizeScore, parseScore, scoreError, suggestGrade } from "./evaluationUtils";
 import "./Evaluation.css";
 import Avatar from "./Avatar";
+import Dropdown from "./Dropdown";
 
 const TASK_STATUS = { not_started: "Chưa thực hiện", in_progress: "Đang thực hiện", waiting_approval: "Chờ duyệt", completed: "Hoàn thành" };
 const AUTOSAVE_DELAY = 1500;
@@ -1006,10 +1007,13 @@ function Summary({ data, totals, isHomeroom, showUnit, showLeader, suggested, re
           {!form.no_grade && (
             <label>
               Xếp loại
-              <select value={form.grade} onChange={(e) => onField("grade", e.target.value)}>
-                <option value="">Theo gợi ý{suggested ? ` (${suggested.name})` : ""}</option>
-                {data.grades.map((grade) => <option key={grade.code} value={grade.code}>{grade.name}</option>)}
-              </select>
+              <Dropdown
+                field
+                label="Xếp loại"
+                value={form.grade}
+                onChange={(value) => onField("grade", value)}
+                options={[{ value: "", label: `Theo gợi ý${suggested ? ` (${suggested.name})` : ""}` }, { divider: true }, ...data.grades.map((grade) => ({ value: grade.code, label: grade.name }))]}
+              />
             </label>
           )}
         </div>

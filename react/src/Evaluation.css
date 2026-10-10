@@ -381,7 +381,6 @@
 }
 
 .ev-dialog input,
-.ev-dialog select,
 .ev-dialog textarea {
   min-height: 38px;
   padding: 8px 10px;
@@ -2475,13 +2474,8 @@
   color: #273250;
 }
 
-.ev-unit-select {
+.dd.ev-unit-select {
   display: none;
-  height: 36px;
-  padding: 0 10px;
-  border: 1px solid #dfe3ec;
-  border-radius: 9px;
-  background: #fff;
 }
 
 .ev-people-note {
@@ -2547,8 +2541,8 @@
     display: none;
   }
 
-  .ev-unit-select {
-    display: block;
+  .dd.ev-unit-select {
+    display: inline-flex;
   }
 
   .ev-people-scroll {
@@ -4214,15 +4208,12 @@
   color: var(--c-primary);
 }
 
-.ev-head-control select {
-  height: 100%;
-  padding: 0;
-  border: 0;
-  outline: 0;
-  color: inherit;
-  background: transparent;
-  font: inherit;
-  cursor: pointer;
+.ev-head-dd .dd-trigger {
+  color: #273250;
+}
+
+.ev-head-dd .dd-trigger > svg:first-child {
+  color: var(--c-primary);
 }
 
 .ev-head-control:focus-within,

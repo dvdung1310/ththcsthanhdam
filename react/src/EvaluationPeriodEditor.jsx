@@ -7,6 +7,7 @@ import { STATUS_TONES } from "./evaluationUtils";
 import "./Evaluation.css";
 import Avatar from "./Avatar";
 import EvaluationScorerPicker from "./EvaluationScorerPicker";
+import Dropdown from "./Dropdown";
 
 const pad = (n) => String(n).padStart(2, "0");
 const AUDIENCE_SHORT = { teacher: "GV", staff: "NV", leadership: "BGH" };
@@ -324,16 +325,14 @@ export default function EvaluationPeriodEditor() {
           {!editing && (
             <label className="ev-head-field">
               <span>Kỳ đánh giá</span>
-              <span className="ev-head-control">
-                <CalendarDays size={15} />
-                <select value={`${form.year}-${form.month}`} onChange={(e) => pickMonth(e.target.value)}>
-                  {monthOptions.map((option) => (
-                    <option key={option.value} value={option.value} disabled={option.taken}>
-                      Tháng {option.month}/{option.year}{option.taken ? " · đã mở" : ""}
-                    </option>
-                  ))}
-                </select>
-              </span>
+              <Dropdown
+                  className="ev-head-dd"
+                  icon={CalendarDays}
+                  label="Kỳ đánh giá"
+                  value={`${form.year}-${form.month}`}
+                  onChange={(value) => pickMonth(value)}
+                  options={monthOptions.map((option) => ({ value: option.value, label: `Tháng ${option.month}/${option.year}`, hint: option.taken ? "đã mở" : undefined, disabled: option.taken }))}
+                />
             </label>
           )}
           <label className="ev-head-field">
@@ -384,11 +383,18 @@ export default function EvaluationPeriodEditor() {
 
         <section className="ev-card ev-people-pane">
           <div className="ev-people-toolbar">
-            <select className="ev-unit-select" value={scope} onChange={(e) => setScope(e.target.value)} aria-label="Đơn vị">
-              <option value="all">Toàn trường</option>
-              {flatten(tree).map((node) => <option key={node.key} value={node.key}>{"— ".repeat(node.depth)}{node.name}</option>)}
-              {excluded.length > 0 && <option value="excluded">Không thuộc diện đánh giá</option>}
-            </select>
+            <Dropdown
+              className="ev-unit-select"
+              label="Đơn vị"
+              value={scope}
+              onChange={(value) => setScope(value)}
+              options={[
+                { value: "all", label: "Toàn trường" },
+                { divider: true },
+                ...flatten(tree).map((node) => ({ value: node.key, label: node.name, depth: node.depth })),
+                ...(excluded.length > 0 ? [{ divider: true }, { value: "excluded", label: "Không thuộc diện đánh giá" }] : []),
+              ]}
+            />
             <label className="ev-search">
               <Search size={15} />
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm theo tên hoặc mã nhân sự..." />

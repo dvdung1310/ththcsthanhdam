@@ -6,6 +6,7 @@ import { EMPLOYMENT_LABELS } from "./PersonnelDrawer";
 import "./OrgStructure.css";
 import UserAvatar from "./Avatar";
 import TablePagination, { usePagination } from "./TablePagination";
+import Dropdown from "./Dropdown";
 
 const COLLAPSED_KEY = "org-collapsed";
 const DESCRIPTION_MAX = 1000;
@@ -340,9 +341,7 @@ function UnitDialog({ unit, roots, onClose, onSaved }) {
         {isGroup && (
           <label>
             Thuộc tổ
-            <select value={parentId} onChange={(e) => setParentId(e.target.value)}>
-              {roots.map((root) => <option key={root.id} value={root.id}>{root.name}</option>)}
-            </select>
+            <Dropdown field label="Thuộc tổ" value={parentId} onChange={(value) => setParentId(value)} options={roots.map((root) => ({ value: root.id, label: root.name }))} />
           </label>
         )}
         <label>

@@ -41,6 +41,7 @@ import LibraryShareDialog, { ACCESS_LABELS } from "./LibraryShareDialog";
 import ShareFileDialog from "./ShareFileDialog";
 import { downloadFile, fileIcon, fileKind, formatBytes } from "./fileUtils";
 import FilePreview from "./FilePreview";
+import Dropdown from "./Dropdown";
 import ActionMenu, { MenuList, menuPosition } from "./ActionMenu";
 import LibraryFolderTree from "./LibraryFolderTree";
 import { useNameConflicts } from "./NameConflictDialog";
@@ -590,24 +591,8 @@ export default function DataLibrary({ view = "library", folderId = null, selectI
                 <Search size={16} />
                 <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Tìm trong các mục bạn được xem..." />
               </label>
-              <select value={fileType} onChange={(e) => { setFileType(e.target.value); setPage(1); }}>
-                <option value="">Mọi loại file</option>
-                <option value="pdf">PDF</option>
-                <option value="word">Word</option>
-                <option value="excel">Excel</option>
-                <option value="slide">Trình chiếu</option>
-                <option value="image">Hình ảnh</option>
-              </select>
-              <select value={sort} onChange={(e) => { setSort(e.target.value); setPage(1); }}>
-                <option value="newest">Mới tải lên</option>
-                <option value="oldest">Tải lên lâu nhất</option>
-                <option value="name_asc">Tên A → Z</option>
-                <option value="name_desc">Tên Z → A</option>
-                <option value="size_desc">Dung lượng lớn nhất</option>
-                <option value="size_asc">Dung lượng nhỏ nhất</option>
-                <option value="updated_desc">Mới cập nhật</option>
-                <option value="updated_asc">Cập nhật lâu nhất</option>
-              </select>
+              <Dropdown label="Loại file" value={fileType} onChange={(value) => { setFileType(String(value)); setPage(1); }} options={[{ value: "", label: "Mọi loại file" }, { divider: true }, { value: "pdf", label: "PDF" }, { value: "word", label: "Word" }, { value: "excel", label: "Excel" }, { value: "slide", label: "Trình chiếu" }, { value: "image", label: "Hình ảnh" }]} />
+              <Dropdown label="Sắp xếp" value={sort} onChange={(value) => { setSort(String(value)); setPage(1); }} options={[{ value: "newest", label: "Mới tải lên" }, { value: "oldest", label: "Tải lên lâu nhất" }, { value: "name_asc", label: "Tên A → Z" }, { value: "name_desc", label: "Tên Z → A" }, { value: "size_desc", label: "Dung lượng lớn nhất" }, { value: "size_asc", label: "Dung lượng nhỏ nhất" }, { value: "updated_desc", label: "Mới cập nhật" }, { value: "updated_asc", label: "Cập nhật lâu nhất" }]} />
               {canUploadHere && !search && (
                 <div className="dl-actions">
                   <button className="secondary-btn" onClick={() => createFolder()}>
@@ -1198,6 +1183,10 @@ function MyFiles({ onError, onSuccess, error, onOpenLocation }) {
     setter(event.target.value);
     setPage(1);
   };
+  const pick = (setter) => (value) => {
+    setter(String(value));
+    setPage(1);
+  };
   const rowKey = (file) => String(file.id);
   const url = (file) => `/api/my-files/${file.id}/download`;
   const [preview, setPreview] = useState(null);
@@ -1243,32 +1232,10 @@ function MyFiles({ onError, onSuccess, error, onOpenLocation }) {
             <Search size={16} />
             <input value={search} onChange={filter(setSearch)} placeholder="Tìm theo tên file..." />
           </label>
-          <select value={source} onChange={filter(setSource)}>
-            <option value="">Mọi nguồn</option>
-            <option value="attachment">Tài liệu giao việc</option>
-            <option value="submission">Bài nộp</option>
-          </select>
-          <select value={status} onChange={filter(setStatus)}>
-            <option value="">Mọi trạng thái</option>
-            <option value="shared">Đã ở trong kho</option>
-            <option value="unshared">Chưa chia sẻ</option>
-            <option value="pending">Chờ việc hoàn thành</option>
-          </select>
-          <select value={fileType} onChange={filter(setFileType)}>
-            <option value="">Mọi loại file</option>
-            <option value="pdf">PDF</option>
-            <option value="word">Word</option>
-            <option value="excel">Excel</option>
-            <option value="slide">Trình chiếu</option>
-            <option value="image">Hình ảnh</option>
-          </select>
-          <select value={sort} onChange={filter(setSort)}>
-            <option value="newest">Mới nhất</option>
-            <option value="oldest">Cũ nhất</option>
-            <option value="name_asc">Tên A → Z</option>
-            <option value="name_desc">Tên Z → A</option>
-            <option value="size_desc">Dung lượng lớn nhất</option>
-          </select>
+          <Dropdown label="Nguồn" value={source} onChange={pick(setSource)} options={[{ value: "", label: "Mọi nguồn" }, { divider: true }, { value: "attachment", label: "Tài liệu giao việc" }, { value: "submission", label: "Bài nộp" }]} />
+          <Dropdown label="Trạng thái" value={status} onChange={pick(setStatus)} options={[{ value: "", label: "Mọi trạng thái" }, { divider: true }, { value: "shared", label: "Đã ở trong kho" }, { value: "unshared", label: "Chưa chia sẻ" }, { value: "pending", label: "Chờ việc hoàn thành" }]} />
+          <Dropdown label="Loại file" value={fileType} onChange={pick(setFileType)} options={[{ value: "", label: "Mọi loại file" }, { divider: true }, { value: "pdf", label: "PDF" }, { value: "word", label: "Word" }, { value: "excel", label: "Excel" }, { value: "slide", label: "Trình chiếu" }, { value: "image", label: "Hình ảnh" }]} />
+          <Dropdown label="Sắp xếp" value={sort} onChange={pick(setSort)} options={[{ value: "newest", label: "Mới nhất" }, { value: "oldest", label: "Cũ nhất" }, { value: "name_asc", label: "Tên A → Z" }, { value: "name_desc", label: "Tên Z → A" }, { value: "size_desc", label: "Dung lượng lớn nhất" }]} />
         </div>
       </section>
       <section className="dl-content" onClick={() => setSelected(null)}>

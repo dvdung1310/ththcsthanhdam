@@ -4,6 +4,7 @@ import { CheckCircle2, Info, Lock, ShieldCheck, TriangleAlert, X } from "lucide-
 import { apiJson } from "./api";
 import { useConfirm } from "./ConfirmDialog";
 import "./RolePermissionMatrix.css";
+import Dropdown from "./Dropdown";
 
 const MODULE_LABELS = {
   dashboard: "Tổng quan",
@@ -226,16 +227,16 @@ export default function RolePermissionMatrix() {
         </div>
 
         <div className="role-mobile">
-          <label className="role-picker">
+          <div className="role-picker">
             <span>Vai trò</span>
-            <select value={activeRole?.id ?? ""} onChange={(e) => setActiveRoleId(Number(e.target.value))}>
-              {editable.map((role) => (
-                <option key={role.id} value={role.id}>
-                  {role.name} · {scopeLabel(role)} · {role.users_count} người{dirtyRoles.includes(role) ? " · chưa lưu" : ""}
-                </option>
-              ))}
-            </select>
-          </label>
+            <Dropdown
+              field
+              label="Vai trò"
+              value={activeRole?.id ?? ""}
+              onChange={(value) => setActiveRoleId(Number(value))}
+              options={editable.map((role) => ({ value: role.id, label: role.name, hint: `${scopeLabel(role)} · ${role.users_count} người${dirtyRoles.includes(role) ? " · chưa lưu" : ""}` }))}
+            />
+          </div>
           {activeRole &&
             grouped.map((group) => (
               <section key={group.module} className="role-group">

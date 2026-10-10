@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { apiJson } from "./api";
 import { GRADE_TONES, formatScore } from "./evaluationUtils";
 import "./Evaluation.css";
+import Dropdown from "./Dropdown";
 
 export default function EvaluationTeacherHistory({ teacherId }) {
   const [summary, setSummary] = useState(null);
@@ -26,9 +27,7 @@ export default function EvaluationTeacherHistory({ teacherId }) {
   return (
     <div className="ev-teacher-history">
       <div className="ev-teacher-history-head">
-        <select value={summary.school_year} onChange={(e) => setYear(e.target.value)} aria-label="Năm học">
-          {summary.school_years.map((item) => <option key={item.value} value={item.value}>Năm học {item.label}</option>)}
-        </select>
+        <Dropdown label="Năm học" value={summary.school_year} onChange={(value) => setYear(value)} options={summary.school_years.map((item) => ({ value: item.value, label: `Năm học ${item.label}` }))} />
         {stats?.months ? (
           <span>
             {grades.filter((grade) => stats.counts[grade.key]).map((grade) => `${stats.counts[grade.key]} ${grade.short}`).join(" · ")}

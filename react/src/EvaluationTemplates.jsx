@@ -7,6 +7,7 @@ import { formatMoment, formatScore, parseScore } from "./evaluationUtils";
 import TablePagination, { usePagination } from "./TablePagination";
 import "./Evaluation.css";
 import Avatar from "./Avatar";
+import Dropdown from "./Dropdown";
 
 let keySeed = 0;
 const newKey = () => `k${++keySeed}`;
@@ -230,9 +231,7 @@ function TemplateList() {
             <Search size={15} />
             <input value={search} onChange={(e) => { setSearch(e.target.value); pager.reset(); }} placeholder="Tìm theo tên hoặc mô tả..." />
           </label>
-          <select value={status} onChange={(e) => { setStatus(e.target.value); pager.reset(); }}>
-            {STATUS_FILTERS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
+          <Dropdown label="Trạng thái" value={status} onChange={(value) => { setStatus(String(value)); pager.reset(); }} options={STATUS_FILTERS.map(([value, label]) => ({ value, label }))} />
         </div>
         {!templates ? (
           <div className="empty-state"><ListChecks className="loading-icon" size={30} /><b>Đang tải...</b></div>
@@ -486,10 +485,14 @@ function TemplateDetail({ id }) {
                   <div className="ev-tpl-section-head">
                     <input className="code" value={section.code} placeholder="Mã" onChange={(e) => updateSection(section.key, (s) => ({ ...s, code: e.target.value }))} />
                     <input className="title" value={section.title} placeholder="Tên mục (VD: Nền nếp, tác phong)" onChange={(e) => updateSection(section.key, (s) => ({ ...s, title: e.target.value }))} />
-                    <select value={section.kind} onChange={(e) => updateSection(section.key, (s) => ({ ...s, kind: e.target.value }))}>
-                      <option value="score">Mục chấm điểm</option>
-                      <option value="bonus">Điểm cộng</option>
-                    </select>
+                    <Dropdown
+                      field
+                      className="kind"
+                      label="Loại mục"
+                      value={section.kind}
+                      onChange={(value) => updateSection(section.key, (s) => ({ ...s, kind: value }))}
+                      options={[{ value: "score", label: "Mục chấm điểm" }, { value: "bonus", label: "Điểm cộng" }]}
+                    />
                     <label className="max">
                       {section.kind === "bonus" ? "Cộng tối đa" : "Tối đa"}
                       <input value={section.max_score} inputMode="decimal" onChange={(e) => updateSection(section.key, (s) => ({ ...s, max_score: e.target.value }))} />
@@ -818,10 +821,13 @@ function CreateDialog({ dialog, templates, onClose, onCreated }) {
         </label>
         <label>
           Sao chép từ
-          <select value={copyFrom} onChange={(e) => setCopyFrom(e.target.value)}>
-            <option value="">Không — bắt đầu từ bộ trống</option>
-            {templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
-          </select>
+          <Dropdown
+            field
+            label="Sao chép từ"
+            value={copyFrom}
+            onChange={(value) => setCopyFrom(String(value))}
+            options={[{ value: "", label: "Không — bắt đầu từ bộ trống" }, { divider: true }, ...templates.map((template) => ({ value: String(template.id), label: template.name }))]}
+          />
         </label>
         <p className="ev-dialog-note">Bộ mới ở trạng thái nháp, chưa ảnh hưởng tới kỳ nào. Sửa xong, bấm “Áp dụng” để phiếu tạo sau dùng bộ này.</p>
         {error && <p className="dl-dialog-error">{error}</p>}

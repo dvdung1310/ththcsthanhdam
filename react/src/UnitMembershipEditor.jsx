@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, Plus, Search, TriangleAlert, X } from "lucide-react";
 import "./UnitMembershipEditor.css";
+import Dropdown from "./Dropdown";
 
 const POSITIONS = {
   to: [
@@ -102,13 +103,15 @@ export default function UnitMembershipEditor({ units, unitIds, roles, roleCatalo
   const selectedRoots = roots.filter((root) => isSelected(root.id));
 
   const positionSelect = (unit) => (
-    <select value={positionOf(unit)} disabled={!canAssignRoles} onChange={(e) => setPosition(unit.id, e.target.value)}>
-      {positionsFor(unit).map(([value, label]) => (
-        <option key={value} value={value}>
-          {label}
-        </option>
-      ))}
-    </select>
+    <Dropdown
+      field
+      label="Chức vụ"
+      align="right"
+      value={positionOf(unit)}
+      disabled={!canAssignRoles}
+      onChange={(value) => setPosition(unit.id, value)}
+      options={positionsFor(unit).map(([value, label]) => ({ value, label }))}
+    />
   );
 
   const conflictNote = (unitId) =>

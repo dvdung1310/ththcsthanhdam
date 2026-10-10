@@ -5,6 +5,7 @@ import { useConfirm } from "./ConfirmDialog";
 import UnitMembershipEditor, { findHolderConflicts } from "./UnitMembershipEditor";
 import EvaluationTeacherHistory from "./EvaluationTeacherHistory";
 import "./PersonnelDrawer.css";
+import Dropdown from "./Dropdown";
 
 export const EMPLOYMENT_LABELS = {
   working: "Đang làm việc",
@@ -344,16 +345,13 @@ export default function PersonnelDrawer({
                   </label>
                   <label>
                     <span>Trạng thái công tác <span className="required-mark">*</span></span>
-                    <select
+                    <Dropdown
+                      field
+                      label="Trạng thái công tác"
                       value={form.employment_status}
-                      onChange={(e) => set("employment_status", e.target.value)}
-                    >
-                      {["working", "on_leave", "suspended"].map((status) => (
-                        <option key={status} value={status}>
-                          {EMPLOYMENT_LABELS[status]}
-                        </option>
-                      ))}
-                    </select>
+                      onChange={(value) => set("employment_status", value)}
+                      options={["working", "on_leave", "suspended"].map((status) => ({ value: status, label: EMPLOYMENT_LABELS[status] }))}
+                    />
                   </label>
                 </div>
               </section>
