@@ -1,45 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
-import {
-  Award,
-  CalendarClock,
-  CalendarDays,
-  CalendarOff,
-  ChevronRight,
-  ClipboardCheck,
-  Inbox,
-  RefreshCw,
-  Sparkles,
-  TriangleAlert,
-  UserX,
-} from "lucide-react";
+import { Award, ChevronRight, ClipboardCheck, Database, RefreshCw, TriangleAlert, UserX, Users } from "lucide-react";
 import { apiFetch } from "./api";
+import { formatBytes } from "./fileUtils";
 import "./ManagementDashboard.css";
 
-const SCOPES = { school: "Toàn trường", department: "Phạm vi đơn vị quản lý", self: "Cá nhân" };
 const WEEKDAYS = ["Chủ nhật", "Thứ hai", "Thứ ba", "Thứ tư", "Thứ năm", "Thứ sáu", "Thứ bảy"];
-const TASK_STATUS = { not_started: "Chưa thực hiện", in_progress: "Đang thực hiện", waiting_approval: "Chờ duyệt" };
-const EVALUATION_TONES = { draft: "warn", submitted: "blue", unit_scored: "teal", published: "green" };
-const AGENDA_LIMIT = 3;
-const pad = (value) => String(value).padStart(2, "0");
-const dayKey = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-const shortDate = (value) => (value ? value.slice(0, 10).split("-").reverse().slice(0, 2).join("/") : "");
 const number = (value) => (value == null ? "—" : Number(value).toLocaleString("vi-VN", { maximumFractionDigits: 1 }));
-
-const dueText = (iso) => {
-  if (!iso) return "Không thời hạn";
-  const due = new Date(iso);
-  const days = Math.round((new Date(dayKey(due)) - new Date(dayKey(new Date()))) / 86400000);
-  const time = due.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" });
-  if (days < 0) return `Quá hạn ${-days} ngày`;
-  if (days === 0) return `Hôm nay ${time}`;
-  if (days === 1) return `Ngày mai ${time}`;
-  return `${shortDate(iso)} · còn ${days} ngày`;
+const shortDate = (value) => (value ? value.slice(0, 10).split("-").reverse().slice(0, 2).join("/") : "");
+const daysUntil = (value) => {
+  if (!value) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((new Date(`${value}T00:00:00`) - today) / 86400000);
 };
+const GRADE_TONES = ["g1", "g2", "g3", "g4", "g5", "g6"];
 
-const daysLeft = (date) => (date ? Math.round((new Date(date) - new Date(dayKey(new Date()))) / 86400000) : null);
-
-export default function ManagementDashboard({ onTask, onKpi }) {
+export default function ManagementDashboard({ onKpi }) {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
@@ -60,12 +37,8 @@ export default function ManagementDashboard({ onTask, onKpi }) {
   }, []);
   useEffect(() => {
     load();
-    const interval = setInterval(load, 60000);
-    window.addEventListener("task-stats:updated", load);
-    return () => {
-      clearInterval(interval);
-      window.removeEventListener("task-stats:updated", load);
-    };
+    const interval = setInterval(load, 120000);
+    return () => clearInterval(interval);
   }, [load]);
 
   if (!data) {
@@ -76,20 +49,17 @@ export default function ManagementDashboard({ onTask, onKpi }) {
     );
   }
 
-  const openTasks = (filter) => window.dispatchEvent(new CustomEvent("dashboard:task-filter", { detail: filter }));
   const today = new Date();
-  const { personal, queue, health, people } = data;
-  const hasQueue = queue.review.count > 0 || queue.scoring || queue.drafts > 0;
+  const openTasks = (filter) => window.dispatchEvent(new CustomEvent("dashboard:task-filter", { detail: filter }));
+  const follow = (link) => (link.tasks ? openTasks(link.tasks) : navigate(link.route));
+  const { personnel, tasks, evaluation, library, results, attention } = data;
 
   return (
     <div className="home">
       <header className="home-head">
         <div>
-          <h2>Xin chào, {data.name}</h2>
-          <p>
-            {WEEKDAYS[today.getDay()]}, {today.toLocaleDateString("vi-VN")}
-            <span className="home-scope">{SCOPES[data.scope]}</span>
-          </p>
+          <h2>Tổng quan toàn trường</h2>
+          <p>{WEEKDAYS[today.getDay()]}, {today.toLocaleDateString("vi-VN")} · số liệu toàn hệ thống</p>
         </div>
         <button type="button" className="secondary-btn" onClick={load} disabled={refreshing}>
           <RefreshCw size={15} className={refreshing ? "spin" : ""} /> Làm mới
@@ -97,126 +67,105 @@ export default function ManagementDashboard({ onTask, onKpi }) {
       </header>
       {error && <div className="kpi-error">{error}</div>}
 
-      <div className="home-grid">
-        {personal && (
-          <section className="home-card home-mine">
-            <header>
-              <h3><ClipboardCheck size={17} /> Việc của tôi</h3>
-              <button type="button" className="home-link" onClick={() => openTasks({ employee_id: String(personal.employee_id) })}>Tất cả <ChevronRight size={14} /></button>
-            </header>
-            <div className="home-counters">
-              <button type="button" onClick={() => openTasks({ employee_id: String(personal.employee_id) })}>
-                <b>{personal.tasks.open}</b><span>Đang cần làm</span>
-              </button>
-              <button type="button" className={personal.tasks.overdue ? "bad" : ""} onClick={() => openTasks({ employee_id: String(personal.employee_id), action: "overdue" })}>
-                <b>{personal.tasks.overdue}</b><span>Quá hạn</span>
-              </button>
-              <button type="button" className={personal.tasks.soon ? "warn" : ""} onClick={() => openTasks({ employee_id: String(personal.employee_id), due_from: dayKey(today), due_to: dayKey(new Date(today.getTime() + 3 * 86400000)) })}>
-                <b>{personal.tasks.soon}</b><span>Đến hạn 3 ngày tới</span>
-              </button>
-              <button type="button" onClick={() => openTasks({ employee_id: String(personal.employee_id), status: "waiting_approval" })}>
-                <b>{personal.tasks.waiting}</b><span>Đã nộp, chờ duyệt</span>
-              </button>
-            </div>
-            <TaskList items={personal.tasks.items} onTask={onTask} empty="Bạn không có việc nào đang mở." />
-          </section>
-        )}
+      <section className="home-modules">
+        <button type="button" className="home-module" onClick={() => navigate("/personnel")}>
+          <span className="home-module-head"><Users size={17} /> Nhân sự</span>
+          <b>{number(personnel.total)} <small>đang công tác</small></b>
+          <span className="home-module-parts">
+            {personnel.by_audience.filter((row) => row.count).map((row) => <span key={row.audience}>{row.label} <b>{row.count}</b></span>)}
+          </span>
+          <small className={personnel.absent_today ? "warn" : ""}>{personnel.absent_today ? `${personnel.absent_today} người vắng hôm nay` : "Hôm nay không ai vắng"}</small>
+        </button>
 
-        {personal && (
-          <div className="home-stack">
-            {personal.evaluation && (
-              <section className="home-card home-compact">
-                <header>
-                  <h3><Award size={17} /> Phiếu thi đua {personal.evaluation.period}</h3>
-                </header>
-                <EvaluationNote evaluation={personal.evaluation} onOpen={() => navigate(`/evaluations/${personal.evaluation.id}`)} />
-              </section>
-            )}
-            <section className="home-card home-compact">
-              <header>
-                <h3><CalendarOff size={17} /> Nghỉ tháng {personal.leave.month}</h3>
-                <button type="button" className="home-link" onClick={() => navigate("/personnel/leave")}>Theo dõi nghỉ <ChevronRight size={14} /></button>
-              </header>
-              <div className="home-leave">
-                <span><b>{personal.leave.excused_sessions}</b> buổi có phép</span>
-                <span className={personal.leave.unexcused ? "bad" : ""}><b>{personal.leave.unexcused}</b> lần không phép</span>
-                {personal.leave.regime_sessions > 0 && <span><b>{personal.leave.regime_sessions}</b> buổi nghỉ chế độ</span>}
-              </div>
-            </section>
-          </div>
-        )}
+        <button type="button" className="home-module" onClick={onKpi}>
+          <span className="home-module-head"><ClipboardCheck size={17} /> Công việc tháng {tasks.period}</span>
+          <b>{tasks.completion_rate == null ? "—" : `${number(tasks.completion_rate)}%`} <small>hoàn thành</small></b>
+          <span className="home-module-parts">
+            <span>Có hạn <b>{tasks.assigned}</b></span>
+            <span>Chờ duyệt <b>{tasks.waiting}</b></span>
+            <span className={tasks.overdue ? "bad" : ""}>Quá hạn <b>{tasks.overdue}</b></span>
+          </span>
+          <small>Bấm để xem Thống kê</small>
+        </button>
 
-        {hasQueue && (
-          <section className="home-card home-queue">
-            <header>
-              <h3><Inbox size={17} /> Cần bạn xử lý</h3>
-            </header>
-            {queue.review.count > 0 && (
-              <div className="home-queue-group">
-                <button type="button" className="home-queue-head" onClick={() => openTasks({ action: "my_review" })}>
-                  <span><b>{queue.review.count}</b> công việc chờ bạn duyệt</span>
+        <button type="button" className="home-module" disabled={!evaluation} onClick={() => evaluation && navigate(`/evaluations?tab=board&period=${evaluation.id}`)}>
+          <span className="home-module-head"><Award size={17} /> Thi đua {evaluation ? evaluation.label : ""}</span>
+          {evaluation ? (
+            <>
+              <b>{evaluation.submitted}/{evaluation.total} <small>phiếu đã nộp</small></b>
+              <span className="home-progress"><i style={{ width: `${evaluation.total ? (evaluation.scored / evaluation.total) * 100 : 0}%` }} className="scored" /><i style={{ width: `${evaluation.total ? ((evaluation.submitted - evaluation.scored) / evaluation.total) * 100 : 0}%` }} className="submitted" /></span>
+              <span className="home-module-parts">
+                <span>Đã chấm <b>{evaluation.scored}</b></span>
+                {evaluation.awaiting_leader > 0 && <span className="warn">Chờ BGH <b>{evaluation.awaiting_leader}</b></span>}
+              </span>
+              <small>{evaluation.status_label}{evaluation.self_due_on ? ` · tự chấm đến ${shortDate(evaluation.self_due_on)}` : ""}</small>
+            </>
+          ) : (
+            <b className="muted">Chưa mở kỳ</b>
+          )}
+        </button>
+
+        <button type="button" className="home-module" onClick={() => navigate("/library")}>
+          <span className="home-module-head"><Database size={17} /> Kho dữ liệu</span>
+          <b>{number(library.files)} <small>file</small></b>
+          <span className="home-module-parts">
+            <span>Thư mục <b>{number(library.folders)}</b></span>
+            <span>Dung lượng <b>{formatBytes(library.bytes)}</b></span>
+          </span>
+          <small>{library.new_week ? `${library.new_week} file mới trong 7 ngày` : "Chưa có file mới trong 7 ngày"}</small>
+        </button>
+      </section>
+
+      <section className="home-card home-attention">
+        <header>
+          <h3><TriangleAlert size={17} /> Cần chú ý toàn trường</h3>
+          <small>{attention.length ? `${attention.length} mục` : ""}</small>
+        </header>
+        {attention.length ? (
+          <ul>
+            {attention.map((item, index) => (
+              <li key={index}>
+                <button type="button" className={item.tone} onClick={() => follow(item.link)}>
+                  <i />
+                  <span>{item.text}</span>
                   <ChevronRight size={15} />
                 </button>
-                <ul>
-                  {queue.review.items.map((task) => (
-                    <li key={task.id}>
-                      <button type="button" onClick={() => onTask(task.code)}>
-                        <code>{task.code}</code>
-                        <span>{task.title}</span>
-                        <small>{task.assignees?.join(", ")}</small>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {queue.scoring && (
-              <div className="home-queue-group">
-                <button type="button" className="home-queue-head" onClick={() => navigate(`/evaluations?tab=board&period=${queue.scoring.period_id}`)}>
-                  <span><b>{queue.scoring.count}</b> phiếu thi đua {queue.scoring.period} chờ bạn chấm</span>
-                  <ChevronRight size={15} />
-                </button>
-                <ul>
-                  {queue.scoring.items.map((sheet) => (
-                    <li key={sheet.id}>
-                      <button type="button" onClick={() => navigate(`/evaluations/${sheet.id}`)}>
-                        <span>{sheet.name}</span>
-                        <small>{sheet.column}</small>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {queue.drafts > 0 && (
-              <button type="button" className="home-queue-head single" onClick={() => navigate("/tasks/ai")}>
-                <span><Sparkles size={14} /> <b>{queue.drafts}</b> bản nháp AI chưa tạo công việc</span>
-                <ChevronRight size={15} />
-              </button>
-            )}
-          </section>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="home-empty">Mọi thứ đang ổn — không có cảnh báo nào.</p>
         )}
+      </section>
 
-        {health && (
-          <section className="home-card home-health">
-            <header>
-              <h3>Tình hình chung · tháng {health.period}</h3>
-              {onKpi && <button type="button" className="home-link" onClick={onKpi}>Xem thống kê <ChevronRight size={14} /></button>}
-            </header>
-            <TaskHealth tasks={health.tasks} onOpen={() => openTasks({ due_from: `${today.getFullYear()}-${pad(today.getMonth() + 1)}-01`, due_to: dayKey(new Date(today.getFullYear(), today.getMonth() + 1, 0)) })} />
-            {health.evaluation && <EvaluationProgress evaluation={health.evaluation} onOpen={() => navigate(`/evaluations?tab=board&period=${health.evaluation.id}`)} />}
-          </section>
-        )}
+      <div className="home-pair">
+        <section className="home-card">
+          <header>
+            <h3><Award size={17} /> Kết quả thi đua {results ? results.current.label : ""}</h3>
+            {results && <button type="button" className="home-link" onClick={() => navigate("/evaluations/summary")}>Tổng hợp <ChevronRight size={14} /></button>}
+          </header>
+          {results ? <Results results={results} /> : <p className="home-empty">Chưa có kỳ đánh giá nào được công bố.</p>}
+        </section>
 
-        {people.leave && (
-          <section className="home-card home-absent">
-            <header>
-              <h3><UserX size={17} /> Vắng mặt hôm nay</h3>
-              <button type="button" className="home-link" onClick={() => navigate("/personnel/leave")}>Theo dõi nghỉ <ChevronRight size={14} /></button>
-            </header>
-            {people.leave.today.length ? (
-              <ul className="home-absent-list">
-                {people.leave.today.map((row, index) => (
+        <section className="home-card">
+          <header>
+            <h3><Users size={17} /> Nhân sự theo tổ</h3>
+            <button type="button" className="home-link" onClick={() => navigate("/personnel/structure")}>Cơ cấu tổ chức <ChevronRight size={14} /></button>
+          </header>
+          <ul className="home-units">
+            {personnel.units.map((unit) => (
+              <li key={unit.id}>
+                <span>{unit.name}</span>
+                <b>{unit.members} <small>người</small></b>
+                <small>{unit.tasks ? `${unit.tasks} việc · ${unit.completion_rate == null ? "—" : `${number(unit.completion_rate)}%`} hoàn thành` : "Chưa có việc tháng này"}</small>
+              </li>
+            ))}
+          </ul>
+          <div className="home-absent">
+            <h4><UserX size={15} /> Vắng hôm nay {personnel.absent_today ? `· ${personnel.absent_today}` : ""}</h4>
+            {personnel.absent.length ? (
+              <ul>
+                {personnel.absent.map((row, index) => (
                   <li key={index}>
                     <b>{row.name}</b>
                     <span className={`home-leave-type ${row.type}`}>{row.type_label}</span>
@@ -225,164 +174,60 @@ export default function ManagementDashboard({ onTask, onKpi }) {
                 ))}
               </ul>
             ) : (
-              <p className="home-empty">Hôm nay không ai nghỉ.</p>
+              <p className="home-muted">Không ai nghỉ hôm nay.</p>
             )}
-            <small className="home-foot">{people.leave.week} người có lịch nghỉ trong 7 ngày tới</small>
-          </section>
-        )}
-
-        <section className="home-card home-agenda">
-          <header>
-            <h3><CalendarDays size={17} /> 7 ngày tới</h3>
-            <small>{data.scope === "self" ? "Việc của bạn" : "Việc đến hạn trong phạm vi"} và các mốc đánh giá</small>
-          </header>
-          <Agenda items={people.upcoming} onTask={onTask} onPeriod={(id) => navigate(`/evaluations?tab=board&period=${id}`)} />
+            <button type="button" className="home-link" onClick={() => navigate("/personnel/leave")}>
+              {personnel.absent_week} người có lịch nghỉ trong 7 ngày tới · Theo dõi nghỉ <ChevronRight size={14} />
+            </button>
+          </div>
         </section>
       </div>
-    </div>
-  );
-}
-
-function TaskList({ items, onTask, empty }) {
-  if (!items.length) return <p className="home-empty">{empty}</p>;
-  return (
-    <ul className="home-tasks">
-      {items.map((task) => (
-        <li key={task.id}>
-          <button type="button" onClick={() => onTask(task.code)}>
-            <span className="home-task-main">
-              <code>{task.code}</code>
-              <b title={task.title}>{task.title}</b>
-            </span>
-            <span className={`home-due ${task.overdue ? "bad" : daysLeft(task.due_at) !== null && daysLeft(task.due_at) <= 1 ? "warn" : ""}`}>
-              <CalendarClock size={13} /> {dueText(task.due_at)}
-            </span>
-            <small>{TASK_STATUS[task.status] ?? task.status}</small>
-          </button>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-function EvaluationNote({ evaluation, onOpen }) {
-  const left = daysLeft(evaluation.self_due_on);
-  const pending = evaluation.status === "draft" && evaluation.period_status === "open";
-  return (
-    <div className="home-eval">
-      <span className={`home-pill ${EVALUATION_TONES[evaluation.status] ?? ""}`}>{evaluation.status_label}</span>
-      <p>
-        {pending
-          ? left == null
-            ? "Bạn chưa nộp phiếu tự đánh giá."
-            : left >= 0
-              ? `Hạn tự chấm ${shortDate(evaluation.self_due_on)} · còn ${left} ngày.`
-              : `Đã quá hạn tự chấm ${-left} ngày.`
-          : evaluation.period_status === "disclosed"
-            ? "Đã có kết quả dự kiến — xem và giải trình nếu cần."
-            : "Phiếu đã nộp, đang chờ chấm và duyệt."}
+      <p className="home-note">
+        Công việc tính theo hạn trong tháng, không tính việc đã hủy; tỷ lệ hoàn thành tính trên các việc đã đến hạn hoặc đã xong.
+        {daysUntil(evaluation?.self_due_on) != null && daysUntil(evaluation.self_due_on) >= 0 ? ` Hạn tự chấm kỳ ${evaluation.label} còn ${daysUntil(evaluation.self_due_on)} ngày.` : ""}
       </p>
-      <button type="button" className={pending ? "primary-btn" : "secondary-btn"} onClick={onOpen}>
-        {pending ? "Tự chấm ngay" : "Xem phiếu"}
-      </button>
     </div>
   );
 }
 
-const PARTS = [
-  ["completed", "Hoàn thành"],
-  ["waiting", "Chờ duyệt"],
-  ["open", "Đang làm"],
-  ["overdue", "Quá hạn"],
-];
-
-function TaskHealth({ tasks, onOpen }) {
-  const total = tasks.assigned || 0;
+function Results({ results }) {
+  const { current, previous } = results;
+  const graded = current.grades.reduce((sum, grade) => sum + grade.count, 0) + current.no_grade;
+  const delta = previous?.average != null && current.average != null ? Math.round((current.average - previous.average) * 10) / 10 : null;
   return (
-    <button type="button" className="home-health-tasks" onClick={onOpen}>
-      <span className="home-health-top">
-        <span><b>{number(tasks.assigned)}</b> việc có hạn trong tháng</span>
-        <span><b>{tasks.completion_rate == null ? "—" : `${number(tasks.completion_rate)}%`}</b> hoàn thành</span>
-        <span className={tasks.overdue ? "bad" : ""}><b>{tasks.overdue}</b> quá hạn</span>
-      </span>
-      <span className="home-bar">{total ? PARTS.map(([key]) => tasks[key] > 0 && <i key={key} className={key} style={{ width: `${(tasks[key] / total) * 100}%` }} />) : null}</span>
-      <span className="home-bar-legend">
-        {PARTS.map(([key, label]) => <span key={key}><i className={key} /> {label} {tasks[key]}</span>)}
-      </span>
-    </button>
-  );
-}
-
-function EvaluationProgress({ evaluation, onOpen }) {
-  const total = evaluation.total || 0;
-  const steps = [
-    ["Đã nộp", evaluation.submitted],
-    ["Đã chấm", evaluation.scored],
-  ];
-  const selfLeft = daysLeft(evaluation.self_due_on);
-  return (
-    <button type="button" className="home-health-eval" onClick={onOpen}>
-      <span className="home-health-eval-head">
-        <b><Award size={15} /> Thi đua {evaluation.label}</b>
-        <span className="home-pill blue">{evaluation.status_label}</span>
-      </span>
-      {steps.map(([label, value]) => (
-        <span key={label} className="home-step">
-          <span>{label}</span>
-          <span className="home-step-track"><i style={{ width: `${total ? (value / total) * 100 : 0}%` }} /></span>
-          <b>{value}/{total}</b>
+    <div className="home-results">
+      <div className="home-results-top">
+        <span>
+          <b>{number(current.average)}</b> <small>điểm trung bình</small>
         </span>
-      ))}
-      <span className="home-eval-meta">
-        {evaluation.awaiting_leader > 0 && <span className="warn"><TriangleAlert size={12} /> {evaluation.awaiting_leader} phiếu GV chờ BGH chấm</span>}
-        {evaluation.self_due_on && <span>Tự chấm đến {shortDate(evaluation.self_due_on)}{selfLeft != null && selfLeft >= 0 ? ` (còn ${selfLeft} ngày)` : ""}</span>}
-        {evaluation.unit_due_on && <span>Chấm phiếu đến {shortDate(evaluation.unit_due_on)}</span>}
+        {delta != null && <small className={delta > 0 ? "good" : delta < 0 ? "bad" : ""}>{delta > 0 ? "↑" : delta < 0 ? "↓" : "↔"} {number(Math.abs(delta))} so với {previous.label}</small>}
+        <small>{current.total} phiếu</small>
+      </div>
+      <span className="home-grade-bar">
+        {current.grades.map((grade, index) => grade.count > 0 && <i key={grade.code} className={GRADE_TONES[index]} style={{ width: `${(grade.count / (graded || 1)) * 100}%` }} title={`${grade.name}: ${grade.count}`} />)}
+        {current.no_grade > 0 && <i className="none" style={{ width: `${(current.no_grade / (graded || 1)) * 100}%` }} title={`Không xếp loại: ${current.no_grade}`} />}
       </span>
-    </button>
-  );
-}
-
-function Agenda({ items, onTask, onPeriod }) {
-  const [openDays, setOpenDays] = useState(() => new Set());
-  if (!items.length) return <p className="home-empty">Không có việc đến hạn trong 7 ngày tới.</p>;
-  const days = items.reduce((map, item) => ((map[item.date] ||= []).push(item), map), {});
-  const label = (date) => {
-    const left = daysLeft(date);
-    const day = new Date(date);
-    if (left === 0) return "Hôm nay";
-    if (left === 1) return "Ngày mai";
-    return `${WEEKDAYS[day.getDay()]}, ${shortDate(date)}`;
-  };
-  return (
-    <div className="home-agenda-days">
-      {Object.entries(days).map(([date, list]) => (
-        <div key={date} className="home-agenda-day">
-          <h4>{label(date)} <small>{list.length} mục</small></h4>
-          <ul>
-            {(openDays.has(date) ? list : list.slice(0, AGENDA_LIMIT)).map((item, index) => (
-              <li key={`${item.kind}-${item.id ?? index}`}>
-                {item.kind === "task" ? (
-                  <button type="button" onClick={() => onTask(item.code)}>
-                    <code>{item.code}</code>
-                    <span title={item.title}>{item.title}</span>
-                    <small>{new Date(item.due_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</small>
-                  </button>
-                ) : (
-                  <button type="button" className="milestone" onClick={() => onPeriod(item.period_id)}>
-                    <Award size={13} />
-                    <span>{item.title}</span>
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
-          {list.length > AGENDA_LIMIT && !openDays.has(date) && (
-            <button type="button" className="home-agenda-more" onClick={() => setOpenDays((current) => new Set([...current, date]))}>
-              + {list.length - AGENDA_LIMIT} việc khác
-            </button>
-          )}
-        </div>
-      ))}
+      <ul className="home-grades">
+        {current.grades.map((grade, index) => {
+          const before = previous?.grades.find((row) => row.code === grade.code)?.count;
+          return (
+            <li key={grade.code}>
+              <i className={GRADE_TONES[index]} />
+              <span>{grade.name}</span>
+              <b>{grade.count}</b>
+              <small>{graded ? `${number((grade.count / graded) * 100)}%` : "—"}{before != null && before !== grade.count ? ` · kỳ trước ${before}` : ""}</small>
+            </li>
+          );
+        })}
+        {current.no_grade > 0 && (
+          <li>
+            <i className="none" />
+            <span>Không xếp loại</span>
+            <b>{current.no_grade}</b>
+            <small>{number((current.no_grade / graded) * 100)}%</small>
+          </li>
+        )}
+      </ul>
     </div>
   );
 }
