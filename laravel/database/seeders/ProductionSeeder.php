@@ -59,15 +59,15 @@ class ProductionSeeder extends Seeder
         $all = array_column(self::PERMISSIONS, 0);
         Permission::whereNotIn('code', $all)->delete();
         $leadership = array_values(array_diff($all, ['roles.manage', 'ai.assistant']));
-        $staff = ['tasks.view', 'tasks.update', 'library.view'];
-        $unitLeader = ['personnel.view', 'personnel.manage', 'leave.view', 'tasks.view', 'tasks.assign', 'ai.tasks', 'tasks.update', 'library.view', 'evaluation.view', 'evaluation.score'];
+        $staff = ['tasks.view', 'tasks.update', 'library.view', 'evaluation.view'];
+        $unitLeader = ['personnel.view', 'leave.view', 'tasks.view', 'tasks.assign', 'ai.tasks', 'tasks.update', 'library.view', 'evaluation.view', 'evaluation.score'];
 
         $roles = [
             Role::ADMIN => ['Quản trị viên', Role::SCOPE_SYSTEM, null, $all],
             Role::HIEU_TRUONG => ['Hiệu trưởng', Role::SCOPE_SCHOOL, null, $all],
             Role::PHO_HIEU_TRUONG => ['Phó hiệu trưởng', Role::SCOPE_SCHOOL, null, $leadership],
             Role::BAN_GIAM_HIEU => ['Ban giám hiệu', Role::SCOPE_SCHOOL, null, $leadership],
-            Role::THU_KY => ['Thư ký', Role::SCOPE_SCHOOL, null, ['dashboard.view', 'personnel.view', 'leave.view', 'leave.manage', 'tasks.view', 'tasks.assign', 'ai.tasks', 'library.view', 'kpi.view']],
+            Role::THU_KY => ['Thư ký', Role::SCOPE_SCHOOL, null, ['dashboard.view', 'personnel.view', 'leave.view', 'leave.manage', 'tasks.view', 'tasks.assign', 'tasks.update', 'ai.tasks', 'library.view', 'kpi.view']],
             Role::TO_TRUONG => ['Tổ trưởng', Role::SCOPE_UNIT, Department::TYPE_TO, $unitLeader],
             Role::TO_PHO => ['Tổ phó', Role::SCOPE_UNIT, Department::TYPE_TO, $unitLeader],
             Role::NHOM_TRUONG => ['Nhóm trưởng', Role::SCOPE_UNIT, Department::TYPE_NHOM, $unitLeader],
