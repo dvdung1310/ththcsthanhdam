@@ -420,8 +420,7 @@ export default function EvaluationPeriodEditor() {
                     <TriCheckbox checked={head.all} indeterminate={head.some} disabled={!head.pickable.length} onChange={() => setMany(visible, !head.all)} label="Chọn tất cả đang hiển thị" />
                   </th>
                   <th>Nhân sự</th>
-                  <th>Đơn vị</th>
-                  <th>Vai trò</th>
+                  <th className="ev-role-col">Vai trò</th>
                   {scorerHeader("unit")}
                   {scorerHeader("board")}
                   <th>{editing ? "Phiếu" : "Ghi chú"}</th>
@@ -440,12 +439,13 @@ export default function EvaluationPeriodEditor() {
                           {row.avatar_url ? <img src={row.avatar_url} alt="" /> : <Avatar name={row.name} />}
                           <span>
                             <b>{row.name}{row.audience !== "teacher" && <em className="ev-tag audience">{AUDIENCE_SHORT[row.audience]}</em>}</b>
-                            <small>{[row.code, row.other_units?.length > 0 && `Cũng thuộc: ${row.other_units.join(", ")}`].filter(Boolean).join(" · ")}</small>
+                            <small title={[unitName(row.unit_id), ...(row.other_units ?? [])].filter(Boolean).join(", ") || undefined}>
+                              {[row.code, unitName(row.unit_id), row.other_units?.length > 0 && `+${row.other_units.length} đơn vị`].filter(Boolean).join(" · ")}
+                            </small>
                           </span>
                         </span>
                       </td>
-                      <td>{unitName(row.unit_id) ?? <span className="ev-muted">—</span>}</td>
-                      <td>
+                      <td className="ev-role-col">
                         <span className="ev-role-list">
                           {row.roles?.length ? (
                             row.roles.map((role, index) => (
