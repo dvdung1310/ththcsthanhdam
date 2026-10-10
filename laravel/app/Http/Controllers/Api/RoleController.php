@@ -12,12 +12,10 @@ class RoleController extends Controller
 {
     private const NOT_ENFORCED = ['kpi.manage', 'reports.view', 'settings.manage'];
 
-    private const ORDER = [Role::ADMIN, Role::HIEU_TRUONG, Role::THU_KY, Role::TO_TRUONG, Role::TO_PHO, Role::NHOM_TRUONG, Role::GIAO_VIEN];
-
     public function index(): JsonResponse
     {
         $roles = Role::with('permissions:id')->withCount('users')->get()
-            ->sortBy(fn (Role $role) => array_search($role->code, self::ORDER, true))
+            ->sortBy(fn (Role $role) => Role::rank($role->code))
             ->map(fn (Role $role) => [
                 'id' => $role->id, 'code' => $role->code, 'name' => $role->name,
                 'scope' => $role->scope, 'unit_type' => $role->unit_type,

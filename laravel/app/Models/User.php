@@ -120,7 +120,7 @@ class User extends Authenticatable
     public function roleLabels(): array
     {
         return $this->activeRoles()
-            ->sortBy(fn (Role $role) => array_search($role->code, [Role::ADMIN, Role::HIEU_TRUONG, Role::THU_KY, Role::TO_TRUONG, Role::TO_PHO, Role::NHOM_TRUONG, Role::GIAO_VIEN], true))
+            ->sortBy(fn (Role $role) => Role::rank($role->code))
             ->map(fn (Role $role) => $role->pivot->department_id ? $role->name.' — '.Department::pathLabel((int) $role->pivot->department_id) : $role->name)
             ->values()->all();
     }

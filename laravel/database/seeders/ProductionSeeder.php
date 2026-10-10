@@ -31,6 +31,7 @@ class ProductionSeeder extends Seeder
         ['kpi.manage', 'Quản lý thống kê', 'kpi'],
         ['reports.view', 'Xem báo cáo', 'reports'],
         ['roles.manage', 'Quản lý phân quyền', 'system'],
+        ['ai.assistant', 'Dùng Trợ lý AI', 'system'],
         ['settings.manage', 'Quản lý hệ thống', 'system'],
     ];
 
@@ -53,16 +54,22 @@ class ProductionSeeder extends Seeder
         }
         $all = array_column(self::PERMISSIONS, 0);
         Permission::whereNotIn('code', $all)->delete();
+        $leadership = array_values(array_diff($all, ['roles.manage', 'ai.assistant']));
+        $staff = ['dashboard.view', 'tasks.view', 'tasks.update', 'library.view', 'kpi.view'];
         $unitLeader = ['dashboard.view', 'personnel.view', 'personnel.manage', 'tasks.view', 'tasks.assign', 'tasks.update', 'library.view', 'evaluation.view', 'evaluation.score', 'kpi.view'];
 
         $roles = [
             Role::ADMIN => ['Quản trị viên', Role::SCOPE_SYSTEM, null, $all],
             Role::HIEU_TRUONG => ['Hiệu trưởng', Role::SCOPE_SCHOOL, null, $all],
+            Role::PHO_HIEU_TRUONG => ['Phó hiệu trưởng', Role::SCOPE_SCHOOL, null, $leadership],
+            Role::BAN_GIAM_HIEU => ['Ban giám hiệu', Role::SCOPE_SCHOOL, null, $leadership],
             Role::THU_KY => ['Thư ký', Role::SCOPE_SCHOOL, null, ['dashboard.view', 'personnel.view', 'tasks.view', 'tasks.assign', 'library.view', 'kpi.view']],
             Role::TO_TRUONG => ['Tổ trưởng', Role::SCOPE_UNIT, Department::TYPE_TO, $unitLeader],
             Role::TO_PHO => ['Tổ phó', Role::SCOPE_UNIT, Department::TYPE_TO, $unitLeader],
             Role::NHOM_TRUONG => ['Nhóm trưởng', Role::SCOPE_UNIT, Department::TYPE_NHOM, $unitLeader],
             Role::GIAO_VIEN => ['Giáo viên', Role::SCOPE_SELF, null, ['dashboard.view', 'tasks.view', 'tasks.update', 'library.view', 'evaluation.view', 'kpi.view']],
+            Role::GVCN => ['Giáo viên chủ nhiệm', Role::SCOPE_SELF, null, []],
+            Role::NHAN_VIEN => ['Nhân viên', Role::SCOPE_SELF, null, $staff],
         ];
 
         foreach ($roles as $code => [$name, $scope, $unitType, $permissions]) {

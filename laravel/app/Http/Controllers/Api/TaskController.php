@@ -786,8 +786,7 @@ class TaskController extends Controller
 
     private function personCard(User $user): array
     {
-        $order = [Role::ADMIN, Role::HIEU_TRUONG, Role::THU_KY, Role::TO_TRUONG, Role::TO_PHO, Role::NHOM_TRUONG, Role::GIAO_VIEN];
-        $role = $user->activeRoles()->sortBy(fn (Role $r) => array_search($r->code, $order, true))->first();
+        $role = $user->activeRoles()->sortBy(fn (Role $r) => Role::rank($r->code))->first();
         $unit = $role?->pivot->department_id ? Department::find($role->pivot->department_id)?->name : null;
 
         return [
