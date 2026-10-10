@@ -533,7 +533,7 @@ function LeaderPicker({ unit, slot, replacing, holders, onClose, onDone }) {
                   <small>{person.units.join(", ") || "Chưa thuộc tổ/nhóm nào"}</small>
                 </span>
                 <span className="chip-list">
-                  {holds ? <span className="current">Đang giữ</span> : person.roles.filter((role) => role !== "Giáo viên").slice(0, 2).map((role) => <span key={role}>{role}</span>)}
+                  {holds ? <span className="current">Đang giữ</span> : person.roles.filter((role) => !["Giáo viên", "Nhân viên", "Giáo viên chủ nhiệm"].includes(role)).slice(0, 2).map((role) => <span key={role}>{role}</span>)}
                 </span>
               </button>
             );

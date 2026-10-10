@@ -26,7 +26,12 @@ const scopeLabel = (role) =>
       : "Theo tổ"
     : SCOPE_LABELS[role.scope];
 
-const teacherOnly = (role) => role.scope === "unit" || role.code === "giao_vien";
+const PROFILE_HINTS = {
+  giao_vien: "Có hồ sơ giảng dạy, thuộc tổ/nhóm",
+  nhan_vien: "Có hồ sơ nhân sự, thuộc tổ/nhóm (vd. Tổ Văn phòng)",
+};
+
+const needsProfile = (role) => role.scope === "unit" || role.code === "gvcn";
 
 const emptyPerson = {
   name: "",
@@ -59,6 +64,7 @@ export default function PersonnelDrawer({
           roles: roles
             .filter((role) => role.code === "giao_vien")
             .map((role) => ({ role_id: role.id, department_id: "" })),
+          homeroom: null,
         }
       : {
           ...emptyPerson,
@@ -67,10 +73,13 @@ export default function PersonnelDrawer({
           employee_code: person.employee_code ?? "",
           employment_status: person.employment_status ?? "working",
           unit_ids: [...person.unit_ids],
-          roles: person.roles.map((role) => ({
-            role_id: role.role_id,
-            department_id: role.department_id ?? "",
-          })),
+          roles: person.roles
+            .filter((role) => role.code !== "gvcn")
+            .map((role) => ({
+              role_id: role.role_id,
+              department_id: role.department_id ?? "",
+            })),
+          homeroom: person.roles.some((role) => role.code === "gvcn"),
         },
   );
   const [password, setPassword] = useState("");
@@ -84,6 +93,7 @@ export default function PersonnelDrawer({
       employment_status: value.employment_status,
       unit_ids: [...value.unit_ids].sort(),
       roles: value.roles.map((row) => `${row.role_id}-${row.department_id || ""}`).sort(),
+      homeroom: value.homeroom,
     });
   const [initialSnapshot] = useState(() => snapshot(form));
   const [error, setError] = useState("");
@@ -91,21 +101,28 @@ export default function PersonnelDrawer({
   const roleById = Object.fromEntries(roles.map((role) => [role.id, role]));
   const set = (key, value) => setForm((current) => ({ ...current, [key]: value }));
 
-  const schoolRoles = roles.filter((role) => role.scope !== "unit");
-  const giaoVienId = roles.find((role) => role.code === "giao_vien")?.id;
-  const lockedTeacher = !isNew && person.is_employee;
-  const isTeacher = canAssignRoles ? form.roles.some((row) => row.role_id === giaoVienId) : isNew || person.is_employee;
-  const toggleRole = (role) =>
-    set(
-      "roles",
-      form.roles.some((row) => row.role_id === role.id)
-        ? form.roles.filter((row) => row.role_id !== role.id)
-        : [...form.roles, { role_id: role.id, department_id: "" }],
-    );
+  const schoolRoles = roles.filter((role) => role.scope !== "unit" && role.code !== "gvcn");
+  const roleId = (code) => roles.find((role) => role.code === code)?.id;
+  const giaoVienId = roleId("giao_vien");
+  const profileIds = [giaoVienId, roleId("nhan_vien")];
+  const gvcnId = roleId("gvcn");
+  const lockedProfile = !isNew && person.is_employee;
+  const has = (id) => form.roles.some((row) => row.role_id === id);
+  const isTeacher = canAssignRoles ? has(giaoVienId) : isNew || person.kind === "teacher";
+  const isEmployee = canAssignRoles ? profileIds.some(has) : isNew || person.is_employee;
+  const toggleRole = (role) => {
+    if (has(role.id)) {
+      set("roles", form.roles.filter((row) => row.role_id !== role.id));
+      return;
+    }
+    const others = profileIds.includes(role.id) ? profileIds.filter((id) => id !== role.id) : [];
+    set("roles", [...form.roles.filter((row) => !others.includes(row.role_id)), { role_id: role.id, department_id: "" }]);
+  };
   const dirty = password !== "" || snapshot(form) !== initialSnapshot;
   const missing = [
     !form.name.trim() && "Họ và tên",
     !form.email.trim() && "Email đăng nhập",
+    canAssignRoles && isTeacher && form.homeroom === null && "Chủ nhiệm hay không chủ nhiệm",
     (isNew ? password.length < 8 : password && password.length < 8) && "Mật khẩu (tối thiểu 8 ký tự)",
   ].filter(Boolean);
   const blockedReason = missing.length ? `Còn thiếu: ${missing.join(", ")}` : !isNew && !dirty ? "Chưa có thay đổi" : "";
@@ -134,22 +151,25 @@ export default function PersonnelDrawer({
       email: form.email,
       phone: form.phone || null,
       is_active: form.is_active,
-      employee_code: isTeacher ? form.employee_code : null,
-      employment_status: isTeacher ? form.employment_status : null,
-      unit_ids: isTeacher ? unitIdsInScope : [],
+      employee_code: isEmployee ? form.employee_code : null,
+      employment_status: isEmployee ? form.employment_status : null,
+      unit_ids: isEmployee ? unitIdsInScope : [],
       ...(password ? { password } : {}),
       ...(canAssignRoles
         ? {
-            roles: form.roles
-              .filter((row) => isTeacher || !teacherOnly(roleById[row.role_id]))
-              .map((row) => ({
-                role_id: row.role_id,
-                department_id: row.department_id || null,
-              })),
+            roles: [
+              ...form.roles
+                .filter((row) => isEmployee || !needsProfile(roleById[row.role_id]))
+                .map((row) => ({
+                  role_id: row.role_id,
+                  department_id: row.department_id || null,
+                })),
+              ...(isTeacher && form.homeroom && gvcnId ? [{ role_id: gvcnId, department_id: null }] : []),
+            ],
           }
         : {}),
     };
-    const conflicts = canAssignRoles && isTeacher ? findHolderConflicts(form.roles, roles, people, person?.id) : [];
+    const conflicts = canAssignRoles && isEmployee ? findHolderConflicts(form.roles, roles, people, person?.id) : [];
     if (conflicts.length) {
       const replace = await confirm({
         tone: "warning",
@@ -273,15 +293,25 @@ export default function PersonnelDrawer({
               {canAssignRoles ? (
                 <div className="role-picker">
                   {schoolRoles.map((role) => {
-                    const checked = form.roles.some((row) => row.role_id === role.id);
-                    const locked = role.id === giaoVienId && lockedTeacher;
+                    const checked = has(role.id);
+                    const locked = checked && lockedProfile && profileIds.includes(role.id);
                     return (
-                      <div key={role.id} className={`role-pick ${checked ? "selected" : ""}`} title={locked ? "Nhân sự đã có dữ liệu công việc. Dùng “Cho nghỉ & khóa” nếu không còn là giáo viên." : undefined}>
+                      <div key={role.id} className={`role-pick ${checked ? "selected" : ""}`} title={locked ? "Nhân sự đã có hồ sơ phải là Giáo viên hoặc Nhân viên. Chọn vai trò còn lại để chuyển, hoặc dùng “Cho nghỉ & khóa”." : undefined}>
                         <label>
                           <input type="checkbox" checked={checked} disabled={locked} onChange={() => toggleRole(role)} />
                           <b>{role.name}</b>
-                          <small>{role.id === giaoVienId ? "Có hồ sơ giảng dạy, thuộc tổ/nhóm" : scopeLabel(role)}</small>
+                          <small>{PROFILE_HINTS[role.code] ?? scopeLabel(role)}</small>
                         </label>
+                        {role.id === giaoVienId && checked && (
+                          <div className="homeroom-choice" role="radiogroup" aria-label="Chủ nhiệm">
+                            {[[true, "Chủ nhiệm"], [false, "Không chủ nhiệm"]].map(([value, label]) => (
+                              <label key={label} className={form.homeroom === value ? "active" : ""}>
+                                <input type="radio" name="homeroom" checked={form.homeroom === value} onChange={() => set("homeroom", value)} />
+                                {label}
+                              </label>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -300,9 +330,9 @@ export default function PersonnelDrawer({
               )}
             </section>
 
-            {isTeacher && (
+            {isEmployee && (
               <section>
-                <h4>Thông tin giáo viên</h4>
+                <h4>Hồ sơ nhân sự</h4>
                 <div className="drawer-grid">
                   <label>
                     Mã nhân sự
@@ -329,7 +359,7 @@ export default function PersonnelDrawer({
               </section>
             )}
 
-            {isTeacher && (
+            {isEmployee && (
               <section>
                 <h4>Tổ / nhóm & chức vụ</h4>
                 <UnitMembershipEditor

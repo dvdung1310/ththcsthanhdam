@@ -27,7 +27,7 @@ import OrgStructure from "./OrgStructure";
 import "./PersonnelManagement.css";
 import Avatar from "./Avatar";
 
-const LEADER_ROLES = ["hieu_truong", "thu_ky", "to_truong", "to_pho", "nhom_truong"];
+const LEADER_ROLES = ["hieu_truong", "pho_hieu_truong", "ban_giam_hieu", "thu_ky", "to_truong", "to_pho", "nhom_truong"];
 
 const collator = new Intl.Collator("vi");
 const givenName = (name) => (name ?? "").trim().split(/\s+/).at(-1);
@@ -132,7 +132,8 @@ export default function PersonnelManagement({ view = "people" }) {
 
   const stats = {
     total: data.data.length,
-    teachers: data.data.filter((person) => person.is_employee).length,
+    teachers: data.data.filter((person) => person.kind === "teacher").length,
+    staff: data.data.filter((person) => person.kind === "staff").length,
     leaders: data.data.filter((person) => person.roles.some((role) => LEADER_ROLES.includes(role.code))).length,
     working: data.data.filter((person) => statusOf(person) === "working").length,
   };
@@ -214,7 +215,7 @@ export default function PersonnelManagement({ view = "people" }) {
               <span>
                 <b>{stats.teachers}</b>
                 <small>Giáo viên</small>
-                <em>Có hồ sơ giảng dạy</em>
+                <em>{stats.staff ? `Và ${stats.staff} nhân viên` : "Có hồ sơ giảng dạy"}</em>
               </span>
             </article>
             <article>
@@ -224,7 +225,7 @@ export default function PersonnelManagement({ view = "people" }) {
               <span>
                 <b>{stats.leaders}</b>
                 <small>Cán bộ quản lý</small>
-                <em>Hiệu trưởng, thư ký, tổ/nhóm trưởng</em>
+                <em>Ban giám hiệu, thư ký, tổ/nhóm trưởng</em>
               </span>
             </article>
             <article>
