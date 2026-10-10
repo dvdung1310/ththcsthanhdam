@@ -1,12 +1,22 @@
 import { useEffect, useState } from "react";
-import { ArrowLeftRight, Building2, ChevronRight, FolderTree, Pencil, Plus, Power, Search, Trash2, Users, X } from "lucide-react";
+import { ArrowDown, ArrowLeftRight, ArrowUp, Building2, ChevronRight, FolderTree, Pencil, Plus, Power, Search, Trash2, Users, X } from "lucide-react";
 import { apiJson } from "./api";
 import { useConfirm } from "./ConfirmDialog";
 import { EMPLOYMENT_LABELS } from "./PersonnelDrawer";
 import "./OrgStructure.css";
 import UserAvatar from "./Avatar";
+import TablePagination, { usePagination } from "./TablePagination";
 
 const COLLAPSED_KEY = "org-collapsed";
+const DESCRIPTION_MAX = 1000;
+
+const collator = new Intl.Collator("vi", { numeric: true });
+const givenName = (name) => (name ?? "").trim().split(/\s+/).at(-1);
+const MEMBER_SORTERS = {
+  name: (a, b) => collator.compare(givenName(a.name), givenName(b.name)) || collator.compare(a.name ?? "", b.name ?? ""),
+  code: (a, b) => collator.compare(a.employee_code ?? "", b.employee_code ?? ""),
+  status: (a, b) => collator.compare(EMPLOYMENT_LABELS[a.employment_status] ?? "", EMPLOYMENT_LABELS[b.employment_status] ?? ""),
+};
 
 export default function OrgStructure({ onChanged, onError }) {
   const [units, setUnits] = useState([]);
@@ -193,9 +203,18 @@ export default function OrgStructure({ onChanged, onError }) {
                 <span className="org-type">{selected.parent_id ? "Nhóm" : "Tổ"}</span>
                 <h3>{selected.label}</h3>
                 <p>
-                  {detail.members.length} giáo viên
+                  {detail.members.length} thành viên
                   {!selected.is_active && " · Ngưng hoạt động"}
                 </p>
+                {detail.unit.description ? (
+                  <p className="org-description">{detail.unit.description}</p>
+                ) : (
+                  canConfigure && (
+                    <button type="button" className="org-link org-add-description" onClick={() => setEditing({ ...selected, description: "" })}>
+                      <Plus size={13} /> Thêm mô tả
+                    </button>
+                  )
+                )}
               </div>
               {canConfigure && (
                 <div className="org-actions">
@@ -204,7 +223,7 @@ export default function OrgStructure({ onChanged, onError }) {
                       <Plus size={15} /> Thêm nhóm
                     </button>
                   )}
-                  <button onClick={() => setEditing(selected)}>
+                  <button onClick={() => setEditing({ ...selected, description: detail.unit.description ?? "" })}>
                     <Pencil size={15} /> Sửa
                   </button>
                   <button onClick={toggleActive}>
@@ -268,6 +287,7 @@ function UnitDialog({ unit, roots, onClose, onSaved }) {
   const isGroup = unit.parent_id != null;
   const [name, setName] = useState(unit.name ?? "");
   const [parentId, setParentId] = useState(unit.parent_id ?? "");
+  const [description, setDescription] = useState(unit.description ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const kind = isGroup ? "nhóm" : "tổ";
@@ -284,7 +304,7 @@ function UnitDialog({ unit, roots, onClose, onSaved }) {
     if (!name.trim()) return setError(`Vui lòng nhập tên ${kind}.`);
     setSaving(true);
     setError("");
-    const body = { name: name.trim(), parent_id: isGroup ? Number(parentId) : null };
+    const body = { name: name.trim(), parent_id: isGroup ? Number(parentId) : null, description: description.trim() };
     try {
       const payload = unit.id
         ? await apiJson(`/api/units/${unit.id}`, { method: "PUT", body: { ...body, is_active: unit.is_active } })
@@ -306,7 +326,7 @@ function UnitDialog({ unit, roots, onClose, onSaved }) {
             <p>
               {isGroup
                 ? unit.id
-                  ? "Đổi tên nhóm hoặc chuyển nhóm sang tổ khác."
+                  ? "Đổi tên, mô tả hoặc chuyển nhóm sang tổ khác."
                   : `Nhóm chuyên môn thuộc ${parent ? `“${parent.name}”` : "một tổ"}.`
                 : "Tổ là đơn vị cấp trên, có thể chia thành nhiều nhóm."}
             </p>
@@ -315,7 +335,7 @@ function UnitDialog({ unit, roots, onClose, onSaved }) {
         </header>
         <label>
           Tên {kind}
-          <input value={name} autoFocus maxLength={150} onChange={(e) => { setName(e.target.value); setError(""); }} placeholder={isGroup ? "VD: Nhóm toán" : "VD: Tổ tự nhiên"} />
+          <input value={name} autoFocus={!unit.id || !!unit.description} maxLength={150} onChange={(e) => { setName(e.target.value); setError(""); }} placeholder={isGroup ? "VD: Nhóm toán" : "VD: Tổ tự nhiên"} />
         </label>
         {isGroup && (
           <label>
@@ -325,6 +345,20 @@ function UnitDialog({ unit, roots, onClose, onSaved }) {
             </select>
           </label>
         )}
+        <label>
+          <span className="org-label-row">
+            Mô tả <small>{description.length}/{DESCRIPTION_MAX}</small>
+          </span>
+          <textarea
+            value={description}
+            rows={4}
+            maxLength={DESCRIPTION_MAX}
+            autoFocus={!!unit.id && !unit.description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder={isGroup ? "VD: Gồm giáo viên Toán khối 6–9; phụ trách bồi dưỡng HSG Toán, ra đề kiểm tra định kỳ." : "VD: Gồm các nhóm Toán, Lý, Hóa, Sinh, Tin; phụ trách thí nghiệm, phòng bộ môn, thi KHKT."}
+          />
+          <small className="org-hint">Các môn, mảng việc hoặc nhiệm vụ tổ/nhóm phụ trách.</small>
+        </label>
         {error && <p className="org-dialog-error" role="alert">{error}</p>}
         <footer>
           <button type="button" className="secondary-btn" onClick={onClose} disabled={saving}>Hủy</button>
@@ -384,13 +418,25 @@ function LeaderSlots({ detail, onPick, onRemove }) {
 function MemberList({ members, groups }) {
   const [query, setQuery] = useState("");
   const [group, setGroup] = useState(null);
+  const [sort, setSort] = useState({ key: "name", desc: false });
   const keyword = query.trim().toLowerCase();
   const inGroup = (member, id) => (id === 0 ? !member.group_ids.length : member.group_ids.includes(id));
   const chips = groups.length
     ? [{ id: null, name: "Tất cả", count: members.length }, ...groups.map((g) => ({ id: g.id, name: g.name, count: members.filter((m) => inGroup(m, g.id)).length })), { id: 0, name: "Trực thuộc tổ", count: members.filter((m) => inGroup(m, 0)).length }].filter((chip) => chip.id === null || chip.count)
     : [];
-  const rows = members.filter(
-    (member) => (group === null || inGroup(member, group)) && (!keyword || `${member.name} ${member.employee_code ?? ""}`.toLowerCase().includes(keyword)),
+  const rows = members
+    .filter((member) => (group === null || inGroup(member, group)) && (!keyword || `${member.name} ${member.employee_code ?? ""}`.toLowerCase().includes(keyword)))
+    .sort((a, b) => (sort.desc ? -1 : 1) * (MEMBER_SORTERS[sort.key](a, b) || MEMBER_SORTERS.name(a, b)));
+  const pager = usePagination(rows, 10);
+  const sortBy = (key) => {
+    setSort((current) => ({ key, desc: current.key === key && !current.desc }));
+    pager.reset();
+  };
+  const header = (key, label) => (
+    <th className={`sortable ${sort.key === key ? "sorted" : ""}`} aria-sort={sort.key === key ? (sort.desc ? "descending" : "ascending") : "none"} onClick={() => sortBy(key)}>
+      {label}
+      {sort.key === key && (sort.desc ? <ArrowDown size={12} /> : <ArrowUp size={12} />)}
+    </th>
   );
 
   return (
@@ -399,13 +445,13 @@ function MemberList({ members, groups }) {
         <h4>Thành viên <em>{members.length}</em></h4>
         <label className="org-search">
           <Search size={14} />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Tìm tên hoặc mã nhân sự..." />
+          <input value={query} onChange={(e) => { setQuery(e.target.value); pager.reset(); }} placeholder="Tìm tên hoặc mã nhân sự..." />
         </label>
       </div>
       {chips.length > 0 && (
         <div className="org-group-chips">
           {chips.map((chip) => (
-            <button key={String(chip.id)} type="button" className={group === chip.id ? "active" : ""} onClick={() => setGroup(chip.id)}>
+            <button key={String(chip.id)} type="button" className={group === chip.id ? "active" : ""} onClick={() => { setGroup(chip.id); pager.reset(); }}>
               {chip.name} <em>{chip.count}</em>
             </button>
           ))}
@@ -415,14 +461,14 @@ function MemberList({ members, groups }) {
         <table>
           <thead>
             <tr>
-              <th>Giáo viên</th>
-              <th>Mã NS</th>
+              {header("name", "Nhân sự")}
+              {header("code", "Mã NS")}
               <th>Vai trò</th>
-              <th>Trạng thái</th>
+              {header("status", "Trạng thái")}
             </tr>
           </thead>
           <tbody>
-            {rows.map((member) => (
+            {pager.rows.map((member) => (
               <tr key={member.user_id}>
                 <td>
                   <span className="org-person">
@@ -444,9 +490,10 @@ function MemberList({ members, groups }) {
             ))}
           </tbody>
         </table>
-        {!members.length && <p className="org-muted">Chưa có giáo viên trong đơn vị này.</p>}
-        {members.length > 0 && !rows.length && <p className="org-muted">Không có giáo viên phù hợp.</p>}
+        {!members.length && <p className="org-muted">Chưa có thành viên trong đơn vị này.</p>}
+        {members.length > 0 && !rows.length && <p className="org-muted">Không có thành viên phù hợp.</p>}
       </div>
+      {pager.total > 10 && <TablePagination pager={pager} noun="thành viên" />}
     </>
   );
 }
