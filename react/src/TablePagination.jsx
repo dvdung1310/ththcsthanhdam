@@ -21,6 +21,24 @@ export function usePagination(items, initialSize = 10) {
   };
 }
 
+export function pageItems(page, totalPages) {
+  if (totalPages <= 7) return Array.from({ length: totalPages }, (_, index) => index + 1);
+  const start = Math.max(2, Math.min(page - 1, totalPages - 4));
+  const end = Math.min(totalPages - 1, Math.max(page + 1, 5));
+  const middle = Array.from({ length: end - start + 1 }, (_, index) => start + index);
+  return [1, ...(start > 2 ? ["start-gap"] : []), ...middle, ...(end < totalPages - 1 ? ["end-gap"] : []), totalPages];
+}
+
+export function PageButtons({ page, totalPages, onPage }) {
+  return pageItems(page, totalPages).map((item) =>
+    typeof item === "number" ? (
+      <button key={item} className={page === item ? "active" : ""} onClick={() => onPage(item)}>{item}</button>
+    ) : (
+      <span key={item} className="page-gap">…</span>
+    ),
+  );
+}
+
 export default function TablePagination({ pager, noun, sizes = [10, 20, 50], showRange = true }) {
   const { page, pageSize, totalPages, total, setPage, setPageSize } = pager;
   if (!total) return null;
@@ -39,9 +57,7 @@ export default function TablePagination({ pager, noun, sizes = [10, 20, 50], sho
           </select>
         </label>
         <button disabled={page === 1} onClick={() => setPage(page - 1)} aria-label="Trang trước"><ChevronLeft size={16} /></button>
-        {Array.from({ length: totalPages }, (_, index) => (
-          <button key={index} className={page === index + 1 ? "active" : ""} onClick={() => setPage(index + 1)}>{index + 1}</button>
-        ))}
+        <PageButtons page={page} totalPages={totalPages} onPage={setPage} />
         <button disabled={page === totalPages} onClick={() => setPage(page + 1)} aria-label="Trang sau"><ChevronRight size={16} /></button>
       </div>
     </div>
