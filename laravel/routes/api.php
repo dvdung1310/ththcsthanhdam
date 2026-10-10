@@ -22,7 +22,7 @@ Route::middleware('api.token')->group(function(){
  Route::get('upload-limits',fn()=>response()->json(\App\Services\UploadLimits::toArray()));
  Route::get('dashboard',[\App\Http\Controllers\Api\DashboardController::class,'index'])->middleware('permission:dashboard.view');
  Route::post('broadcasting/auth',[BroadcastController::class,'authenticate']);
- Route::get('push-subscriptions/key',[PushSubscriptionController::class,'key']);Route::post('push-subscriptions',[PushSubscriptionController::class,'store']);Route::delete('push-subscriptions',[PushSubscriptionController::class,'destroy']);
+ Route::get('push-subscriptions/key',[PushSubscriptionController::class,'key']);Route::post('push-subscriptions',[PushSubscriptionController::class,'store']);Route::delete('push-subscriptions',[PushSubscriptionController::class,'destroy']);Route::post('push-subscriptions/test',[PushSubscriptionController::class,'test']);
  Route::get('notifications',[NotificationController::class,'index']);Route::get('notifications/unread-count',[NotificationController::class,'unreadCount']);Route::post('notifications/read-all',[NotificationController::class,'markAllRead']);Route::post('notifications/{notification}/read',[NotificationController::class,'markRead']);
  Route::get('auth/me',[AuthController::class,'me']);Route::post('auth/logout',[AuthController::class,'logout']);Route::post('auth/change-password',[AuthController::class,'changePassword']);Route::post('auth/avatar',[AuthController::class,'updateAvatar']);
  Route::post('ai-assistant/ask',[AiAssistantController::class,'ask']);

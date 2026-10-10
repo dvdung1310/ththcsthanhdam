@@ -16,7 +16,8 @@ trait PushesToBrowser
 
     public function toWebPush(object $notifiable, mixed $notification): WebPushMessage
     {
-        ['title' => $title, 'body' => $body, 'url' => $url, 'tag' => $tag] = $this->pushContent($notifiable);
+        $content = $this->pushContent($notifiable);
+        ['title' => $title, 'body' => $body, 'url' => $url, 'tag' => $tag] = $content;
 
         return (new WebPushMessage)
             ->title($title)
@@ -25,7 +26,7 @@ trait PushesToBrowser
             ->badge('/icons/icon-192.png')
             ->lang('vi')
             ->tag($tag)
-            ->data(['url' => $url])
-            ->options(['TTL' => 86400, 'urgency' => 'high']);
+            ->data(['url' => $url, ...($content['data'] ?? [])])
+            ->options(['TTL' => $content['ttl'] ?? 86400, 'urgency' => 'high']);
     }
 }
