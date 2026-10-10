@@ -489,7 +489,7 @@ class TaskController extends Controller
     private function validateTask(Request $request): array
     {
         $data = $request->validate([
-            'title' => ['required', 'string', 'max:255'],
+            'title' => ['required', 'string', 'max:'.Task::TITLE_MAX],
             'description' => ['nullable', 'string'],
             'category_id' => ['nullable', Rule::exists('task_categories', 'id')->where('is_active', true)],
             'reviewer_ids' => ['nullable', 'array', 'max:10'],
@@ -508,7 +508,7 @@ class TaskController extends Controller
             'attachments.*' => ['file', 'max:20480', 'mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png,zip'],
             'remove_attachment_ids' => ['nullable', 'array'],
             'remove_attachment_ids.*' => ['integer', 'exists:files,id'],
-        ]);
+        ], ['title.max' => 'Tên công việc tối đa '.Task::TITLE_MAX.' ký tự.']);
         $reviewerIds = collect($data['reviewer_ids'] ?? [])->map(fn ($id) => (int) $id);
         abort_if($reviewerIds->contains($request->user()->id) && in_array($request->user()->employee?->id, array_map('intval', $data['employee_ids'] ?? []), true), 422, 'Bạn không thể tự duyệt công việc của chính mình.');
         abort_if($reviewerIds->isNotEmpty() && Employee::whereIn('id', $data['employee_ids'] ?? [])->whereIn('user_id', $reviewerIds)->exists(), 422, 'Người duyệt không được đồng thời là người thực hiện được chọn.');

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\LibraryNode;
 use App\Models\StoredFile;
+use App\Models\Task;
 use App\Models\TaskDraft;
 use App\Models\TaskDraftBatch;
 use App\Models\TaskDraftSource;
@@ -160,7 +161,7 @@ class TaskDraftController extends Controller
     private function validatePayload(Request $request): array
     {
         return $request->validate([
-            'title' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'title' => ['sometimes', 'nullable', 'string', 'max:'.Task::TITLE_MAX],
             'description' => ['sometimes', 'nullable', 'string', 'max:20000'],
             'employee_ids' => ['sometimes', 'array'],
             'employee_ids.*' => ['integer'],
@@ -175,7 +176,7 @@ class TaskDraftController extends Controller
             'share_submissions' => ['sometimes', 'boolean'],
             'source_ids' => ['sometimes', 'array'],
             'source_ids.*' => ['integer'],
-        ]);
+        ], ['title.max' => 'Tên công việc tối đa '.Task::TITLE_MAX.' ký tự.']);
     }
 
     private function blank(): array

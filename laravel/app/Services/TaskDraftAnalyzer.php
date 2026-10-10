@@ -248,7 +248,7 @@ class TaskDraftAnalyzer
             $points = array_values(array_filter(array_map('trim', $task['requirements'] ?? [])));
 
             return [
-                'title' => mb_substr(trim((string) ($task['title'] ?? '')) ?: 'Công việc mới', 0, 255),
+                'title' => mb_substr(trim((string) ($task['title'] ?? '')) ?: 'Công việc mới', 0, Task::TITLE_MAX),
                 'description' => $points ? '<p><strong>Yêu cầu:</strong></p><ul>'.implode('', array_map(fn ($p) => '<li>'.e($p).'</li>', $points)).'</ul>' : '',
                 'employee_ids' => $employeeIds->all(),
                 'department_ids' => $unitIds->all(),
