@@ -134,7 +134,7 @@ export default function TaskDocuments({ editing, setEditing, libraryOptions, onT
   );
 }
 
-function SharedFilePicker({ files, selected, onToggle, onClose }) {
+export function SharedFilePicker({ files, selected, onToggle, onClose }) {
   const [search, setSearch] = useState("");
   const searchRef = useRef(null);
   useEffect(() => {
