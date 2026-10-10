@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AiConversation;
+use App\Models\AiMessage;
 use App\Models\Department;
 use App\Models\LibraryNode;
 use App\Models\User;
@@ -12,14 +14,22 @@ use App\Services\LibraryAccess;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class AiAssistantController extends Controller
 {
     private const MAX_ROUNDS = 4;
 
     private const MAX_TOOL_CALLS = 6;
+
+    private const CONTEXT_MESSAGES = 20;
+
+    private const CONTEXT_CHARS = 12000;
+
+    private const CONTEXT_ANSWER_CHARS = 1500;
 
     public function summarizeLibraryFile(Request $request, LibraryNode $node): JsonResponse
     {
@@ -67,17 +77,15 @@ class AiAssistantController extends Controller
     public function ask(Request $request, EvaluationScoring $scoring): JsonResponse
     {
         $this->ensurePrincipal($request);
-        $data = $request->validate(['question'=>['required','string','max:2000'],'history'=>['nullable','array','max:10'],'history.*.role'=>['required','in:user,assistant'],'history.*.content'=>['required','string','max:3000']]);
+        $data = $request->validate(['question' => ['required', 'string', 'max:2000'], 'conversation_id' => ['nullable', 'integer']]);
+        $conversation = isset($data['conversation_id']) ? $this->owned($request, (int) $data['conversation_id']) : null;
         $apiKey = config('services.openai.key');
         if (! $apiKey) return response()->json(['message'=>'Trợ lý AI chưa được cấu hình OPENAI_API_KEY.'],503);
         @set_time_limit(180);
 
         $user = $request->user();
         $tools = new AssistantTools($user, $scoring);
-        $input = [
-            ...collect($data['history'] ?? [])->map(fn ($message) => ['role' => $message['role'], 'content' => $message['content']])->all(),
-            ['role' => 'user', 'content' => $data['question']],
-        ];
+        $input = [...($conversation ? $this->context($conversation) : []), ['role' => 'user', 'content' => $data['question']]];
         $executed = 0;
         for ($round = 1; $round <= self::MAX_ROUNDS; $round++) {
             $response = Http::withToken($apiKey)->timeout(60)->post('https://api.openai.com/v1/responses', [
@@ -99,9 +107,13 @@ class AiAssistantController extends Controller
             $output = $response->json('output', []);
             $calls = collect($output)->where('type', 'function_call')->values();
             if ($calls->isEmpty()) {
-                $answer = collect($output)->where('type', 'message')->flatMap(fn ($item) => $item['content'] ?? [])->where('type', 'output_text')->pluck('text')->join("\n");
+                $answer = trim(collect($output)->where('type', 'message')->flatMap(fn ($item) => $item['content'] ?? [])->where('type', 'output_text')->pluck('text')->join("\n"));
+                if ($answer === '') {
+                    return response()->json(['message' => 'AI chưa trả về nội dung. Vui lòng hỏi lại.'], 502);
+                }
+                $conversation = $this->remember($user, $conversation, $data['question'], $answer);
 
-                return response()->json(['answer' => trim($answer) ?: 'AI chưa trả về nội dung.', 'generated_at' => now()->toIso8601String()]);
+                return response()->json(['answer' => $answer, 'conversation' => $this->conversationData($conversation), 'generated_at' => now()->toIso8601String()]);
             }
             $input = [...$input, ...$output];
             foreach ($calls as $call) {
@@ -112,7 +124,81 @@ class AiAssistantController extends Controller
             }
         }
 
-        return response()->json(['answer' => 'Câu hỏi cần tra cứu quá nhiều dữ liệu. Hãy hỏi cụ thể hơn (theo tổ, người hoặc mã công việc).', 'generated_at' => now()->toIso8601String()]);
+        return response()->json(['message' => 'Câu hỏi cần tra cứu quá nhiều dữ liệu. Hãy hỏi cụ thể hơn (theo tổ, người hoặc mã công việc).'], 422);
+    }
+
+    public function conversations(Request $request): JsonResponse
+    {
+        $this->ensurePrincipal($request);
+        $items = AiConversation::where('user_id', $request->user()->id)->orderByDesc('last_message_at')->orderByDesc('id')->limit(100)->get();
+
+        return response()->json(['data' => $items->map(fn (AiConversation $conversation) => $this->conversationData($conversation))->values()]);
+    }
+
+    public function conversation(Request $request, int $id): JsonResponse
+    {
+        $conversation = $this->owned($request, $id);
+
+        return response()->json([
+            'conversation' => $this->conversationData($conversation),
+            'messages' => $conversation->messages()->get(['id', 'role', 'content', 'created_at'])
+                ->map(fn (AiMessage $message) => ['id' => $message->id, 'role' => $message->role, 'content' => $message->content, 'created_at' => $message->created_at?->toIso8601String()]),
+        ]);
+    }
+
+    public function renameConversation(Request $request, int $id): JsonResponse
+    {
+        $conversation = $this->owned($request, $id);
+        $data = $request->validate(['title' => ['required', 'string', 'max:'.AiConversation::TITLE_MAX]], ['title.required' => 'Vui lòng nhập tên cuộc trò chuyện.']);
+        $conversation->update(['title' => trim($data['title'])]);
+
+        return response()->json(['message' => 'Đã đổi tên cuộc trò chuyện.', 'conversation' => $this->conversationData($conversation)]);
+    }
+
+    public function destroyConversation(Request $request, int $id): JsonResponse
+    {
+        $this->owned($request, $id)->delete();
+
+        return response()->json(['message' => 'Đã xóa cuộc trò chuyện.']);
+    }
+
+    private function owned(Request $request, int $id): AiConversation
+    {
+        $this->ensurePrincipal($request);
+
+        return AiConversation::where('user_id', $request->user()->id)->findOr($id, fn () => abort(404, 'Không tìm thấy cuộc trò chuyện.'));
+    }
+
+    private function context(AiConversation $conversation): array
+    {
+        $budget = self::CONTEXT_CHARS;
+        $messages = [];
+        foreach ($conversation->messages()->reorder()->orderByDesc('id')->limit(self::CONTEXT_MESSAGES)->get(['role', 'content']) as $message) {
+            $content = $message->role === AiMessage::ASSISTANT ? Str::limit($message->content, self::CONTEXT_ANSWER_CHARS) : $message->content;
+            $budget -= mb_strlen($content);
+            if ($budget < 0 && $messages) {
+                break;
+            }
+            $messages[] = ['role' => $message->role, 'content' => $content];
+        }
+
+        return array_reverse($messages);
+    }
+
+    private function remember(User $user, ?AiConversation $conversation, string $question, string $answer): AiConversation
+    {
+        return DB::transaction(function () use ($user, $conversation, $question, $answer) {
+            $conversation ??= AiConversation::create(['user_id' => $user->id, 'title' => Str::limit(preg_replace('/\s+/u', ' ', trim($question)), 80)]);
+            $conversation->messages()->createMany([['role' => AiMessage::USER, 'content' => $question], ['role' => AiMessage::ASSISTANT, 'content' => $answer]]);
+            $conversation->update(['last_message_at' => now()]);
+
+            return $conversation;
+        });
+    }
+
+    private function conversationData(AiConversation $conversation): array
+    {
+        return ['id' => $conversation->id, 'title' => $conversation->title, 'last_message_at' => ($conversation->last_message_at ?? $conversation->created_at)?->toIso8601String()];
     }
 
     private function handbook(User $user, AssistantTools $tools): string
