@@ -17,6 +17,7 @@ use App\Models\Employee;
 use App\Models\TaskDraft;
 use App\Models\User;
 use App\Services\FileStore;
+use App\Services\LibraryAccess;
 use App\Notifications\TaskAssignedNotification;
 use App\Notifications\TaskReminderNotification;
 use App\Notifications\TaskWorkflowNotification;
@@ -94,7 +95,7 @@ class TaskController extends Controller
             'current_employee' => $user->employee ? ['id' => $user->employee->id, 'user_id' => $user->id, 'name' => $user->name, 'avatar_url' => $avatar($user)] : null,
             'current_user_id' => $user->id,
             'can_assign' => $canAssign,
-            'library_files' => $this->readableLibraryFiles($user),
+            'can_browse_library' => $user->hasPermission('library.view'),
         ]);
     }
 
@@ -906,32 +907,14 @@ class TaskController extends Controller
         return app(FileStore::class)->store($uploaded, $folder, $actor);
     }
 
-    private ?int $sharedFolder = null;
-
-    private function sharedFolderId(): ?int
-    {
-        return $this->sharedFolder ??= LibraryNode::where('is_system', true)->whereNull('parent_id')->where('type', LibraryNode::FOLDER)->value('id');
-    }
-
-    private function readableLibraryFiles(User $user): Collection
-    {
-        $shared = $this->sharedFolderId();
-        if (! $user->hasPermission('library.view') || ! $shared) {
-            return collect();
-        }
-
-        return LibraryNode::with('file:id,size,mime_type')->where('type', LibraryNode::FILE)->where('parent_id', $shared)
-            ->orderBy('name')->get()
-            ->map(fn (LibraryNode $node) => ['id' => $node->id, 'name' => $node->name, 'size' => $node->file?->size, 'mime_type' => $node->file?->mime_type])->values();
-    }
-
     private function syncLibraryFiles(Request $request, Task $task, array $data): void
     {
         $ids = collect($data['library_file_ids'] ?? [])->map(fn ($id) => (int) $id)->unique();
         $existing = $task->exists ? $task->libraryFiles()->pluck('library_nodes.id') : collect();
         $added = $ids->diff($existing);
-        $allowed = $added->isEmpty() ? collect() : LibraryNode::whereIn('id', $added)->where('type', LibraryNode::FILE)->where('parent_id', $this->sharedFolderId() ?? 0)->pluck('id');
-        abort_if($added->diff($allowed)->isNotEmpty(), 422, 'Chỉ gắn được file trong thư mục Chia sẻ chung.');
+        $access = new LibraryAccess($request->user());
+        $allowed = $added->isEmpty() ? collect() : LibraryNode::whereIn('id', $added)->where('type', LibraryNode::FILE)->get()->filter(fn (LibraryNode $node) => $access->can($node, LibraryAccess::READ))->pluck('id');
+        abort_if($added->diff($allowed)->isNotEmpty(), 422, 'Chỉ gắn được file trong Kho dữ liệu mà bạn có quyền xem.');
         $task->libraryFiles()->sync($ids->all());
     }
 
@@ -956,7 +939,7 @@ class TaskController extends Controller
             if ($source->file_id && ! DB::table('file_attachments')->where('attachable_type', Task::class)->where('attachable_id', $task->id)->where('file_id', $source->file_id)->exists()) {
                 DB::table('file_attachments')->insert(['file_id' => $source->file_id, 'attachable_type' => Task::class, 'attachable_id' => $task->id, 'purpose' => 'attachment', 'created_at' => now(), 'updated_at' => now()]);
             }
-            if ($source->node && $source->node->parent_id === $this->sharedFolderId()) {
+            if ($source->node) {
                 $task->libraryFiles()->syncWithoutDetaching([$source->node->id]);
             }
         }
@@ -1022,7 +1005,7 @@ class TaskController extends Controller
             'created_by' => $task->created_by, 'creator' => $task->creator?->name,
             'employee_ids' => $task->employees->pluck('id'), 'department_ids' => $task->departments->pluck('id'),
             'library_file_ids' => $task->libraryFiles->pluck('id'),
-            'library_files' => $task->libraryFiles->map(fn (LibraryNode $node) => ['id' => $node->id, 'name' => $node->name, 'size' => $node->file?->size, 'mime_type' => $node->file?->mime_type, 'in_shared' => $node->parent_id === $this->sharedFolderId(), 'download_url' => route('tasks.library-file', ['task' => $task->id, 'node' => $node->id])])->values(),
+            'library_files' => $task->libraryFiles->map(fn (LibraryNode $node) => ['id' => $node->id, 'name' => $node->name, 'size' => $node->file?->size, 'mime_type' => $node->file?->mime_type, 'download_url' => route('tasks.library-file', ['task' => $task->id, 'node' => $node->id])])->values(),
             'assignees' => $assignees->map(fn (Employee $t) => ['id' => $t->id, 'name' => $t->user->name, 'avatar_url' => $t->user->avatar_path ? route('avatars.show', ['filename' => basename($t->user->avatar_path)]) : null, 'direct' => $task->employees->contains('id', $t->id), 'reminder_count' => (int) ($reminders->get($t->id)?->reminder_count ?? 0), 'last_reminded_at' => $reminders->get($t->id)?->last_reminded_at])->values(),
             'departments' => $task->departments->map(fn ($d) => Department::pathLabel($d->id))->values(),
             'units' => $task->departments->map(fn ($d) => [
