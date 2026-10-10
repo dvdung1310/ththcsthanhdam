@@ -37,33 +37,45 @@ class TaskStatsController extends Controller
             ->when(! empty($v['category_id']), fn ($q) => $q->where('category_id', $v['category_id']))
             ->get();
         $finishedAt = $this->finishTimes($tasks);
-        $inMonth = fn (Task $task, Carbon $from) => $task->due_at && $task->due_at->gte($from) && $task->due_at->lt($from->copy()->addMonth());
+        $now = now();
+        $inProgress = $now->gte($start) && $now->lt($start->copy()->addMonth());
+        $cutoff = $inProgress ? $now : null;
+        $previousEnd = $inProgress ? Carbon::createFromTimestamp(min($previous->copy()->addSeconds($start->diffInSeconds($now))->timestamp, $previous->copy()->addMonth()->timestamp)) : null;
+        $inMonth = fn (Task $task, Carbon $from, ?Carbon $to = null) => $task->due_at && $task->due_at->gte($from) && $task->due_at->lt($to ?? $from->copy()->addMonth());
         $belongsTo = fn (Task $task, Employee $employee) => $task->employees->contains('id', $employee->id) || $task->departments->pluck('id')->intersect($employee->unitIds())->isNotEmpty();
         $revisions = DB::table('task_submissions')->whereIn('task_id', $tasks->pluck('id'))->where('status', 'revision_required')->selectRaw('task_id, COUNT(*) as total')->groupBy('task_id')->pluck('total', 'task_id');
 
-        $metrics = function (Collection $cohort) use ($finishedAt) {
+        $metrics = function (Collection $cohort, ?Carbon $cutoff = null) use ($finishedAt) {
             $completed = $cohort->where('status', Task::COMPLETED);
             $onTime = $completed->filter(fn (Task $t) => ($finishedAt[$t->id] ?? null)?->lte($t->due_at));
+            $due = $cutoff ? $cohort->filter(fn (Task $t) => $t->due_at->lte($cutoff) || $t->status === Task::COMPLETED) : $cohort;
+            $overdue = $cohort->filter(fn (Task $t) => in_array($t->status, [Task::NOT_STARTED, Task::IN_PROGRESS], true) && $t->due_at->isPast())->count();
 
             return [
                 'assigned' => $cohort->count(),
+                'due' => $due->count(),
                 'completed' => $completed->count(),
+                'on_time' => $onTime->count(),
+                'late' => $completed->count() - $onTime->count(),
                 'waiting' => $cohort->where('status', Task::WAITING_APPROVAL)->count(),
-                'overdue' => $cohort->filter(fn (Task $t) => in_array($t->status, [Task::NOT_STARTED, Task::IN_PROGRESS], true) && $t->due_at->isPast())->count(),
-                'completion_rate' => $cohort->count() ? round($completed->count() / $cohort->count() * 100, 1) : null,
+                'overdue' => $overdue,
+                'open' => max(0, $cohort->count() - $completed->count() - $cohort->where('status', Task::WAITING_APPROVAL)->count() - $overdue),
+                'completion_rate' => $due->count() ? round($completed->count() / $due->count() * 100, 1) : null,
                 'on_time_rate' => $completed->count() ? round($onTime->count() / $completed->count() * 100, 1) : null,
             ];
         };
-        $cohort = fn (Carbon $from, ?callable $filter = null) => $tasks->filter(fn (Task $t) => $inMonth($t, $from) && (! $filter || $filter($t)))->values();
+        $cohort = fn (Carbon $from, ?callable $filter = null, ?Carbon $to = null) => $tasks->filter(fn (Task $t) => $inMonth($t, $from, $to) && (! $filter || $filter($t)))->values();
+        $current = fn (?callable $filter = null) => $metrics($cohort($start, $filter), $cutoff);
+        $before = fn (?callable $filter = null) => $compare === 'none' ? null : $metrics($cohort($previous, $filter, $previousEnd));
 
-        $rows = $employees->map(function (Employee $employee) use ($cohort, $start, $belongsTo, $metrics, $finishedAt, $revisions) {
+        $rows = $employees->map(function (Employee $employee) use ($cohort, $start, $belongsTo, $metrics, $finishedAt, $revisions, $cutoff) {
             $own = $cohort($start, fn (Task $t) => $belongsTo($t, $employee));
 
             return [
                 'employee_id' => $employee->id, 'employee' => $employee->user?->name, 'employee_code' => $employee->employee_code,
                 'department' => $employee->departments->map(fn ($d) => Department::pathLabel($d->id))->join(', '),
                 'units' => $employee->departments->map(fn ($d) => ['id' => $d->id, 'name' => $d->name, 'path' => Department::pathLabel($d->id)])->values(),
-                ...$metrics($own),
+                ...$metrics($own, $cutoff),
                 'tasks' => $own->map(fn (Task $t) => [
                     'id' => $t->id, 'code' => $t->code, 'title' => $t->title, 'category' => $t->category?->name,
                     'due_at' => $t->due_at?->toIso8601String(), 'status' => $t->status,
@@ -73,31 +85,34 @@ class TaskStatsController extends Controller
             ];
         })->sortByDesc('assigned')->values();
 
-        $departments = Department::ordered($unitIds->all())->map(function ($unit) use ($employees, $cohort, $start, $previous, $compare, $belongsTo, $metrics, $unitIds) {
+        $departments = Department::ordered($unitIds->all())->map(function ($unit) use ($employees, $current, $before, $belongsTo, $unitIds) {
             $members = $employees->filter(fn (Employee $t) => in_array($unit['id'], $t->unitIds(), true));
             $ofMembers = fn (Task $t) => $members->contains(fn (Employee $m) => $belongsTo($t, $m));
 
             return [
                 'id' => $unit['id'], 'name' => $unit['label'], 'short_name' => $unit['name'], 'type' => $unit['type'],
                 'parent_id' => $unit['parent_id'] && $unitIds->contains($unit['parent_id']) ? $unit['parent_id'] : null,
-                'employees' => $members->count(), ...$metrics($cohort($start, $ofMembers)),
-                'previous' => $compare === 'none' ? null : $metrics($cohort($previous, $ofMembers)),
+                'employees' => $members->count(), ...$current($ofMembers),
+                'previous' => $before($ofMembers),
             ];
         })->values();
 
         return response()->json([
-            'scope' => $scope, 'period' => $start->format('m/Y'), 'comparison_period' => $compare === 'none' ? null : $previous->format('m/Y'),
-            'current' => $metrics($cohort($start)), 'previous' => $compare === 'none' ? null : $metrics($cohort($previous)),
-            'trend' => collect(range(5, 0))->map(function ($offset) use ($start, $cohort, $metrics) {
+            'scope' => $scope, 'period' => $start->format('m/Y'),
+            'comparison_period' => $compare === 'none' ? null : ($inProgress ? '1–'.$previousEnd->copy()->subSecond()->format('d/m/Y') : $previous->format('m/Y')),
+            'in_progress' => $inProgress, 'as_of' => $inProgress ? $now->format('d/m') : null,
+            'current' => $current(), 'previous' => $before(),
+            'trend' => collect(range(5, 0))->map(function ($offset) use ($start, $cohort, $metrics, $now) {
                 $from = $start->copy()->subMonths($offset);
+                $running = $now->gte($from) && $now->lt($from->copy()->addMonth());
 
-                return ['period' => $from->format('m/Y'), ...$metrics($cohort($from))];
+                return ['period' => $from->format('m/Y'), 'year' => $from->year, 'month' => $from->month, 'in_progress' => $running, ...$metrics($cohort($from), $running ? $now : null)];
             }),
             'no_deadline_open' => $tasks->filter(fn (Task $t) => ! $t->due_at && in_array($t->status, Task::OPEN, true))->count(),
             'data' => $rows, 'departments' => $departments,
             'references' => [
                 'employees' => $allEmployees->map(fn ($t) => ['id' => $t->id, 'name' => $t->user?->name, 'department_ids' => $t->unitIds()])->values(),
-                'departments' => Department::ordered($allEmployees->flatMap(fn ($t) => $t->unitIds())->unique()->values()->all())->map(fn ($d) => ['id' => $d['id'], 'name' => $d['label']])->values(),
+                'departments' => Department::ordered($allEmployees->flatMap(fn ($t) => $t->unitIds())->unique()->values()->all())->map(fn ($d) => ['id' => $d['id'], 'name' => $d['label'], 'short_name' => $d['name'], 'parent_id' => $d['parent_id']])->values(),
                 'task_types' => TaskCategory::orderBy('name')->get(['id', 'name']),
             ],
         ]);
