@@ -42,10 +42,12 @@ export default function ManagementDashboard({ onKpi }) {
   }, [load]);
 
   if (!data) {
-    return (
+    return error ? (
       <div className="home">
-        <p className="home-loading">{error || "Đang tải Tổng quan…"}</p>
+        <div className="kpi-error">{error}</div>
       </div>
+    ) : (
+      <DashboardSkeleton />
     );
   }
 
@@ -228,6 +230,48 @@ function Results({ results }) {
           </li>
         )}
       </ul>
+    </div>
+  );
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="home home-skeleton" aria-busy="true" aria-label="Đang tải Tổng quan">
+      <header className="home-head">
+        <div>
+          <i className="sk" style={{ width: 260, height: 26 }} />
+          <i className="sk" style={{ width: 200, height: 14, marginTop: 8 }} />
+        </div>
+        <i className="sk" style={{ width: 96, height: 36, borderRadius: 9 }} />
+      </header>
+      <section className="home-modules">
+        {Array.from({ length: 4 }, (_, index) => (
+          <div key={index} className="home-module">
+            <i className="sk" style={{ width: "45%", height: 14 }} />
+            <i className="sk" style={{ width: "60%", height: 28 }} />
+            <i className="sk" style={{ width: "85%", height: 12 }} />
+            <i className="sk" style={{ width: "55%", height: 12 }} />
+          </div>
+        ))}
+      </section>
+      <section className="home-card home-attention">
+        <i className="sk" style={{ width: 200, height: 16 }} />
+        <ul>
+          {Array.from({ length: 4 }, (_, index) => <li key={index}><i className="sk" style={{ width: "100%", height: 40, borderRadius: 10 }} /></li>)}
+        </ul>
+      </section>
+      <div className="home-pair">
+        {Array.from({ length: 2 }, (_, index) => (
+          <section key={index} className="home-card">
+            <i className="sk" style={{ width: 220, height: 16 }} />
+            <i className="sk" style={{ width: "40%", height: 28 }} />
+            <i className="sk" style={{ width: "100%", height: 14, borderRadius: 99 }} />
+            <div className="home-sk-grid">
+              {Array.from({ length: 6 }, (_, cell) => <i key={cell} className="sk" style={{ height: 52, borderRadius: 10 }} />)}
+            </div>
+          </section>
+        ))}
+      </div>
     </div>
   );
 }
