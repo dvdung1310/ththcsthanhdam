@@ -20,6 +20,7 @@ class EvaluationPeriod extends Model
     public function template() { return $this->belongsTo(EvaluationTemplate::class, 'template_id'); }
     public function evaluations() { return $this->hasMany(Evaluation::class, 'period_id'); }
     public function opener() { return $this->belongsTo(User::class, 'opened_by'); }
+    public function scorers() { return $this->belongsToMany(User::class, 'evaluation_period_scorers', 'period_id', 'user_id')->withTimestamps(); }
 
     public function label(): string
     {
