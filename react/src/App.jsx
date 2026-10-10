@@ -59,6 +59,7 @@ import "./SystemTypography.css";
 import "./GlobalLoading.css";
 import "./NotificationTaskStates.css";
 import LeaveTracking from "./LeaveTracking";
+import TaskAiWorkspace from "./TaskAiWorkspace";
 import Avatar from "./Avatar";
 
 const navTree = [
@@ -599,7 +600,8 @@ function App() {
         <Routes>
           <Route path="/" element={<ManagementDashboard onTask={openTask} onKpi={() => navigate("/stats")} />} />
           <Route path="/stats" element={guard("stats", <TaskStats onTask={openTask} />)} />
-          <Route path="/tasks/:taskCode?" element={guard("tasks", <TaskRoute canAssign={can("tasks.assign")} canUpdate={can("tasks.update")} selectedTask={selectedTask} />)} />
+          <Route path="/tasks/ai" element={can("tasks.assign") && can("ai.tasks") ? <TaskAiWorkspace /> : <RouteNotice kind="forbidden" />} />
+          <Route path="/tasks/:taskCode?" element={guard("tasks", <TaskRoute canAssign={can("tasks.assign")} canUpdate={can("tasks.update")} canAi={can("tasks.assign") && can("ai.tasks")} selectedTask={selectedTask} />)} />
           <Route path="/library/*" element={guard("library", <LibraryRoute />)} />
           <Route path="/evaluations" element={guard("evaluations", <EvaluationHome />)} />
           <Route path="/evaluations/periods/new" element={guard("evaluation-templates", <EvaluationPeriodEditor />)} />

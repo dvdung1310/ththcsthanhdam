@@ -35,7 +35,9 @@ import {
   Link2,
   MessageSquare,
   X,
+  Sparkles,
 } from "lucide-react";
+import { useLocation, useNavigate } from "react-router";
 import "./TaskManagement.css";
 import TaskActionFilters, {
   TaskActionCards,
@@ -55,7 +57,8 @@ import "./TaskDrawer.css";
 import "./TaskComments.css";
 import "./TaskAvatars.css";
 import "./TaskDrawerLayout.css";
-import { apiFetch } from "./api";
+import "./TaskAiWorkspace.css";
+import { apiFetch, apiJson } from "./api";
 import { uploadProblem } from "./uploadLimits";
 import { ColumnPicker, NameStack, useScrollEdges, useTaskColumns } from "./TaskTable";
 import PeoplePicker, { roleChips, useOutsideClose } from "./PeoplePicker";
@@ -104,8 +107,17 @@ const emptyTask = {
   assignment_mode: "assign",
 };
 
-export default function TaskManagement({ canAssign, canUpdate, selectedTask, routeTaskCode = null, onRouteTaskChange }) {
+export default function TaskManagement({ canAssign, canUpdate, canAi = false, selectedTask, routeTaskCode = null, onRouteTaskChange }) {
   const confirm = useConfirm();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [draftCount, setDraftCount] = useState(0);
+  useEffect(() => {
+    if (!canAi) return;
+    apiJson("/api/task-drafts")
+      .then((result) => setDraftCount(result.data.reduce((sum, batch) => sum + batch.drafts.length, 0)))
+      .catch(() => {});
+  }, [canAi]);
   const columnState = useTaskColumns();
   const [tasks, setTasks] = useState([]),
     [meta, setMeta] = useState({
@@ -226,6 +238,23 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
     }
   }, [selectedTask?.id, selectedTask?.token]);
   useEffect(() => {
+    const draft = location.state?.draftForm;
+    if (!draft || !refs.categories.length) return;
+    navigate(location.pathname, { replace: true, state: null });
+    setEditing({
+      ...emptyTask,
+      ...draft,
+      category_id: draft.category_id ?? "",
+      starts_at: draft.starts_at ?? emptyTask.starts_at,
+      due_at: draft.due_at ?? "",
+      assignment_mode: "assign",
+      library_file_ids: [],
+      attachments: [],
+      pending_files: [],
+      removed_attachment_ids: [],
+    });
+  }, [location.state, refs.categories.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
     if (!success) return;
     const t = setTimeout(() => setSuccess(""), 3500);
     return () => clearTimeout(t);
@@ -309,6 +338,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
       editing.removed_attachment_ids?.forEach((id) =>
         f.append("remove_attachment_ids[]", id),
       );
+      if (editing.draft_id && !editing.id) f.append("draft_id", editing.draft_id);
       if (editing.id) f.append("_method", "PUT");
       const endpoint =
         editing.assignment_mode === "self"
@@ -327,6 +357,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
       if (!r.ok)
         throw new Error(Object.values(d.errors ?? {}).flat()[0] ?? d.message ?? "Không thể lưu công việc. Vui lòng thử lại.");
       const savedId = editing.id;
+      if (editing.draft_id && !savedId) setDraftCount((count) => Math.max(0, count - 1));
       setEditing(null);
       setSuccess(d.message);
       if (savedId && viewing?.id === savedId) await show(viewing);
@@ -636,6 +667,19 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
           </button>
           {showSupport && (
             <div className="block-body">
+              {canAi && !editing.id && editing.assignment_mode !== "self" && !editing.draft_id && (
+                <button
+                  type="button"
+                  className="ai-shortcut"
+                  onClick={async () => {
+                    if (formDirty && !(await confirm({ tone: "warning", title: "Rời form tạo công việc?", message: "Nội dung đang nhập trong form sẽ không được lưu.", confirmText: "Tiếp tục" }))) return;
+                    setEditing(null);
+                    navigate("/tasks/ai", { state: { nodeId: editing.library_file_ids[0] ?? null } });
+                  }}
+                >
+                  <Sparkles size={15} /> Phân tích tài liệu & gợi ý công việc <small>— AI đọc văn bản và tạo các bản nháp công việc</small>
+                </button>
+              )}
               <TaskDocuments
                 editing={editing}
                 setEditing={setEditing}
@@ -832,6 +876,12 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
             <p>Chọn nhóm công việc cần xử lý và thực hiện ngay</p>
           </div>
           <div className="task-create-actions">
+            {canAi && (
+              <button className="secondary-btn" onClick={() => navigate("/tasks/ai")} title="AI đọc công văn, kế hoạch và gợi ý các công việc cần giao">
+                <Sparkles size={16} /> Tạo từ tài liệu
+                {draftCount > 0 && <em className="ai-create-badge" title={`${draftCount} bản nháp đang chờ`}>{draftCount}</em>}
+              </button>
+            )}
             {(canAssign || (canUpdate && refs.current_employee)) && (
               <button className="primary-btn" onClick={openCreate}>
                 <Plus size={17} /> Tạo công việc
@@ -1296,7 +1346,7 @@ export default function TaskManagement({ canAssign, canUpdate, selectedTask, rou
   );
 }
 
-function CompactAssignees({ editing, refs, toggle }) {
+export function CompactAssignees({ editing, refs, toggle }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
   const ref = useOutsideClose(open, close);
@@ -1401,7 +1451,7 @@ export function RichTextEditor({ value, onChange, placeholder = "Mô tả nội 
   );
 }
 
-function ReviewerPicker({ reviewers, units, value, onChange }) {
+export function ReviewerPicker({ reviewers, units, value, onChange }) {
   const [open, setOpen] = useState(false);
   const close = useCallback(() => setOpen(false), []);
   const ref = useOutsideClose(open, close);
