@@ -7,7 +7,6 @@ use App\Models\Task;
 use App\Models\Employee;
 use App\Models\Department;
 use App\Models\LibraryNode;
-use App\Models\Role;
 use App\Services\LibraryAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -92,6 +91,6 @@ class AiAssistantController extends Controller
 
     private function ensurePrincipal(Request $request): void
     {
-        abort_unless($request->user()->hasRole(Role::HIEU_TRUONG),403,'Trợ lý AI chỉ dành cho Hiệu trưởng.');
+        abort_unless($request->user()->hasPermission('ai.assistant'),403,'Bạn chưa được cấp quyền dùng Trợ lý AI.');
     }
 }
