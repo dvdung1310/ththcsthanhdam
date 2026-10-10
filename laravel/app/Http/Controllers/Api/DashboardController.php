@@ -10,6 +10,7 @@ use App\Models\EvaluationPeriod;
 use App\Models\EvaluationTemplate;
 use App\Models\LeaveRecord;
 use App\Models\LibraryNode;
+use App\Models\Role;
 use App\Models\Task;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -35,7 +36,7 @@ class DashboardController extends Controller
                 'total' => $employees->count(),
                 'by_audience' => collect(EvaluationTemplate::AUDIENCES)->map(fn ($label, $audience) => [
                     'audience' => $audience, 'label' => $label,
-                    'count' => $employees->filter(fn (Employee $e) => EvaluationTemplate::audienceOf($e->user) === $audience)->count(),
+                    'count' => $employees->filter(fn (Employee $e) => $this->audience($e) === $audience)->count(),
                 ])->values(),
                 'absent_today' => $absentToday->count(),
                 'absent_week' => $leave->pluck('employee_id')->unique()->count(),
@@ -51,6 +52,17 @@ class DashboardController extends Controller
             'results' => $this->results(),
             'attention' => $this->attention($tasks['summary'], $evaluation, $units, $today),
         ]);
+    }
+
+    private function audience(Employee $employee): string
+    {
+        $codes = ($employee->user?->roles ?? collect())->filter(fn ($role) => ! $role->pivot->expires_at || CarbonImmutable::parse($role->pivot->expires_at)->isFuture())->pluck('code');
+
+        return match (true) {
+            $codes->contains(Role::BAN_GIAM_HIEU) => EvaluationTemplate::LEADERSHIP,
+            $codes->contains(Role::NHAN_VIEN) => EvaluationTemplate::STAFF,
+            default => EvaluationTemplate::TEACHER,
+        };
     }
 
     private function monthTasks(): array
