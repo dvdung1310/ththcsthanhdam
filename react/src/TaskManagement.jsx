@@ -152,6 +152,7 @@ export default function TaskManagement({ canAssign, canUpdate, canAi = false, se
   const [formBaseline, setFormBaseline] = useState(null);
   const [, setFormTick] = useState(0);
   const [viewDraft, setViewDraft] = useState(false);
+  const [submitDraft, setSubmitDraft] = useState(false);
   const [editingSubmission, setEditingSubmission] = useState(null);
   const [drawerTab, setDrawerTab] = useState("overview");
   const [chatCollapsed, setChatCollapsed] = useState(() => localStorage.getItem(CHAT_COLLAPSED_KEY) !== "0");
@@ -594,9 +595,10 @@ export default function TaskManagement({ canAssign, canUpdate, canAi = false, se
   };
   const requestCloseView = async () => {
     if (inlineEdit && formDirty && !(await discardChanges("Nội dung bạn vừa sửa cho công việc này sẽ không được lưu."))) return false;
-    if ((viewDraft || commentDraft || editingSubmission) && !(await discardChanges("Kết quả, nhận xét hoặc trao đổi bạn đang nhập sẽ không được gửi."))) return false;
+    if ((viewDraft || submitDraft || commentDraft || editingSubmission) && !(await discardChanges("Kết quả, nhận xét hoặc trao đổi bạn đang nhập sẽ không được gửi."))) return false;
     if (inlineEdit) setEditing(null);
     setViewDraft(false);
+    setSubmitDraft(false);
     setEditingSubmission(null);
     setDrawerTab("overview");
     setCommentDraft(false);
@@ -1223,7 +1225,6 @@ export default function TaskManagement({ canAssign, canUpdate, canAi = false, se
                   saving={workflowSaving}
                   error={workflowError}
                   onStart={startTask}
-                  onSubmit={submitCompletion}
                   onReview={reviewCompletion}
                   onSelfComplete={selfComplete}
                   onDraftChange={setViewDraft}
@@ -1289,6 +1290,7 @@ export default function TaskManagement({ canAssign, canUpdate, canAi = false, se
                   onDownload={(url, name) => downloadFile(url, name).catch((e) => setError(e.message))}
                   onShare={(file) => setSharingFile({ id: file.id, name: file.original_name })}
                 />
+                <TaskSubmitPanel task={viewing} saving={workflowSaving} onSubmit={submitCompletion} onDraftChange={setSubmitDraft} />
               </div>
               )}
               <TaskChat
@@ -1666,12 +1668,13 @@ function useDraftTracker(resetKeys, onDraftChange) {
   return [drafts, track];
 }
 
-function TaskWorkflowPanel({ task, saving, error, onStart, onSubmit, onReview, onSelfComplete, onDraftChange }) {
+function TaskWorkflowPanel({ task, saving, error, onStart, onReview, onSelfComplete, onDraftChange }) {
   const [, track] = useDraftTracker([task.id, task.status, task.submission_count], onDraftChange);
   const latest = task.latest_submission;
-  const hasAction = task.can_update_progress || task.can_submit_completion || task.can_review_completion || task.can_self_complete;
+  const canStart = task.can_update_progress && task.status === "not_started";
+  const revision = task.needs_revision && latest?.review_comment;
   const waiting = task.status === "waiting_approval" && !task.can_review_completion;
-  if (!hasAction && !waiting && !task.needs_revision && !error) return null;
+  if (!canStart && !task.can_review_completion && !task.can_self_complete && !waiting && !revision && !error) return null;
   return (
     <section className="drawer-actions">
       {error && (
@@ -1680,7 +1683,7 @@ function TaskWorkflowPanel({ task, saving, error, onStart, onSubmit, onReview, o
           {error}
         </div>
       )}
-      {task.needs_revision && latest?.review_comment && (
+      {revision && (
         <div className="workflow-note revision">
           <RotateCcw size={15} />
           <span>
@@ -1707,9 +1710,9 @@ function TaskWorkflowPanel({ task, saving, error, onStart, onSubmit, onReview, o
           </div>
         </form>
       )}
-      {(task.can_update_progress && task.status === "not_started") || task.can_self_complete ? (
+      {canStart || task.can_self_complete ? (
         <div className="drawer-action-row">
-          {task.can_update_progress && task.status === "not_started" && (
+          {canStart && (
             <button type="button" className="secondary-btn" disabled={saving} onClick={onStart}>
               <Activity size={15} /> Bắt đầu thực hiện
             </button>
@@ -1721,9 +1724,16 @@ function TaskWorkflowPanel({ task, saving, error, onStart, onSubmit, onReview, o
           )}
         </div>
       ) : null}
-      {task.can_submit_completion && (
-        <SubmissionForm key={`${task.id}-${task.submission_count ?? 0}`} task={task} saving={saving} onSubmit={onSubmit} draft={track("submit")} />
-      )}
+    </section>
+  );
+}
+
+function TaskSubmitPanel({ task, saving, onSubmit, onDraftChange }) {
+  const [, track] = useDraftTracker([task.id, task.status, task.submission_count], onDraftChange);
+  if (!task.can_submit_completion) return null;
+  return (
+    <section className="drawer-actions drawer-submit">
+      <SubmissionForm key={`${task.id}-${task.submission_count ?? 0}`} task={task} saving={saving} onSubmit={onSubmit} draft={track("submit")} />
     </section>
   );
 }
