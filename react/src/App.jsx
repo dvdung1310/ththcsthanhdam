@@ -17,6 +17,8 @@ import {
   FileBarChart,
   FileText,
   GraduationCap,
+  PanelLeftClose,
+  PanelLeftOpen,
   LayoutDashboard,
   Menu,
   MessageCircle,
@@ -65,6 +67,7 @@ import Avatar from "./Avatar";
 import { releaseDevice, syncPushSubscription } from "./deviceNotifications";
 import NotificationPrompt from "./NotificationPrompt";
 
+const SIDEBAR_KEY = "thanhdam_sidebar_collapsed";
 const NEEDS_ME_HINT = "Việc cần bạn xử lý: được giao chưa nộp và đang chờ bạn duyệt";
 
 const navTree = [
@@ -381,7 +384,40 @@ function App() {
   const pageTitle = current ? current.title ?? current.label : "Không tìm thấy trang";
   const pageLabel = authLoading ? null : !authUser ? "Đăng nhập" : pageTitle;
   const [openGroups, setOpenGroups] = useState([]);
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === "1");
+  const [flyout, setFlyout] = useState(null);
   const currentGroup = current?.group?.key;
+
+  const toggleCollapsed = () =>
+    setCollapsed((value) => {
+      localStorage.setItem(SIDEBAR_KEY, value ? "0" : "1");
+      return !value;
+    });
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "b" || event.shiftKey || event.altKey) return;
+      if (event.target.closest?.("input, textarea, [contenteditable='true'], .ProseMirror")) return;
+      event.preventDefault();
+      toggleCollapsed();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  useEffect(() => {
+    if (!flyout) return undefined;
+    const outside = (event) => !event.target.closest?.(".nav-group") && setFlyout(null);
+    const escape = (event) => event.key === "Escape" && setFlyout(null);
+    document.addEventListener("mousedown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("mousedown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [flyout]);
+
+  useEffect(() => setFlyout(null), [location.pathname]);
 
   useEffect(() => {
     if (currentGroup) setOpenGroups((groups) => (groups.includes(currentGroup) ? groups : [...groups, currentGroup]));
@@ -531,7 +567,7 @@ function App() {
   const openTask = (code) => navigate(`/tasks/${code}`);
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${collapsed ? "nav-collapsed" : ""}`}>
       <NotificationPrompt key={authUser.id} />
       {apiLoadingCount > 0 && (
         <div className="global-api-loading" role="status">
@@ -561,6 +597,15 @@ function App() {
             <X size={20} />
           </button>
         </div>
+        <button
+          type="button"
+          className="collapse-menu"
+          onClick={toggleCollapsed}
+          aria-label={collapsed ? "Mở rộng menu" : "Thu gọn menu"}
+          title={`${collapsed ? "Mở rộng menu" : "Thu gọn menu"} (Ctrl + B)`}
+        >
+          {collapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
+        </button>
         <nav className="nav-list">
           {navTree.map((item) => {
             const Icon = item.icon;
@@ -570,7 +615,7 @@ function App() {
               const leaf = item.children ? children[0] : item;
               return (
                 <div className="nav-entry" key={item.key}>
-                  <Link to={leaf.path} className={`nav-link ${current?.key === leaf.key ? "active" : ""}`} onClick={closeSidebar}>
+                  <Link to={leaf.path} className={`nav-link ${current?.key === leaf.key ? "active" : ""}`} onClick={closeSidebar} data-tip={item.label} aria-label={collapsed ? item.label : undefined}>
                     <Icon size={18} />
                     <span>{item.label}</span>
                     {leaf.badge && needsMeCount > 0 && <em title={NEEDS_ME_HINT}>{needsMeCount}</em>}
@@ -580,15 +625,22 @@ function App() {
             }
             const open = openGroups.includes(item.key);
             return (
-              <div className="nav-entry nav-group" key={item.key}>
-                <button type="button" className={`nav-link nav-parent ${current?.group?.key === item.key ? "in-group" : ""}`} aria-expanded={open} onClick={() => toggleGroup(item.key)}>
+              <div className={`nav-entry nav-group ${flyout === item.key ? "flyout-open" : ""}`} key={item.key}>
+                <button
+                  type="button"
+                  className={`nav-link nav-parent ${current?.group?.key === item.key ? "in-group" : ""}`}
+                  aria-expanded={collapsed ? flyout === item.key : open}
+                  aria-label={collapsed ? item.label : undefined}
+                  onClick={() => (collapsed ? setFlyout((key) => (key === item.key ? null : item.key)) : toggleGroup(item.key))}
+                >
                   <Icon size={18} />
                   <span>{item.label}</span>
-                  {!open && needsMeCount > 0 && children.some((child) => child.badge) && <em title={NEEDS_ME_HINT}>{needsMeCount}</em>}
+                  {(!open || collapsed) && needsMeCount > 0 && children.some((child) => child.badge) && <em title={NEEDS_ME_HINT}>{needsMeCount}</em>}
                   <ChevronDown size={15} className="nav-chevron" />
                 </button>
-                {open && (
+                {(open || collapsed) && (
                   <div className="nav-children">
+                    {collapsed && <b className="nav-flyout-title">{item.label}</b>}
                     {children.map((child) => (
                       <Link key={child.key} to={child.path} className={`nav-link ${current?.key === child.key ? "active" : ""}`} onClick={closeSidebar}>
                         <span>{child.label}</span>
