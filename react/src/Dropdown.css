@@ -99,10 +99,6 @@
   font-weight: 600;
 }
 
-.dd-list li.indent {
-  padding-left: 24px;
-}
-
 .dd-list li.disabled {
   opacity: 0.45;
   cursor: not-allowed;
