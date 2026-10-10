@@ -1314,3 +1314,86 @@ a.dl-detail-task span {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
 }
+
+.dl-table .dl-check {
+  width: 34px;
+  padding-right: 0;
+}
+
+.dl-table .dl-check input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--c-primary);
+  cursor: pointer;
+  opacity: 0.35;
+  transition: opacity 0.12s;
+}
+
+.dl-table tr:hover .dl-check input,
+.dl-table tr.checked .dl-check input,
+.dl-table th.dl-check input {
+  opacity: 1;
+}
+
+.dl-table tr.checked {
+  background: var(--c-primary-tint);
+}
+
+.dl-bulkbar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  margin-bottom: 8px;
+  padding: 8px 10px 8px 14px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--c-primary-line);
+  border-radius: 10px;
+  background: var(--c-primary-tint);
+  box-shadow: 0 6px 18px rgba(20, 28, 55, 0.08);
+}
+
+.dl-bulkbar b {
+  margin-right: auto;
+  color: var(--c-primary);
+  font-size: 13px;
+}
+
+.dl-bulkbar button {
+  height: 30px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid #dfe3ec;
+  border-radius: 8px;
+  color: #3f4961;
+  background: #fff;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dl-bulkbar button:hover:not(:disabled) {
+  border-color: var(--c-primary-line);
+  color: var(--c-primary);
+}
+
+.dl-bulkbar button.danger:hover:not(:disabled) {
+  border-color: #f2c4c1;
+  color: var(--c-danger);
+}
+
+.dl-bulkbar button.ghost {
+  border-color: transparent;
+  background: none;
+}
+
+.dl-bulkbar button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

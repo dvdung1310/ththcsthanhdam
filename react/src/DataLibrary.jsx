@@ -71,6 +71,8 @@ export default function DataLibrary({ view = "library", folderId = null, selectI
   const [success, setSuccess] = useState("");
   const [selected, setSelected] = useState(null);
   const [clipboard, setClipboard] = useState(null);
+  const [checked, setChecked] = useState(() => new Set());
+  const anchor = useRef(null);
   const [menu, setMenu] = useState(null);
   const [nameDialog, setNameDialog] = useState(null);
   const [sharing, setSharing] = useState(null);
@@ -118,6 +120,8 @@ export default function DataLibrary({ view = "library", folderId = null, selectI
     setSearch("");
     setPage(1);
     setSelected(select);
+    setChecked(new Set());
+    anchor.current = null;
     setDetail(null);
     setPreview(null);
   }, []);
@@ -250,21 +254,98 @@ export default function DataLibrary({ view = "library", folderId = null, selectI
 
   const paste = async (targetId = folderId) => {
     if (!clipboard) return;
-    const body = { node_id: clipboard.node.id, target_folder_id: targetId, action: clipboard.action };
-    try {
-      let result;
+    const { nodes, action } = clipboard;
+    const attempt = (node, resolution) => apiJson("/api/library/paste", { method: "POST", body: { node_id: node.id, target_folder_id: targetId, action, ...(resolution ? { resolution } : {}) } });
+    const failures = [];
+    const conflicts = [];
+    let pasted = 0;
+    let skipped = 0;
+    let lastMessage = "";
+    for (const node of nodes) {
       try {
-        result = await apiJson("/api/library/paste", { method: "POST", body });
+        lastMessage = (await attempt(node)).message;
+        pasted++;
       } catch (e) {
-        if (e.status !== 409 || !e.payload.conflict) throw e;
-        const answers = await askConflicts([e.payload.conflict]);
-        if (!answers || answers[0].resolution === "skip") return;
-        result = await apiJson("/api/library/paste", { method: "POST", body: { ...body, resolution: answers[0].resolution } });
+        if (e.status === 409 && e.payload?.conflict) conflicts.push({ ...e.payload.conflict, node });
+        else failures.push(`${node.name}: ${e.message}`);
       }
-      if (clipboard.action === "cut") setClipboard(null);
-      await done(result.message);
-    } catch (e) {
-      setError(e.message);
+    }
+    if (conflicts.length) {
+      const answers = await askConflicts(conflicts);
+      for (const answer of answers ?? conflicts.map((conflict) => ({ ...conflict, resolution: "skip" }))) {
+        if (answer.resolution === "skip") {
+          skipped++;
+          continue;
+        }
+        try {
+          lastMessage = (await attempt(answer.node, answer.resolution)).message;
+          pasted++;
+        } catch (e) {
+          failures.push(`${answer.node.name}: ${e.message}`);
+        }
+      }
+    }
+    if (action === "cut" && pasted) setClipboard(null);
+    if (failures.length) setError(failures.length === 1 ? failures[0] : `Không dán được ${failures.length} mục: ${failures.join("; ")}`);
+    if (pasted || skipped) {
+      const summary = nodes.length === 1 ? lastMessage : [`Đã ${action === "cut" ? "chuyển" : "dán"} ${pasted} mục`, skipped && `bỏ qua ${skipped}`].filter(Boolean).join(", ") + ".";
+      await done(summary || "Đã bỏ qua.");
+      setChecked(new Set());
+    }
+  };
+
+  const removeMany = async (nodes) => {
+    const deletable = nodes.filter((node) => node.abilities.can_delete);
+    if (!deletable.length) {
+      setError("Bạn không có quyền xóa các mục đã chọn.");
+      return;
+    }
+    const folders = deletable.filter((node) => node.type === "folder").length;
+    const ok = await confirm({
+      tone: "danger",
+      title: `Xóa ${deletable.length} mục đã chọn?`,
+      message: [
+        `${deletable.length - folders} file, ${folders} thư mục.`,
+        folders ? "Chỉ xóa được thư mục trống." : null,
+        deletable.length < nodes.length ? `${nodes.length - deletable.length} mục bạn không có quyền xóa sẽ được giữ lại.` : null,
+      ].filter(Boolean).join(" "),
+      confirmText: `Xóa ${deletable.length} mục`,
+    });
+    if (!ok) return;
+    const failures = [];
+    const linked = [];
+    let removed = 0;
+    for (const node of deletable) {
+      try {
+        await apiJson(`/api/library/nodes/${node.id}`, { method: "DELETE" });
+        removed++;
+      } catch (e) {
+        if (e.status === 409 && e.payload?.task_count) linked.push({ node, count: e.payload.task_count });
+        else failures.push(`${node.name}: ${e.message}`);
+      }
+    }
+    if (linked.length) {
+      const force = await confirm({
+        tone: "danger",
+        title: `${linked.length} file đang được gắn vào công việc`,
+        message: `${linked.map((item) => `“${item.node.name}” (${item.count} việc)`).join(", ")}. Xóa sẽ gỡ các file này khỏi công việc, người thực hiện và người duyệt sẽ không xem được nữa.`,
+        confirmText: "Vẫn xóa",
+      });
+      for (const item of force ? linked : []) {
+        try {
+          await apiJson(`/api/library/nodes/${item.node.id}?force=1`, { method: "DELETE" });
+          removed++;
+        } catch (e) {
+          failures.push(`${item.node.name}: ${e.message}`);
+        }
+      }
+    }
+    if (failures.length) setError(failures.length === 1 ? failures[0] : `Không xóa được ${failures.length} mục: ${failures.join("; ")}`);
+    if (removed) {
+      await done(`Đã xóa ${removed} mục.`);
+      setChecked(new Set());
+      setSelected(null);
+      if (detail && deletable.some((node) => node.id === detail.id)) setDetail(null);
     }
   };
 
@@ -275,9 +356,26 @@ export default function DataLibrary({ view = "library", folderId = null, selectI
     setPreview({ files: list.map(toPreview), index: list.findIndex((item) => item.id === node.id) });
   };
   const openNode = (node) => (node.type === "folder" ? openFolder(node.id) : openFile(node));
-  const copyNode = (node, action) => {
-    setClipboard({ node, action });
-    setSuccess(action === "cut" ? "Đã cắt. Mở thư mục đích và dán (Ctrl+V)." : "Đã sao chép. Mở thư mục đích và dán (Ctrl+V).");
+  const copyNode = (target, action) => {
+    const nodes = Array.isArray(target) ? target : [target];
+    if (!nodes.length) return;
+    setClipboard({ nodes, action });
+    const what = nodes.length === 1 ? "" : ` ${nodes.length} mục`;
+    setSuccess(action === "cut" ? `Đã cắt${what}. Mở thư mục đích và dán (Ctrl+V).` : `Đã sao chép${what}. Mở thư mục đích và dán (Ctrl+V).`);
+  };
+  const clipLabel = clipboard ? (clipboard.nodes.length === 1 ? `“${clipboard.nodes[0].name}”` : `${clipboard.nodes.length} mục`) : "";
+  const checkedNodes = items.filter((item) => checked.has(item.id));
+  const bulkMenu = (nodes) => {
+    const movable = nodes.every((node) => node.abilities.can_move);
+    const deletable = nodes.filter((node) => node.abilities.can_delete).length;
+    return [
+      { key: "bulk-title", label: `${nodes.length} mục đã chọn`, disabled: true },
+      { key: "d0", divider: true },
+      { key: "cut", label: `Cắt ${nodes.length} mục`, icon: Scissors, shortcut: "Ctrl+X", disabled: !movable, onClick: () => copyNode(nodes, "cut") },
+      { key: "copy", label: `Sao chép ${nodes.length} mục`, icon: Copy, shortcut: "Ctrl+C", onClick: () => copyNode(nodes, "copy") },
+      { key: "d1", divider: true },
+      { key: "delete", label: deletable ? `Xóa ${deletable} mục` : "Xóa", icon: Trash2, shortcut: "Del", danger: true, disabled: !deletable, onClick: () => removeMany(nodes) },
+    ];
   };
 
   const nodeMenu = (node, inTree = false) => [
@@ -299,12 +397,12 @@ export default function DataLibrary({ view = "library", folderId = null, selectI
           { key: "t0", divider: true },
           { key: "folder-here", label: "Thư mục mới ở đây", icon: FolderPlus, onClick: () => createFolder(targetId) },
           { key: "upload-here", label: "Tải file lên vào đây", icon: Upload, onClick: () => chooseUploadTarget(targetId) },
-          clipboard && { key: "paste-here", label: `Dán “${clipboard.node.name}” vào đây`, icon: ClipboardPaste, onClick: () => paste(targetId) },
+          clipboard && { key: "paste-here", label: `Dán ${clipLabel} vào đây`, icon: ClipboardPaste, onClick: () => paste(targetId) },
           { key: "t1", divider: true },
         ]
       : [];
   const backgroundMenu = () => [
-    { key: "paste", label: clipboard ? `Dán “${clipboard.node.name}”` : "Dán", icon: ClipboardPaste, shortcut: "Ctrl+V", disabled: !clipboard || !canUploadHere, onClick: () => paste() },
+    { key: "paste", label: clipboard ? `Dán ${clipLabel}` : "Dán", icon: ClipboardPaste, shortcut: "Ctrl+V", disabled: !clipboard || !canUploadHere, onClick: () => paste() },
     canUploadHere && { key: "d", divider: true },
     canUploadHere && { key: "folder", label: "Thư mục mới", icon: FolderPlus, onClick: () => createFolder() },
     canUploadHere && { key: "upload", label: "Tải file lên", icon: Upload, onClick: () => chooseUploadTarget(folderId) },
@@ -317,7 +415,14 @@ export default function DataLibrary({ view = "library", folderId = null, selectI
   const openContextMenu = (event, node = null) => {
     event.preventDefault();
     event.stopPropagation();
-    if (node) setSelected(node.id);
+    if (node && checked.has(node.id) && checked.size > 1) {
+      setMenu({ position: menuPosition(event.clientX, event.clientY), items: bulkMenu(checkedNodes) });
+      return;
+    }
+    if (node) {
+      setSelected(node.id);
+      setChecked(new Set());
+    }
     setMenu({ position: menuPosition(event.clientX, event.clientY), items: node ? nodeMenu(node) : backgroundMenu() });
   };
   const openTreeMenu = (event, folder) => {
@@ -328,22 +433,35 @@ export default function DataLibrary({ view = "library", folderId = null, selectI
 
   useEffect(() => {
     const shortcut = (event) => {
-      if (view !== "library" || nameDialog || sharing || conflictDialog || preview || ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName) || document.activeElement?.isContentEditable) return;
+      if (view !== "library" || nameDialog || sharing || conflictDialog || preview || (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName) && document.activeElement?.type !== "checkbox") || document.activeElement?.isContentEditable) return;
       const node = selected ? findItem(selected) : null;
+      const many = checkedNodes.length ? checkedNodes : node ? [node] : [];
       const key = event.key.toLowerCase();
-      if ((event.ctrlKey || event.metaKey) && key === "c" && node) {
+      if ((event.ctrlKey || event.metaKey) && key === "a" && rows.length) {
         event.preventDefault();
-        copyNode(node, "copy");
+        setChecked(new Set(rows.map((row) => row.id)));
+        return;
       }
-      if ((event.ctrlKey || event.metaKey) && key === "x" && node?.abilities.can_move) {
+      if (event.key === "Escape" && checked.size) {
+        setChecked(new Set());
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && key === "c" && many.length) {
         event.preventDefault();
-        copyNode(node, "cut");
+        copyNode(many, "copy");
+      }
+      if ((event.ctrlKey || event.metaKey) && key === "x" && many.length && many.every((item) => item.abilities.can_move)) {
+        event.preventDefault();
+        copyNode(many, "cut");
       }
       if ((event.ctrlKey || event.metaKey) && key === "v" && clipboard && canUploadHere) {
         event.preventDefault();
         paste();
       }
-      if (event.key === "Delete" && node?.abilities.can_delete) {
+      if ((event.key === "Delete" || (event.key === "Backspace" && (event.metaKey || event.ctrlKey))) && checkedNodes.length > 1) {
+        event.preventDefault();
+        removeMany(checkedNodes);
+      } else if (event.key === "Delete" && node?.abilities.can_delete) {
         event.preventDefault();
         remove(node);
       }
@@ -375,6 +493,34 @@ export default function DataLibrary({ view = "library", folderId = null, selectI
 
   const breadcrumbs = payload?.folder?.breadcrumbs ?? [];
   const showFolders = payload && (payload.meta.current_page === 1 || !payload.data.length) ? payload.folders : [];
+  const rows = [...showFolders, ...(payload?.data ?? [])];
+  const toggleChecked = (id) =>
+    setChecked((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const clickRow = (event, node) => {
+    event.stopPropagation();
+    if (event.shiftKey && anchor.current !== null) {
+      const from = rows.findIndex((row) => row.id === anchor.current);
+      const to = rows.findIndex((row) => row.id === node.id);
+      if (from >= 0 && to >= 0) {
+        const [a, b] = from < to ? [from, to] : [to, from];
+        setChecked(new Set(rows.slice(a, b + 1).map((row) => row.id)));
+      }
+    } else if (event.metaKey || event.ctrlKey) {
+      if (!checked.size && selected && selected !== node.id) setChecked(new Set([selected, node.id]));
+      else toggleChecked(node.id);
+      anchor.current = node.id;
+    } else {
+      setChecked(new Set());
+      anchor.current = node.id;
+    }
+    setSelected(node.id);
+  };
+  const allChecked = rows.length > 0 && rows.every((row) => checked.has(row.id));
 
   return (
     <div className="data-library" style={{ gridTemplateColumns: `${sidebarWidth}px 8px minmax(0, 1fr)` }}>
@@ -478,7 +624,10 @@ export default function DataLibrary({ view = "library", folderId = null, selectI
 
           <section
             className={`dl-content ${dragging ? "dragging" : ""}`}
-            onClick={() => setSelected(null)}
+            onClick={() => {
+              setSelected(null);
+              setChecked(new Set());
+            }}
             onContextMenu={(e) => openContextMenu(e)}
             onDragOver={(e) => {
               if (!canUploadHere || search) return;
@@ -500,10 +649,37 @@ export default function DataLibrary({ view = "library", folderId = null, selectI
               </div>
             )}
             {dragging && <div className="dl-drop-hint"><Upload size={22} /> Thả file để tải lên thư mục này</div>}
+            {checked.size > 0 && (
+              <div className="dl-bulkbar" onClick={(e) => e.stopPropagation()}>
+                <b>Đã chọn {checked.size} mục</b>
+                <button type="button" disabled={!checkedNodes.every((node) => node.abilities.can_move)} onClick={() => copyNode(checkedNodes, "cut")} title={checkedNodes.every((node) => node.abilities.can_move) ? "Ctrl+X" : "Có mục bạn không có quyền di chuyển"}>
+                  <Scissors size={15} /> Cắt
+                </button>
+                <button type="button" onClick={() => copyNode(checkedNodes, "copy")} title="Ctrl+C">
+                  <Copy size={15} /> Sao chép
+                </button>
+                <button type="button" className="danger" disabled={!checkedNodes.some((node) => node.abilities.can_delete)} onClick={() => removeMany(checkedNodes)} title="Del">
+                  <Trash2 size={15} /> Xóa
+                </button>
+                <button type="button" className="ghost" onClick={() => setChecked(new Set())}>
+                  <X size={15} /> Bỏ chọn
+                </button>
+              </div>
+            )}
 
             <table className="dl-table">
               <thead>
                 <tr>
+                  <th className="dl-check">
+                    <input
+                      type="checkbox"
+                      checked={allChecked}
+                      ref={(element) => element && (element.indeterminate = checked.size > 0 && !allChecked)}
+                      onChange={() => setChecked(allChecked ? new Set() : new Set(rows.map((row) => row.id)))}
+                      disabled={!rows.length}
+                      aria-label="Chọn tất cả"
+                    />
+                  </th>
                   <SortHeader column="name" label="Tên" sort={sort} onSort={(value) => { setSort(value); setPage(1); }} />
                   <SortHeader column="size" label="Kích thước" sort={sort} onSort={(value) => { setSort(value); setPage(1); }} />
                   <th className="dl-col-optional">Chủ sở hữu</th>
@@ -512,17 +688,28 @@ export default function DataLibrary({ view = "library", folderId = null, selectI
                 </tr>
               </thead>
               <tbody>
-                {[...showFolders, ...(payload?.data ?? [])].map((node) => {
+                {rows.map((node) => {
                   const isFolder = node.type === "folder";
                   const Icon = isFolder ? Folder : fileIcon(node.mime_type);
                   return (
                     <tr
                       key={node.id}
-                      className={`${selected === node.id ? "selected" : ""} ${isFolder ? "folder" : ""}`}
-                      onClick={(e) => { e.stopPropagation(); setSelected(node.id); }}
+                      className={`${selected === node.id || checked.has(node.id) ? "selected" : ""} ${checked.has(node.id) ? "checked" : ""} ${isFolder ? "folder" : ""}`}
+                      onClick={(e) => clickRow(e, node)}
                       onDoubleClick={() => openNode(node)}
                       onContextMenu={(e) => openContextMenu(e, node)}
                     >
+                      <td className="dl-check" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={checked.has(node.id)}
+                          onChange={() => {
+                            toggleChecked(node.id);
+                            anchor.current = node.id;
+                          }}
+                          aria-label={`Chọn ${node.name}`}
+                        />
+                      </td>
                       <td className="dl-name">
                         <span className={`dl-node-icon ${isFolder ? (node.is_system ? "system" : "folder") : "file"}`}>
                           <Icon size={17} />
