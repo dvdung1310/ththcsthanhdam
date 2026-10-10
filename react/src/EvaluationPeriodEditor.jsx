@@ -6,6 +6,7 @@ import { useConfirm } from "./ConfirmDialog";
 import { STATUS_TONES } from "./evaluationUtils";
 import "./Evaluation.css";
 import Avatar from "./Avatar";
+import EvaluationScorerPicker from "./EvaluationScorerPicker";
 
 const pad = (n) => String(n).padStart(2, "0");
 const AUDIENCE_SHORT = { teacher: "GV", staff: "NV", leadership: "BGH" };
@@ -37,6 +38,8 @@ export default function EvaluationPeriodEditor() {
   const [selected, setSelected] = useState(new Set());
   const [scorers, setScorers] = useState(new Set());
   const [audience, setAudience] = useState("");
+  const [sheetScorers, setSheetScorers] = useState({});
+  const [assigning, setAssigning] = useState(null);
   const [scope, setScope] = useState("all");
   const [search, setSearch] = useState("");
   const [show, setShow] = useState("all");
@@ -51,6 +54,7 @@ export default function EvaluationPeriodEditor() {
         setRoster(result);
         setSelected(new Set(result.data.filter((row) => (editing ? row.evaluation : row.eligible)).map((row) => row.teacher_id)));
         setScorers(new Set(editing ? result.scorer_ids : result.scorer_candidates.filter((candidate) => candidate.suggested).map((candidate) => candidate.id)));
+        setSheetScorers(Object.fromEntries(result.data.filter((row) => row.evaluation?.scorer_ids?.length).map((row) => [row.teacher_id, row.evaluation.scorer_ids])));
         if (editing) {
           setForm({ self_due_on: result.period.self_due_on ?? "", unit_due_on: result.period.unit_due_on ?? "" });
         } else {
@@ -165,7 +169,15 @@ export default function EvaluationPeriodEditor() {
     setSaving(true);
     setError("");
     try {
-      const body = { self_due_on: form.self_due_on || null, unit_due_on: form.unit_due_on || null, teacher_ids: [...selected], scorer_ids: [...scorers] };
+      const body = {
+        self_due_on: form.self_due_on || null,
+        unit_due_on: form.unit_due_on || null,
+        teacher_ids: [...selected],
+        scorer_ids: [...scorers],
+        sheet_scorers: rows
+          .filter((row) => selected.has(row.teacher_id) && (sheetScorers[row.teacher_id]?.length || row.evaluation?.scorer_ids?.length))
+          .map((row) => ({ teacher_id: row.teacher_id, user_ids: sheetScorers[row.teacher_id] ?? [] })),
+      };
       const result = editing
         ? await apiJson(`/api/evaluation-periods/${periodId}`, { method: "PUT", body })
         : await apiJson("/api/evaluation-periods", { method: "POST", body: { ...body, year: Number(form.year), month: Number(form.month) } });
@@ -189,6 +201,11 @@ export default function EvaluationPeriodEditor() {
   }
 
   const head = groupState(visible);
+  const candidateById = Object.fromEntries((roster.assignable_scorers ?? []).map((candidate) => [candidate.id, candidate]));
+  const defaultFor = (row) =>
+    row.audience === "teacher"
+      ? ["Tổ trưởng, tổ phó, nhóm trưởng của đơn vị"]
+      : roster.scorer_candidates.filter((candidate) => scorers.has(candidate.id) && candidate.employee_id !== row.teacher_id).map((candidate) => candidate.name);
 
   return (
     <div className="ev-page ev-period-page">
@@ -267,7 +284,7 @@ export default function EvaluationPeriodEditor() {
               const active = scorers.has(candidate.id);
               return (
                 <button key={candidate.id} type="button" disabled={locked} className={`ev-scorer ${active ? "active" : ""}`} onClick={() => toggleScorer(candidate.id)} aria-pressed={active}>
-                  {candidate.avatar_url ? <img src={candidate.avatar_url} alt="" /> : <Avatar name={candidate.name} />}
+                  <Avatar src={candidate.avatar_url} name={candidate.name} size={28} />
                   <span>
                     <b>{candidate.name}</b>
                     <small>{candidate.roles.slice(0, 2).join(" · ")}</small>
@@ -339,6 +356,7 @@ export default function EvaluationPeriodEditor() {
                   <th>Mã</th>
                   <th>Đơn vị</th>
                   <th>Vai trò</th>
+                  <th>Người chấm</th>
                   <th>{editing ? "Phiếu" : "Ghi chú"}</th>
                 </tr>
               </thead>
@@ -375,6 +393,20 @@ export default function EvaluationPeriodEditor() {
                           )}
                         </span>
                       </td>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        {selected.has(row.teacher_id) ? (
+                          <span className="ev-assign-line">
+                            {sheetScorers[row.teacher_id]?.length ? (
+                              <span className="ev-chip purple" title="Chỉ định riêng">{sheetScorers[row.teacher_id].map((id) => candidateById[id]?.name ?? "?").join(", ")}</span>
+                            ) : (
+                              <span className="ev-muted">Mặc định</span>
+                            )}
+                            <button type="button" className="ev-assign-btn" disabled={locked} onClick={() => setAssigning(row)}>Đổi</button>
+                          </span>
+                        ) : (
+                          <span className="ev-muted">—</span>
+                        )}
+                      </td>
                       <td>
                         {row.evaluation ? (
                           <span className="ev-roster-tags">
@@ -393,6 +425,20 @@ export default function EvaluationPeriodEditor() {
           </div>
         </section>
       </div>
+      {assigning && (
+        <EvaluationScorerPicker
+          title="Người chấm riêng cho phiếu"
+          subject={`${assigning.name}${editing ? "" : " · áp dụng khi mở kỳ"}`}
+          candidates={(roster.assignable_scorers ?? []).filter((candidate) => candidate.employee_id !== assigning.teacher_id)}
+          selected={sheetScorers[assigning.teacher_id] ?? []}
+          defaultScorers={defaultFor(assigning)}
+          onSave={(ids) => {
+            setSheetScorers((current) => ({ ...current, [assigning.teacher_id]: ids }));
+            setAssigning(null);
+          }}
+          onClose={() => setAssigning(null)}
+        />
+      )}
     </div>
   );
 }

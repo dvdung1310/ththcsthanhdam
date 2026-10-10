@@ -23,6 +23,7 @@ import { apiFetch, apiJson } from "./api";
 import { uploadProblem } from "./uploadLimits";
 import { useConfirm } from "./ConfirmDialog";
 import FilePreview from "./FilePreview";
+import EvaluationScorerPicker from "./EvaluationScorerPicker";
 import { formatBytes } from "./fileUtils";
 import { SCORE_PATTERN, STATUS_TONES, computeTotals, formatDay, formatMoment, formatScore, hasZeroCriterion, maxBase, normalizeScore, parseScore, scoreError, suggestGrade } from "./evaluationUtils";
 import "./Evaluation.css";
@@ -84,6 +85,8 @@ export default function EvaluationSheet() {
   const [success, setSuccess] = useState("");
   const [preview, setPreview] = useState(null);
   const [returning, setReturning] = useState(false);
+  const [assigning, setAssigning] = useState(false);
+  const [assignSaving, setAssignSaving] = useState(false);
 
   const reset = useCallback((detail) => {
     setData(detail);
@@ -286,6 +289,20 @@ export default function EvaluationSheet() {
       return false;
     } finally {
       setSaving(false);
+    }
+  };
+
+  const assignScorers = async (userIds) => {
+    setAssignSaving(true);
+    try {
+      const result = await apiJson(`/api/evaluations/${data.id}/scorers`, { method: "PUT", body: { user_ids: userIds } });
+      setData((current) => ({ ...current, assigned_scorers: result.data.assigned_scorers, default_scorers: result.data.default_scorers, abilities: result.data.abilities }));
+      setSuccess(result.message);
+      setAssigning(false);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setAssignSaving(false);
     }
   };
 
@@ -564,6 +581,7 @@ export default function EvaluationSheet() {
             form={form}
             reviewMode={reviewMode}
             onField={(field, value) => setField(field, value, "review")}
+            onAssign={() => setAssigning(true)}
           />
         </aside>
       </div>
@@ -580,6 +598,18 @@ export default function EvaluationSheet() {
         />
       )}
       {preview && <FilePreview files={preview.files} startIndex={preview.index} onClose={() => setPreview(null)} />}
+      {assigning && (
+        <EvaluationScorerPicker
+          title={`Người chấm cột “${sheetContext.scorer}”`}
+          subject={`Phiếu của ${data.teacher.name} · ${data.period.label}`}
+          candidates={data.scorer_candidates ?? []}
+          selected={(data.assigned_scorers ?? []).map((user) => user.id)}
+          defaultScorers={data.default_scorers}
+          saving={assignSaving}
+          onSave={assignScorers}
+          onClose={() => setAssigning(false)}
+        />
+      )}
     </div>
     </SheetContext.Provider>
   );
@@ -839,7 +869,7 @@ function CriterionRow({ criterion, row, bonus, selfMode, unitMode, reviewMode, s
   );
 }
 
-function Summary({ data, totals, isHomeroom, showUnit, suggested, resultColumn, form, reviewMode, onField }) {
+function Summary({ data, totals, isHomeroom, showUnit, suggested, resultColumn, form, reviewMode, onField, onAssign }) {
   const { scorer, teacherSheet } = useContext(SheetContext);
   const base = maxBase(data.sections, isHomeroom);
   const columns = [["self", "Tự chấm"], ...(showUnit ? [["unit", scorer]] : [])];
@@ -919,6 +949,24 @@ function Summary({ data, totals, isHomeroom, showUnit, suggested, resultColumn, 
       )}
 
       <dl className="ev-trail">
+        {!data.abilities.is_own && (
+          <>
+            <dt>Người chấm</dt>
+            <dd className="ev-assign-line">
+              {data.assigned_scorers?.length ? (
+                <>
+                  <span>{data.assigned_scorers.map((user) => user.name).join(", ")}</span>
+                  <span className="ev-chip purple">Chỉ định riêng</span>
+                </>
+              ) : (
+                <span>{data.default_scorers?.length ? data.default_scorers.join(", ") : "Chưa có"} <small className="ev-muted">(mặc định)</small></span>
+              )}
+              {data.abilities.can_assign_scorers && (
+                <button type="button" className="ev-assign-btn" onClick={onAssign}>Đổi</button>
+              )}
+            </dd>
+          </>
+        )}
         {data.submitted_at && <><dt>Nộp phiếu</dt><dd>{formatMoment(data.submitted_at)}</dd></>}
         {data.unit_scored_by && <><dt>{scorer}</dt><dd>{data.unit_scored_by} · {formatMoment(data.unit_scored_at)}</dd></>}
         {data.reviewed_by && <><dt>Duyệt</dt><dd>{data.reviewed_by} · {formatMoment(data.reviewed_at)}</dd></>}

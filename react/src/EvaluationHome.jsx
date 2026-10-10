@@ -658,6 +658,7 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
                     <td>
                       <span className={`ev-chip ${STATUS_TONES[row.status]}`}>{row.status_label}</span>
                       {note && <small className={note.tone === "late" ? "ev-late" : "ev-warn"}>{note.text}</small>}
+                      {!dense && row.assigned_scorers?.length > 0 && <small className="ev-sub" title="Người chấm được chỉ định riêng">Chấm: {row.assigned_scorers.join(", ")}</small>}
                     </td>
                     <td className="num">{formatScore(row.self_total)}</td>
                     <td className="num">{row.unit_in_progress ? <span className="ev-muted">Đang chấm</span> : formatScore(row.unit_total)}</td>

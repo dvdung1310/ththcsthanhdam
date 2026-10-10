@@ -3823,15 +3823,12 @@
   cursor: pointer;
 }
 
-.ev-scorer img,
-.ev-scorer > span:first-child {
-  width: 28px;
-  height: 28px;
+.ev-scorer img {
   border-radius: 50%;
   object-fit: cover;
 }
 
-.ev-scorer > span:not(:first-child) {
+.ev-scorer > span {
   display: grid;
 }
 
@@ -3870,4 +3867,222 @@
 .ev-tpl-audiences button svg {
   margin-left: 4px;
   vertical-align: -1px;
+}
+
+.ev-scorer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 115;
+  padding: 20px;
+  display: grid;
+  place-items: center;
+  background: rgba(15, 23, 49, 0.45);
+  backdrop-filter: blur(3px);
+}
+
+.ev-scorer-dialog {
+  width: min(520px, 100%);
+  max-height: min(640px, calc(100vh - 40px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 25px 70px rgba(13, 20, 45, 0.28);
+}
+
+.ev-scorer-dialog header {
+  padding: 16px 16px 10px 18px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.ev-scorer-dialog header > span {
+  flex: 1;
+  display: grid;
+  gap: 2px;
+}
+
+.ev-scorer-dialog header b {
+  color: var(--c-text);
+  font-size: 15px;
+}
+
+.ev-scorer-dialog header small {
+  color: var(--c-muted);
+  font-size: 12px;
+}
+
+.ev-scorer-close {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #e5e8ef;
+  border-radius: 8px;
+  color: var(--c-text-2);
+  background: #fff;
+  cursor: pointer;
+}
+
+.ev-scorer-default {
+  margin: 0 18px 10px;
+  padding: 8px 10px;
+  display: flex;
+  gap: 8px;
+  border-radius: 8px;
+  color: var(--c-text-2);
+  background: #f5f8fe;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ev-scorer-default svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--c-primary);
+}
+
+.ev-scorer-search {
+  margin: 0 18px 8px;
+  height: 36px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--c-border, #dbdfe9);
+  border-radius: 8px;
+  color: var(--c-muted);
+}
+
+.ev-scorer-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--c-text);
+  font-size: 13px;
+}
+
+.ev-scorer-options {
+  min-height: 120px;
+  padding: 0 10px 8px;
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: 2px;
+}
+
+.ev-scorer-options > button {
+  padding: 7px 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ev-scorer-options > button:hover {
+  background: #f6f7fb;
+}
+
+.ev-scorer-options > button.active {
+  background: var(--c-primary-tint);
+}
+
+.ev-scorer-options img,
+.ev-scorer-options .avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.ev-scorer-options > button > span:last-child {
+  display: grid;
+}
+
+.ev-scorer-options b {
+  color: #2d3756;
+  font-size: 13px;
+}
+
+.ev-scorer-options small {
+  color: var(--c-muted);
+  font-size: 11px;
+}
+
+.ev-scorer-check {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 1.5px solid #c3c9d8;
+  border-radius: 5px;
+  color: #fff;
+}
+
+.ev-scorer-options > button.active .ev-scorer-check {
+  border-color: var(--c-primary);
+  background: var(--c-primary);
+}
+
+.ev-scorer-dialog footer {
+  padding: 12px 16px 14px 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid #eef0f5;
+}
+
+.ev-scorer-dialog footer span {
+  flex: 1;
+  color: var(--c-muted);
+  font-size: 12px;
+  text-align: right;
+}
+
+.ev-assign-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ev-assign-line .ev-chip {
+  font-size: 11px;
+}
+
+.ev-assign-btn {
+  padding: 2px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--c-primary-line);
+  border-radius: 6px;
+  color: var(--c-primary);
+  background: #fff;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ev-assign-btn:hover {
+  background: var(--c-primary-tint);
+}
+
+.ev-assign-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.ev-people-table .ev-assign-line {
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
