@@ -68,6 +68,10 @@ class EvaluationScoring
             return null;
         }
 
+        if ($column === 'final') {
+            return $score->leader_score ?? $score->unit_score;
+        }
+
         return $score->{$column.'_score'};
     }
 
