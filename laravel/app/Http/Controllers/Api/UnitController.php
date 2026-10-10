@@ -15,6 +15,8 @@ use Illuminate\Validation\Rule;
 
 class UnitController extends Controller
 {
+    private const DESCRIPTION_MAX = 1000;
+
     public function index(Request $request): JsonResponse
     {
         $unitIds = $request->user()->managedUnitIds();
@@ -127,7 +129,7 @@ class UnitController extends Controller
             ])->values();
 
         return [
-            'unit' => ['id' => $unit->id, 'name' => $unit->name, 'label' => Department::pathLabel($unit->id), 'type' => $unit->type, 'parent_id' => $unit->parent_id, 'is_active' => $unit->is_active],
+            'unit' => ['id' => $unit->id, 'name' => $unit->name, 'label' => Department::pathLabel($unit->id), 'type' => $unit->type, 'parent_id' => $unit->parent_id, 'is_active' => $unit->is_active, 'description' => $unit->description],
             'leaders' => $leaders,
             'slots' => $this->slots($unit),
             'can_assign' => $this->canAssign($actor),
@@ -177,7 +179,7 @@ class UnitController extends Controller
         $this->ensureSchoolManager($request);
         $data = $this->validateUnit($request);
         $unit = Department::create([
-            'name' => $data['name'], 'parent_id' => $data['parent_id'] ?? null,
+            'name' => $data['name'], 'parent_id' => $data['parent_id'] ?? null, 'description' => $this->description($data),
             'code' => $this->uniqueCode('departments', $data['name']),
             'type' => empty($data['parent_id']) ? Department::TYPE_TO : Department::TYPE_NHOM, 'is_active' => true,
         ]);
@@ -190,7 +192,10 @@ class UnitController extends Controller
         $this->ensureSchoolManager($request);
         $data = $this->validateUnit($request, $unit);
         $parentId = $unit->type === Department::TYPE_NHOM ? ($data['parent_id'] ?? $unit->parent_id) : null;
-        $unit->update(['name' => $data['name'], 'parent_id' => $parentId, 'is_active' => $data['is_active'] ?? $unit->is_active]);
+        $unit->update([
+            'name' => $data['name'], 'parent_id' => $parentId, 'is_active' => $data['is_active'] ?? $unit->is_active,
+            'description' => array_key_exists('description', $data) ? $this->description($data) : $unit->description,
+        ]);
 
         return response()->json(['message' => 'Đã cập nhật đơn vị.', 'data' => $unit]);
     }
@@ -215,11 +220,18 @@ class UnitController extends Controller
             'name' => ['required', 'string', 'max:255', Rule::unique('departments', 'name')->where(fn ($q) => $parentId ? $q->where('parent_id', $parentId) : $q->whereNull('parent_id'))->ignore($unit?->id)],
             'parent_id' => ['nullable', 'integer', Rule::exists('departments', 'id')->whereNull('parent_id')->where('type', Department::TYPE_TO), Rule::notIn(array_filter([$unit?->id]))],
             'is_active' => ['nullable', 'boolean'],
+            'description' => ['nullable', 'string', 'max:'.self::DESCRIPTION_MAX],
         ], [
+            'description.max' => 'Mô tả tối đa '.self::DESCRIPTION_MAX.' ký tự.',
             'name.required' => 'Vui lòng nhập tên đơn vị.',
             'name.unique' => 'Tên này đã tồn tại trong cùng cấp.',
             'parent_id.exists' => 'Nhóm chỉ có thể thuộc một tổ.',
         ]);
+    }
+
+    private function description(array $data): ?string
+    {
+        return trim((string) ($data['description'] ?? '')) ?: null;
     }
 
     private function ensureSchoolManager(Request $request): void
