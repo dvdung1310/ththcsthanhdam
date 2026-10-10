@@ -30,6 +30,16 @@ class Employee extends Model
         return Department::withAncestors($this->directUnitIds());
     }
 
+    public function scopeTeachers(Builder $query): Builder
+    {
+        return $query->whereHas('user.roles', fn ($r) => $r->where('code', Role::GIAO_VIEN));
+    }
+
+    public function isTeacher(): bool
+    {
+        return (bool) $this->user?->hasRole(Role::GIAO_VIEN);
+    }
+
     public function scopeInUnits(Builder $query, iterable $unitIds): Builder
     {
         $ids = Department::withDescendants($unitIds);
