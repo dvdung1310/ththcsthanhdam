@@ -62,6 +62,7 @@ import "./NotificationTaskStates.css";
 import LeaveTracking from "./LeaveTracking";
 import TaskAiWorkspace from "./TaskAiWorkspace";
 import Avatar from "./Avatar";
+import { releaseDevice, syncPushSubscription } from "./deviceNotifications";
 
 const navTree = [
   { key: "dashboard", label: "Tổng quan", icon: LayoutDashboard, path: "/", permission: "dashboard.view" },
@@ -389,6 +390,23 @@ function App() {
   }, [pageLabel, unreadCount, authUser]);
 
   useEffect(() => {
+    if (!authUser) return undefined;
+    syncPushSubscription().catch(() => null);
+    const open = (url) => {
+      const target = new URL(url || "/", window.location.origin);
+      if (target.origin === window.location.origin) navigate(`${target.pathname}${target.search}`);
+    };
+    const fromWorker = (event) => event.data?.type === "OPEN_URL" && open(event.data.url);
+    const fromPage = (event) => open(event.detail);
+    navigator.serviceWorker?.addEventListener("message", fromWorker);
+    window.addEventListener("device-notification:open", fromPage);
+    return () => {
+      navigator.serviceWorker?.removeEventListener("message", fromWorker);
+      window.removeEventListener("device-notification:open", fromPage);
+    };
+  }, [authUser?.id]);
+
+  useEffect(() => {
     const openFilteredTasks = (event) => {
       setSelectedTask({ filter: event.detail, token: Date.now() });
       navigate("/tasks");
@@ -461,6 +479,7 @@ function App() {
   }, []);
 
   const logout = async () => {
+    await releaseDevice();
     await apiFetch("/api/auth/logout", {
       method: "POST",
       headers: { Accept: "application/json" },
