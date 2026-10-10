@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { ChevronRight, TriangleAlert, X } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronRight, TriangleAlert, X } from "lucide-react";
 import "./TaskStatsPeople.css";
 
 const collator = new Intl.Collator("vi", { sensitivity: "base" });
@@ -7,11 +7,16 @@ const number = (value) => Number(value).toLocaleString("vi-VN", { maximumFractio
 const percent = (value) => (value == null ? "—" : `${number(value)}%`);
 const openOf = (unit) => Math.max(0, unit.assigned - unit.completed - unit.waiting - unit.overdue);
 
-const SORTS = [
-  ["attention", "Cần chú ý", (a, b) => b.overdue / (b.assigned || 1) - a.overdue / (a.assigned || 1) || (a.completion_rate ?? 101) - (b.completion_rate ?? 101)],
-  ["rate", "Hoàn thành", (a, b) => (b.completion_rate ?? -1) - (a.completion_rate ?? -1)],
-  ["overdue", "Quá hạn", (a, b) => b.overdue - a.overdue],
-  ["assigned", "Số việc", (a, b) => b.assigned - a.assigned],
+const attention = (a, b) => b.overdue / (b.assigned || 1) - a.overdue / (a.assigned || 1) || (a.completion_rate ?? 101) - (b.completion_rate ?? 101);
+const byValue = (pick) => (a, b) => (pick(a) ?? -1) - (pick(b) ?? -1);
+const COLUMNS = [
+  ["name", "Đơn vị", "", (a, b) => collator.compare(a.short_name ?? a.name, b.short_name ?? b.name)],
+  ["assigned", "Công việc", "num", byValue((unit) => unit.assigned)],
+  ["progress", "Tiến độ", "", byValue((unit) => (unit.assigned ? (unit.completed + unit.waiting) / unit.assigned : null))],
+  ["rate", "Hoàn thành", "num", byValue((unit) => unit.completion_rate)],
+  ["waiting", "Chờ duyệt", "num", byValue((unit) => unit.waiting)],
+  ["overdue", "Quá hạn", "num", byValue((unit) => unit.overdue)],
+  ["on_time", "Đúng hạn", "num", byValue((unit) => unit.on_time_rate)],
 ];
 
 const SEGMENTS = [
@@ -22,10 +27,12 @@ const SEGMENTS = [
 ];
 
 export default function TaskStatsUnits({ units, schoolRate, comparison, selectedId, selectedName, onSelect, onClear }) {
-  const [sort, setSort] = useState("attention");
+  const [sort, setSort] = useState({ key: "attention", desc: false });
   const [expanded, setExpanded] = useState(() => new Set());
-  const compare = SORTS.find(([key]) => key === sort)[2];
-  const order = (list) => [...list].sort((a, b) => compare(a, b) || collator.compare(a.short_name ?? a.name, b.short_name ?? b.name));
+  const compare = sort.key === "attention" ? attention : COLUMNS.find(([key]) => key === sort.key)[3];
+  const sign = sort.key !== "attention" && sort.desc ? -1 : 1;
+  const order = (list) => [...list].sort((a, b) => sign * compare(a, b) || collator.compare(a.short_name ?? a.name, b.short_name ?? b.name));
+  const sortBy = (key) => setSort((current) => (current.key === key ? { key, desc: !current.desc } : { key, desc: key !== "name" }));
   const { roots, childrenOf } = useMemo(() => {
     const map = {};
     units.forEach((unit) => unit.parent_id && (map[unit.parent_id] ||= []).push(unit));
@@ -95,7 +102,7 @@ export default function TaskStatsUnits({ units, schoolRate, comparison, selected
       <header className="tsp-head">
         <div>
           <h3>Theo tổ / nhóm</h3>
-          <small>Bấm một dòng để lọc cả trang theo đơn vị · bấm ▸ để xem các nhóm</small>
+          <small>Bấm một dòng để lọc cả trang theo đơn vị · bấm ▸ để xem các nhóm · bấm tiêu đề cột để sắp xếp</small>
         </div>
         <div className="tsu-tools">
           {selectedId && (
@@ -104,11 +111,9 @@ export default function TaskStatsUnits({ units, schoolRate, comparison, selected
               <button type="button" onClick={onClear} aria-label="Bỏ lọc đơn vị"><X size={13} /></button>
             </span>
           )}
-          <div className="tsu-sort" role="group" aria-label="Sắp xếp">
-            {SORTS.map(([key, label]) => (
-              <button key={key} type="button" className={sort === key ? "active" : ""} onClick={() => setSort(key)}>{label}</button>
-            ))}
-          </div>
+          <button type="button" className={`tsu-attention ${sort.key === "attention" ? "active" : ""}`} onClick={() => setSort({ key: "attention", desc: false })} title="Đưa đơn vị nhiều việc quá hạn, tỷ lệ hoàn thành thấp lên đầu">
+            <TriangleAlert size={13} /> Ưu tiên cần chú ý
+          </button>
         </div>
       </header>
       <div className="tsu-legend">
@@ -118,13 +123,15 @@ export default function TaskStatsUnits({ units, schoolRate, comparison, selected
         <table className="tsp-table tsu-table">
           <thead>
             <tr>
-              <th>Đơn vị</th>
-              <th className="num">Công việc</th>
-              <th>Tiến độ</th>
-              <th className="num">Hoàn thành{comparison ? ` · so với ${comparison}` : ""}</th>
-              <th className="num">Chờ duyệt</th>
-              <th className="num">Quá hạn</th>
-              <th className="num">Đúng hạn</th>
+              {COLUMNS.map(([key, label, align]) => (
+                <th key={key} className={`${align} ${sort.key === key ? "sorted" : ""}`} onClick={() => sortBy(key)} aria-sort={sort.key === key ? (sort.desc ? "descending" : "ascending") : "none"}>
+                  <span>
+                    {label}
+                    {key === "rate" && comparison ? ` · so với ${comparison}` : ""}
+                    {sort.key === key && (sort.desc ? <ArrowDown size={12} /> : <ArrowUp size={12} />)}
+                  </span>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
