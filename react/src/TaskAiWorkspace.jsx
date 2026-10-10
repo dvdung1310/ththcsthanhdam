@@ -664,6 +664,17 @@ function DraftAttachments({ payload, sources, canBrowseLibrary, onEdit, onUpload
   const libraryFiles = payload.library_files ?? [];
   const attached = sources.filter((source) => sourceIds.includes(source.id));
 
+  const [placement, setPlacement] = useState("");
+  const openMenu = () => {
+    if (menu) {
+      setMenu(false);
+      return;
+    }
+    const rect = menuRef.current.getBoundingClientRect();
+    setPlacement([rect.left + 340 > window.innerWidth - 12 && "align-right", rect.bottom + 370 > window.innerHeight && rect.top > 370 && "open-up"].filter(Boolean).join(" "));
+    setMenu(true);
+  };
+
   useEffect(() => {
     if (!menu) return undefined;
     const outside = (event) => !menuRef.current?.contains(event.target) && setMenu(false);
@@ -703,11 +714,11 @@ function DraftAttachments({ payload, sources, canBrowseLibrary, onEdit, onUpload
       ))}
       {!attached.length && !libraryFiles.length && <small className="ai-attach-empty">Chưa đính kèm file nào</small>}
       <div className="ai-attach-add" ref={menuRef}>
-        <button type="button" className="ai-attach-btn" disabled={uploading} aria-expanded={menu} onClick={() => setMenu(!menu)}>
+        <button type="button" className="ai-attach-btn" disabled={uploading} aria-expanded={menu} onClick={openMenu}>
           {uploading ? <LoaderCircle size={13} className="spin" /> : <Plus size={13} />} {uploading ? "Đang tải lên..." : "Thêm file"}
         </button>
         {menu && (
-          <div className="ai-attach-menu" role="menu">
+          <div className={`ai-attach-menu ${placement}`} role="menu">
             {sources.length > 0 && (
               <>
                 <p>Tài liệu ban đầu</p>
