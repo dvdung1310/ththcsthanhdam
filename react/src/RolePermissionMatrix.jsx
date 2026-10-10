@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, Lock, ShieldCheck, TriangleAlert, X } from "lucide-react";
+import { useBlocker } from "react-router";
+import { CheckCircle2, Info, Lock, ShieldCheck, TriangleAlert, X } from "lucide-react";
 import { apiJson } from "./api";
+import { useConfirm } from "./ConfirmDialog";
 import "./RolePermissionMatrix.css";
 
 const MODULE_LABELS = {
@@ -9,19 +11,59 @@ const MODULE_LABELS = {
   tasks: "Công việc",
   library: "Kho dữ liệu",
   evaluation: "Đánh giá thi đua",
-  kpi: "KPI",
-  reports: "Báo cáo",
+  kpi: "Thống kê",
   system: "Hệ thống",
+};
+
+const PERMISSION_INFO = {
+  "dashboard.view": { hint: "Mở trang Tổng quan số liệu toàn trường." },
+  "kpi.view": { hint: "Mở trang Thống kê công việc theo tổ và nhân sự." },
+  "personnel.view": { hint: "Xem danh sách nhân sự và cơ cấu tổ, nhóm." },
+  "personnel.manage": { hint: "Thêm, sửa hồ sơ và cho nghỉ việc.", requires: ["personnel.view"] },
+  "units.manage": { hint: "Tạo, sửa tổ/nhóm và đổi người phụ trách.", requires: ["personnel.view"] },
+  "leave.view": { hint: "Xem ngày nghỉ của người khác; ai cũng xem được của mình." },
+  "leave.manage": { hint: "Ghi nhận ngày nghỉ cho người khác, kể cả nghỉ không phép." },
+  "tasks.view": { hint: "Mở danh sách công việc của mình và việc liên quan." },
+  "tasks.assign": { hint: "Tạo, giao, sửa, hủy công việc và duyệt kết quả.", requires: ["tasks.view"] },
+  "tasks.update": { hint: "Cập nhật tiến độ và nộp kết quả việc được giao.", requires: ["tasks.view"] },
+  "library.view": { hint: "Xem thư mục, file được chia sẻ cho mình." },
+  "library.upload": { hint: "Tạo thư mục và tải file ở cấp gốc của kho.", requires: ["library.view"] },
+  "library.manage": { hint: "Toàn quyền với mọi thư mục, file trong kho.", requires: ["library.view"] },
+  "evaluation.view": { hint: "Tự chấm phiếu thi đua hằng tháng của mình." },
+  "evaluation.score": { hint: "Chấm phiếu thi đua cho thành viên trong tổ." },
+  "evaluation.manage": { hint: "Mở kỳ, sửa bộ tiêu chí, duyệt, công bố và xem tổng hợp." },
+  "roles.manage": { hint: "Mở trang này và đổi quyền của các vai trò." },
+  "ai.assistant": { hint: "Dùng khung Trợ lý AI ở góc màn hình." },
+  "ai.tasks": { hint: "Tạo công việc từ tài liệu bằng AI.", requires: ["tasks.assign"] },
 };
 
 const SCOPE_LABELS = { system: "Toàn hệ thống", school: "Toàn trường", self: "Cá nhân" };
 const scopeLabel = (role) =>
   role.scope === "unit" ? (role.unit_type === "nhom" ? "Theo nhóm" : "Theo tổ") : SCOPE_LABELS[role.scope];
 
+const closure = (codes, next) => {
+  const result = new Set(codes);
+  for (let queue = [...codes]; queue.length; ) {
+    for (const code of next(queue.pop())) {
+      if (!result.has(code)) {
+        result.add(code);
+        queue.push(code);
+      }
+    }
+  }
+  return result;
+};
+const requirementsOf = (code) => PERMISSION_INFO[code]?.requires ?? [];
+const dependentsOf = (code) => Object.keys(PERMISSION_INFO).filter((other) => requirementsOf(other).includes(code));
+const quoted = (names) => names.map((name) => `“${name}”`).join(", ");
+
 export default function RolePermissionMatrix() {
+  const confirm = useConfirm();
   const [roles, setRoles] = useState([]);
   const [permissions, setPermissions] = useState([]);
   const [draft, setDraft] = useState({});
+  const [activeRoleId, setActiveRoleId] = useState(null);
+  const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -32,6 +74,7 @@ export default function RolePermissionMatrix() {
       setRoles(payload.roles);
       setPermissions(payload.permissions);
       setDraft(Object.fromEntries(payload.roles.map((role) => [role.id, [...role.permission_ids]])));
+      setActiveRoleId((current) => current ?? payload.roles.find((role) => !role.locked)?.id ?? null);
     } catch (e) {
       setError(e.message);
     }
@@ -47,15 +90,64 @@ export default function RolePermissionMatrix() {
   }, [success]);
 
   const sameSet = (a, b) => a.length === b.length && a.every((id) => b.includes(id));
-  const dirtyRoles = roles.filter((role) => !role.locked && !sameSet(draft[role.id] ?? [], role.permission_ids));
+  const editable = roles.filter((role) => !role.locked);
+  const dirtyRoles = editable.filter((role) => !sameSet(draft[role.id] ?? [], role.permission_ids));
   const modules = [...new Set(permissions.map((permission) => permission.module))];
+  const byCode = Object.fromEntries(permissions.map((permission) => [permission.code, permission]));
+  const activeRole = editable.find((role) => role.id === activeRoleId) ?? editable[0];
 
-  const toggle = (role, permissionId) => {
+  useEffect(() => {
+    if (!dirtyRoles.length) return undefined;
+    const warn = (event) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirtyRoles.length]);
+
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => dirtyRoles.length > 0 && currentLocation.pathname !== nextLocation.pathname);
+  useEffect(() => {
+    if (blocker.state !== "blocked") return;
+    (async () => {
+      const leave = await confirm({
+        tone: "warning",
+        icon: TriangleAlert,
+        title: "Có thay đổi chưa lưu",
+        message: `Quyền của ${dirtyRoles.map((role) => role.name).join(", ")} chưa được lưu. Nếu rời trang, các thay đổi này sẽ mất.`,
+        confirmText: "Rời trang",
+        cancelText: "Ở lại",
+      });
+      if (leave) blocker.proceed();
+      else blocker.reset();
+    })();
+  }, [blocker.state]);
+
+  const toggle = (role, permission) => {
     if (role.locked) return;
-    setDraft((current) => {
-      const ids = current[role.id] ?? [];
-      return { ...current, [role.id]: ids.includes(permissionId) ? ids.filter((id) => id !== permissionId) : [...ids, permissionId] };
-    });
+    const ids = draft[role.id] ?? [];
+    const turningOn = !ids.includes(permission.id);
+    const linked = [...closure([permission.code], turningOn ? requirementsOf : dependentsOf)]
+      .filter((code) => code !== permission.code)
+      .map((code) => byCode[code])
+      .filter((other) => other && ids.includes(other.id) !== turningOn);
+    const changed = new Set([permission.id, ...linked.map((other) => other.id)]);
+    setDraft((current) => ({
+      ...current,
+      [role.id]: turningOn ? [...new Set([...ids, ...changed])] : ids.filter((id) => !changed.has(id)),
+    }));
+    setNotice(
+      linked.length
+        ? turningOn
+          ? `${role.name}: đã bật kèm ${quoted(linked.map((other) => other.name))} vì “${permission.name}” cần quyền này.`
+          : `${role.name}: đã tắt kèm ${quoted(linked.map((other) => other.name))} vì cần “${permission.name}”.`
+        : "",
+    );
+  };
+
+  const reset = () => {
+    setDraft(Object.fromEntries(roles.map((role) => [role.id, [...role.permission_ids]])));
+    setNotice("");
   };
 
   const save = async () => {
@@ -66,6 +158,7 @@ export default function RolePermissionMatrix() {
         await apiJson(`/api/roles/${role.id}/permissions`, { method: "PUT", body: { permission_ids: draft[role.id] } });
       }
       setSuccess(`Đã cập nhật quyền cho ${dirtyRoles.map((role) => role.name).join(", ")}.`);
+      setNotice("");
       await load();
     } catch (e) {
       setError(e.message);
@@ -73,6 +166,12 @@ export default function RolePermissionMatrix() {
       setSaving(false);
     }
   };
+
+  const grouped = modules.map((module) => ({
+    module,
+    label: MODULE_LABELS[module] ?? module,
+    items: permissions.filter((permission) => permission.module === module),
+  }));
 
   return (
     <div className="matrix-page">
@@ -93,23 +192,10 @@ export default function RolePermissionMatrix() {
 
       <section className="matrix-card">
         <div className="matrix-head">
-          <div>
-            <h2>
-              <ShieldCheck size={20} /> Vai trò & quyền
-            </h2>
-            <p>Tick để cấp quyền cho từng vai trò. Thay đổi có hiệu lực ngay ở lần thao tác tiếp theo của người dùng.</p>
-          </div>
-          {dirtyRoles.length > 0 && (
-            <div className="matrix-savebar">
-              <span>Thay đổi chưa lưu: {dirtyRoles.map((role) => role.name).join(", ")}</span>
-              <button className="secondary-btn" disabled={saving} onClick={() => setDraft(Object.fromEntries(roles.map((role) => [role.id, [...role.permission_ids]])))}>
-                Hoàn tác
-              </button>
-              <button className="primary-btn" disabled={saving} onClick={save}>
-                {saving ? "Đang lưu..." : "Lưu thay đổi"}
-              </button>
-            </div>
-          )}
+          <h2>
+            <ShieldCheck size={20} /> Vai trò & quyền
+          </h2>
+          <p>Tick để cấp quyền cho từng vai trò. Thay đổi có hiệu lực ngay ở lần thao tác tiếp theo của người dùng.</p>
         </div>
         {error && (
           <div className="matrix-error">
@@ -122,11 +208,9 @@ export default function RolePermissionMatrix() {
             <thead>
               <tr>
                 <th className="perm-col">Quyền</th>
-                {roles.map((role) => (
+                {editable.map((role) => (
                   <th key={role.id} className={dirtyRoles.includes(role) ? "dirty" : ""}>
-                    <b>
-                      {role.locked && <Lock size={12} />} {role.name}
-                    </b>
+                    <b>{role.name}</b>
                     <small>{scopeLabel(role)}</small>
                     <em>{role.users_count} người</em>
                   </th>
@@ -134,41 +218,97 @@ export default function RolePermissionMatrix() {
               </tr>
             </thead>
             <tbody>
-              {modules.map((module) => (
-                <ModuleRows
-                  key={module}
-                  label={MODULE_LABELS[module] ?? module}
-                  permissions={permissions.filter((permission) => permission.module === module)}
-                  roles={roles}
-                  draft={draft}
-                  onToggle={toggle}
-                />
+              {grouped.map((group) => (
+                <ModuleRows key={group.module} group={group} roles={editable} draft={draft} onToggle={toggle} byCode={byCode} />
               ))}
             </tbody>
           </table>
         </div>
+
+        <div className="role-mobile">
+          <label className="role-picker">
+            <span>Vai trò</span>
+            <select value={activeRole?.id ?? ""} onChange={(e) => setActiveRoleId(Number(e.target.value))}>
+              {editable.map((role) => (
+                <option key={role.id} value={role.id}>
+                  {role.name} · {scopeLabel(role)} · {role.users_count} người{dirtyRoles.includes(role) ? " · chưa lưu" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+          {activeRole &&
+            grouped.map((group) => (
+              <section key={group.module} className="role-group">
+                <h3>{group.label}</h3>
+                {group.items.map((permission) => {
+                  const checked = (draft[activeRole.id] ?? []).includes(permission.id);
+                  const changed = checked !== activeRole.permission_ids.includes(permission.id);
+                  return (
+                    <label key={permission.id} className={`role-switch-row ${changed ? "changed" : ""}`}>
+                      <PermissionText permission={permission} byCode={byCode} />
+                      <input type="checkbox" role="switch" checked={checked} onChange={() => toggle(activeRole, permission)} />
+                    </label>
+                  );
+                })}
+              </section>
+            ))}
+        </div>
+
         <p className="matrix-note">
-          <Lock size={13} /> Quản trị viên luôn có toàn bộ quyền và không thể chỉnh sửa. Quyền gắn nhãn “Chưa áp dụng” đã có trong danh mục nhưng hệ thống chưa kiểm tra.
+          <Lock size={13} /> Quản trị viên luôn có toàn bộ quyền nên không hiện trong bảng.
         </p>
+
+        {(dirtyRoles.length > 0 || notice) && (
+          <div className="matrix-savebar">
+            <div>
+              {dirtyRoles.length > 0 && <b>Chưa lưu: {dirtyRoles.map((role) => role.name).join(", ")}</b>}
+              {notice && (
+                <span>
+                  <Info size={13} /> {notice}
+                </span>
+              )}
+            </div>
+            {dirtyRoles.length > 0 && (
+              <>
+                <button className="secondary-btn" disabled={saving} onClick={reset}>
+                  Hoàn tác
+                </button>
+                <button className="primary-btn" disabled={saving} onClick={save}>
+                  {saving ? "Đang lưu..." : "Lưu thay đổi"}
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </section>
     </div>
   );
 }
 
-function ModuleRows({ label, permissions, roles, draft, onToggle }) {
+function PermissionText({ permission, byCode }) {
+  const info = PERMISSION_INFO[permission.code];
+  const requires = (info?.requires ?? []).map((code) => byCode[code]?.name).filter(Boolean);
+  return (
+    <span className="perm-text" title={permission.code}>
+      <b>{permission.name}</b>
+      {info?.hint && <small>{info.hint}</small>}
+      {requires.length > 0 && <small className="perm-requires">Cần {quoted(requires)}</small>}
+    </span>
+  );
+}
+
+function ModuleRows({ group, roles, draft, onToggle, byCode }) {
   return (
     <>
       <tr className="module-row">
-        <td colSpan={roles.length + 1}>{label}</td>
+        <td colSpan={roles.length + 1}>
+          <span>{group.label}</span>
+        </td>
       </tr>
-      {permissions.map((permission) => (
+      {group.items.map((permission) => (
         <tr key={permission.id}>
           <td className="perm-col">
-            <b>{permission.name}</b>
-            <small>
-              <code>{permission.code}</code>
-              {!permission.enforced && <span className="not-enforced">Chưa áp dụng</span>}
-            </small>
+            <PermissionText permission={permission} byCode={byCode} />
           </td>
           {roles.map((role) => {
             const checked = (draft[role.id] ?? []).includes(permission.id);
@@ -179,8 +319,7 @@ function ModuleRows({ label, permissions, roles, draft, onToggle }) {
                   type="checkbox"
                   aria-label={`${permission.name} — ${role.name}`}
                   checked={checked}
-                  disabled={role.locked}
-                  onChange={() => onToggle(role, permission.id)}
+                  onChange={() => onToggle(role, permission)}
                 />
               </td>
             );
