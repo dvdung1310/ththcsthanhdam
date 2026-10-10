@@ -99,7 +99,7 @@ export default function Dropdown({ value, options, onChange, label, icon: Icon, 
                 role="option"
                 aria-selected={isSelected}
                 aria-disabled={option.disabled || undefined}
-                className={[isSelected && "selected", current === active && "active", option.disabled && "disabled"].filter(Boolean).join(" ")}
+                className={[isSelected && "selected", current === active && "active", option.disabled && "disabled", option.indent && "indent"].filter(Boolean).join(" ")}
                 onMouseEnter={() => setActive(current)}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => choose(option)}
