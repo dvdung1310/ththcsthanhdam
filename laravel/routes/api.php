@@ -39,7 +39,7 @@ Route::middleware('api.token')->group(function(){
  Route::middleware('permission:evaluation.view|evaluation.score|evaluation.manage')->group(function(){
   Route::get('evaluation-periods',[EvaluationController::class,'periods']);Route::get('evaluations',[EvaluationController::class,'index']);Route::get('evaluations/{evaluation}',[EvaluationController::class,'show']);
   Route::put('evaluations/{evaluation}/self',[EvaluationController::class,'saveSelf']);Route::get('evaluations/{evaluation}/duties',[EvaluationController::class,'duties']);Route::post('evaluations/{evaluation}/comments',[EvaluationController::class,'comment']);
-  Route::put('evaluations/{evaluation}/unit',[EvaluationController::class,'saveUnit']);Route::post('evaluations/{evaluation}/return',[EvaluationController::class,'returnToTeacher']);
+  Route::put('evaluations/{evaluation}/unit',[EvaluationController::class,'saveUnit']);Route::put('evaluations/{evaluation}/leader',[EvaluationController::class,'saveLeader']);Route::post('evaluations/{evaluation}/return',[EvaluationController::class,'returnToTeacher']);
   Route::post('evaluations/{evaluation}/evidence',[EvaluationController::class,'uploadEvidence']);Route::get('evaluations/{evaluation}/evidence/{file}',[EvaluationController::class,'downloadEvidence']);Route::delete('evaluations/{evaluation}/evidence/{file}',[EvaluationController::class,'removeEvidence']);
  });
  Route::middleware('permission:evaluation.manage')->group(function(){
