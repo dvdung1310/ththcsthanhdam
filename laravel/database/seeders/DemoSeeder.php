@@ -82,7 +82,7 @@ class DemoSeeder extends Seeder
             }
         });
 
-        $this->call([LibrarySeeder::class, TaskSeeder::class, EvaluationHistorySeeder::class]);
+        $this->call([LibrarySeeder::class, TaskSeeder::class, LeaveSeeder::class, EvaluationHistorySeeder::class]);
     }
 
     private function account(string $name, string $handle, string $phone, bool $active): User
