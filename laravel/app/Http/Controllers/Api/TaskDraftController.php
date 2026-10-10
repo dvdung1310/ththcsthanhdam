@@ -105,7 +105,7 @@ class TaskDraftController extends Controller
         $payload = $this->validatePayload($request);
         $draft = $batch->drafts()->create([
             'position' => (int) $batch->drafts()->max('position') + 1,
-            'payload' => [...$this->blank(), ...$payload],
+            'payload' => [...$this->blank(), 'source_ids' => $batch->sources()->pluck('id')->all(), ...$payload],
         ]);
 
         return response()->json(['message' => 'Đã thêm bản nháp.', 'data' => $this->draft($draft)], 201);
@@ -183,7 +183,7 @@ class TaskDraftController extends Controller
         return [
             'title' => '', 'description' => '', 'employee_ids' => [], 'department_ids' => [], 'reviewer_ids' => [],
             'starts_at' => now()->format('Y-m-d').'T07:30', 'due_at' => null, 'priority' => 'normal', 'category_id' => null,
-            'share_submissions' => true, 'ai_reason' => null, 'source_ids' => [],
+            'share_submissions' => true, 'ai_reason' => null,
         ];
     }
 
@@ -192,9 +192,14 @@ class TaskDraftController extends Controller
         abort_unless($batch && $batch->created_by === $user->id, 404, 'Không tìm thấy bản nháp.');
     }
 
-    private function draft(TaskDraft $draft): array
+    private function draft(TaskDraft $draft, ?array $allSources = null): array
     {
-        return ['id' => $draft->id, 'position' => $draft->position, 'payload' => [...$this->blank(), ...$draft->payload], 'updated_at' => $draft->updated_at?->toIso8601String()];
+        $payload = [...$this->blank(), ...$draft->payload];
+        if (! array_key_exists('source_ids', $draft->payload)) {
+            $payload['source_ids'] = $allSources ?? $draft->batch?->sources()->pluck('id')->all() ?? [];
+        }
+
+        return ['id' => $draft->id, 'position' => $draft->position, 'payload' => $payload, 'updated_at' => $draft->updated_at?->toIso8601String()];
     }
 
     private function serialize(TaskDraftBatch $batch): array
@@ -213,7 +218,7 @@ class TaskDraftController extends Controller
                     'url' => "/api/task-draft-sources/{$source->id}/file",
                 ];
             })->values(),
-            'drafts' => $batch->drafts->map(fn (TaskDraft $draft) => $this->draft($draft))->values(),
+            'drafts' => $batch->drafts->map(fn (TaskDraft $draft) => $this->draft($draft, $batch->sources->pluck('id')->all()))->values(),
             'created_at' => $batch->created_at?->toIso8601String(),
             'updated_at' => $batch->updated_at?->toIso8601String(),
         ];
