@@ -59,7 +59,8 @@ import "./TaskAvatars.css";
 import "./TaskDrawerLayout.css";
 import "./TaskAiWorkspace.css";
 import { apiFetch, apiJson } from "./api";
-import { PageButtons } from "./TablePagination";
+import { PageButtons, PageSize } from "./TablePagination";
+import Dropdown from "./Dropdown";
 import { uploadProblem } from "./uploadLimits";
 import { ColumnPicker, NameStack, useScrollEdges, useTaskColumns } from "./TaskTable";
 import PeoplePicker, { roleChips, useOutsideClose } from "./PeoplePicker";
@@ -782,29 +783,28 @@ export default function TaskManagement({ canAssign, canUpdate, canAi = false, se
               <span className="field-label">
                 Mức ưu tiên <span className="required-mark">*</span>
               </span>
-              <select name="priority" defaultValue={editing.priority}>
-                {Object.entries(labels.priority).map(
-                  ([value, text]) => (
-                    <option value={value} key={value}>
-                      {text}
-                    </option>
-                  ),
-                )}
-              </select>
+              <FormDropdown
+                name="priority"
+                label="Mức ưu tiên"
+                initial={editing.priority}
+                options={Object.entries(labels.priority).map(([value, text]) => ({ value, label: text }))}
+              />
             </label>
             <label className="field">
               <span className="field-label">Loại nhiệm vụ</span>
-              <select name="category_id" defaultValue={editing.category_id || ""}>
-                <option value="">— Không phân loại —</option>
-                {refs.categories.map((type) => (
-                  <option key={type.id} value={type.id}>
-                    {type.name}
-                  </option>
-                ))}
-                {editing.category_id && !refs.categories.some((type) => type.id === Number(editing.category_id)) && (
-                  <option value={editing.category_id}>{editing.category} (ngưng sử dụng)</option>
-                )}
-              </select>
+              <FormDropdown
+                name="category_id"
+                label="Loại nhiệm vụ"
+                initial={editing.category_id || ""}
+                options={[
+                  { value: "", label: "— Không phân loại —" },
+                  { divider: true },
+                  ...refs.categories.map((type) => ({ value: type.id, label: type.name })),
+                  ...(editing.category_id && !refs.categories.some((type) => type.id === Number(editing.category_id))
+                    ? [{ value: editing.category_id, label: `${editing.category} (ngưng sử dụng)` }]
+                    : []),
+                ]}
+              />
             </label>
           </div>
         </section>
@@ -1091,20 +1091,14 @@ export default function TaskManagement({ canAssign, canUpdate, canAi = false, se
             trong {meta.total} kết quả
           </span>
           <div>
-            <label>
-              Số dòng{" "}
-              <select
-                value={perPage}
-                onChange={(e) => {
-                  setPerPage(+e.target.value);
-                  setPage(1);
-                }}
-              >
-                <option>5</option>
-                <option>10</option>
-                <option>20</option>
-              </select>
-            </label>
+            <PageSize
+              value={perPage}
+              sizes={[5, 10, 20]}
+              onChange={(size) => {
+                setPerPage(size);
+                setPage(1);
+              }}
+            />
             <button disabled={page === 1} onClick={() => setPage(page - 1)}>
               <ChevronLeft size={16} />
             </button>
@@ -2190,5 +2184,23 @@ function CommentComposer({ task, saving, onComment, onDraftChange }) {
         <Send size={15} />
       </button>
     </form>
+  );
+}
+
+function FormDropdown({ name, label, initial, options }) {
+  const [value, setValue] = useState(initial);
+  const ref = useRef(null);
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    ref.current?.querySelector(`input[name="${name}"]`)?.dispatchEvent(new Event("input", { bubbles: true }));
+  }, [name, value]);
+  return (
+    <span ref={ref} className="form-dropdown">
+      <Dropdown field name={name} label={label} value={value} onChange={setValue} options={options} />
+    </span>
   );
 }

@@ -10,6 +10,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import "./TaskActionToolbar.css";
+import Dropdown from "./Dropdown";
 
 export const emptyActionFilters = {
   search: "",
@@ -103,19 +104,15 @@ export default function TaskActionFilters({
     }
     onChange(next);
   };
-  const select = (key, title, options) => (
-    <select
-      aria-label={title}
+  const select = (key, title, options, { field = false, label = title } = {}) => (
+    <Dropdown
+      label={label}
+      field={field}
+      className={filters[key] !== "" ? "picked" : ""}
       value={filters[key]}
-      onChange={(e) => change(key, e.target.value)}
-    >
-      <option value="">{title}</option>
-      {options.map(([value, label]) => (
-        <option key={value} value={value}>
-          {label}
-        </option>
-      ))}
-    </select>
+      onChange={(value) => change(key, String(value))}
+      options={[{ value: "", label: title }, { divider: true }, ...options.map(([value, text]) => ({ value: String(value), label: text }))]}
+    />
   );
   const advancedKeys = [
     "created_by",
@@ -194,6 +191,7 @@ export default function TaskActionFilters({
               "created_by",
               "Tất cả người giao",
               (refs.reviewers || []).map((u) => [u.id, u.name]),
+              { field: true, label: "Người giao việc" },
             )}
           </label>
           <label>
@@ -205,6 +203,7 @@ export default function TaskActionFilters({
                 d.id,
                 d.name,
               ]),
+              { field: true, label: "Tổ / nhóm" },
             )}
           </label>
           {dateField("assigned_from", "Ngày giao từ")}
@@ -216,7 +215,7 @@ export default function TaskActionFilters({
             {select("late", "Có / không bị trễ", [
               ["yes", "Có bị trễ"],
               ["no", "Không bị trễ"],
-            ])}
+            ], { field: true, label: "Trễ hạn" })}
           </label>
           <p>Khoảng ngày bao gồm cả ngày đầu và ngày cuối.</p>
         </div>

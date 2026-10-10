@@ -18,4 +18,5 @@
 .teacher-config-form.positions>.primary-btn,.teacher-config-form.positions>.secondary-btn{height:42px;padding:0 17px;white-space:nowrap}
 @media(max-width:760px){.teacher-config-form.positions{grid-template-columns:1fr 1fr}.teacher-config-form.positions>.primary-btn,.teacher-config-form.positions>.secondary-btn{width:100%}}
 @media(max-width:520px){.teacher-config-form.positions{grid-template-columns:1fr}}
-.pagination .page-gap{min-width:16px;text-align:center}@media(max-width:680px){.pagination>div{flex-wrap:wrap;row-gap:8px}.pagination>div>label{flex-basis:100%}}
+.pagination .page-gap{min-width:16px;text-align:center}@media(max-width:680px){.pagination>div{flex-wrap:wrap;row-gap:8px}.pagination>div>label,.pagination>div>.page-size{flex-basis:100%}}
+.pagination .page-size{margin-right:8px;display:inline-flex;align-items:center;gap:6px}.pagination .page-size .dd-trigger{display:inline-flex;min-width:0;height:28px;padding:0 6px 0 9px;gap:4px;border-color:#e3e6ed;border-radius:6px;font-size:12px;font-weight:500}.pagination .page-size .dd-list{min-width:72px}

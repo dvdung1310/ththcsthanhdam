@@ -26,7 +26,7 @@ import PersonnelDrawer, { EMPLOYMENT_LABELS } from "./PersonnelDrawer";
 import OrgStructure from "./OrgStructure";
 import "./PersonnelManagement.css";
 import Avatar from "./Avatar";
-import { PageButtons } from "./TablePagination";
+import { PageButtons, PageSize } from "./TablePagination";
 import Dropdown from "./Dropdown";
 import UnitPicker from "./UnitPicker";
 
@@ -434,20 +434,13 @@ export default function PersonnelManagement({ view = "people" }) {
                 trong {filtered.length} kết quả
               </span>
               <div>
-                <label>
-                  Số dòng{" "}
-                  <select
-                    value={pageSize}
-                    onChange={(e) => {
-                      setPageSize(Number(e.target.value));
-                      setPage(1);
-                    }}
-                  >
-                    <option>10</option>
-                    <option>20</option>
-                    <option>50</option>
-                  </select>
-                </label>
+                <PageSize
+                  value={pageSize}
+                  onChange={(size) => {
+                    setPageSize(size);
+                    setPage(1);
+                  }}
+                />
                 <button disabled={safePage === 1} onClick={() => setPage((p) => p - 1)}>
                   <ChevronLeft size={16} />
                 </button>

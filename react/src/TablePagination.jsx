@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import Dropdown from "./Dropdown";
 
 export function usePagination(items, initialSize = 10) {
   const [page, setPage] = useState(1);
@@ -39,6 +40,15 @@ export function PageButtons({ page, totalPages, onPage }) {
   );
 }
 
+export function PageSize({ value, sizes = [10, 20, 50], onChange }) {
+  return (
+    <span className="page-size">
+      Số dòng
+      <Dropdown label="Số dòng" placement="top" align="right" searchable={false} value={value} onChange={(next) => onChange(Number(next))} options={sizes.map((size) => ({ value: size, label: String(size) }))} />
+    </span>
+  );
+}
+
 export default function TablePagination({ pager, noun, sizes = [10, 20, 50], showRange = true }) {
   const { page, pageSize, totalPages, total, setPage, setPageSize } = pager;
   if (!total) return null;
@@ -50,12 +60,7 @@ export default function TablePagination({ pager, noun, sizes = [10, 20, 50], sho
         </span>
       )}
       <div>
-        <label>
-          Số dòng{" "}
-          <select value={pageSize} onChange={(e) => setPageSize(Number(e.target.value))}>
-            {sizes.map((size) => <option key={size}>{size}</option>)}
-          </select>
-        </label>
+        <PageSize value={pageSize} sizes={sizes} onChange={setPageSize} />
         <button disabled={page === 1} onClick={() => setPage(page - 1)} aria-label="Trang trước"><ChevronLeft size={16} /></button>
         <PageButtons page={page} totalPages={totalPages} onPage={setPage} />
         <button disabled={page === totalPages} onClick={() => setPage(page + 1)} aria-label="Trang sau"><ChevronRight size={16} /></button>
