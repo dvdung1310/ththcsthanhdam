@@ -13,6 +13,7 @@ import {
   LoaderCircle,
   PenLine,
   Plus,
+  Send,
   Sparkles,
   Trash2,
   TriangleAlert,
@@ -383,6 +384,43 @@ function BatchView({ batch, refs, confirm, onChange, onDeleted, onError, onSucce
   const chosen = batch.drafts.filter((draft) => selected.has(draft.id));
   const ready = chosen.filter((draft) => !problemsOf(draft.payload).length);
 
+  const publishDraft = async (draft) => {
+    setState(draft.id, { publishing: true, error: null });
+    const payload = draft.payload;
+    const body = new FormData();
+    body.append("draft_id", draft.id);
+    body.append("title", payload.title.trim());
+    body.append("description", payload.description ?? "");
+    body.append("priority", payload.priority || "normal");
+    body.append("share_submissions", payload.share_submissions === false ? "0" : "1");
+    if (payload.category_id) body.append("category_id", payload.category_id);
+    if (payload.starts_at) body.append("starts_at", payload.starts_at);
+    if (payload.due_at) body.append("due_at", payload.due_at);
+    payload.employee_ids.forEach((id) => body.append("employee_ids[]", id));
+    payload.department_ids.forEach((id) => body.append("department_ids[]", id));
+    payload.reviewer_ids.forEach((id) => body.append("reviewer_ids[]", id));
+    try {
+      const response = await apiFetch("/api/tasks", { method: "POST", headers: { Accept: "application/json" }, body });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(Object.values(result.errors ?? {}).flat()[0] ?? result.message ?? "Không tạo được công việc.");
+      setState(draft.id, { publishing: false });
+      return { id: draft.id, code: result.data.code, title: result.data.title };
+    } catch (e) {
+      setState(draft.id, { publishing: false, error: e.message });
+      return null;
+    }
+  };
+
+  const finishPublishing = (done) => {
+    setPublishing(false);
+    if (!done.length) return;
+    setCreated((current) => [...current, ...done]);
+    const doneIds = new Set(done.map((item) => item.id));
+    onChange((current) => ({ ...current, drafts: current.drafts.filter((draft) => !doneIds.has(draft.id)) }));
+    setSelected((current) => new Set([...current].filter((id) => !doneIds.has(id))));
+    onSuccess(done.length === 1 ? `Đã tạo công việc ${done[0].code}.` : `Đã tạo ${done.length} công việc.`);
+  };
+
   const publish = async () => {
     const blocked = chosen.length - ready.length;
     const ok = await confirm({
@@ -395,37 +433,17 @@ function BatchView({ batch, refs, confirm, onChange, onDeleted, onError, onSucce
     await Promise.all(ready.map((draft) => persist(draft.id)));
     const done = [];
     for (const draft of ready) {
-      setState(draft.id, { publishing: true, error: null });
-      const payload = draft.payload;
-      const body = new FormData();
-      body.append("draft_id", draft.id);
-      body.append("title", payload.title.trim());
-      body.append("description", payload.description ?? "");
-      body.append("priority", payload.priority || "normal");
-      body.append("share_submissions", payload.share_submissions === false ? "0" : "1");
-      if (payload.category_id) body.append("category_id", payload.category_id);
-      if (payload.starts_at) body.append("starts_at", payload.starts_at);
-      if (payload.due_at) body.append("due_at", payload.due_at);
-      payload.employee_ids.forEach((id) => body.append("employee_ids[]", id));
-      payload.department_ids.forEach((id) => body.append("department_ids[]", id));
-      payload.reviewer_ids.forEach((id) => body.append("reviewer_ids[]", id));
-      try {
-        const response = await apiFetch("/api/tasks", { method: "POST", headers: { Accept: "application/json" }, body });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(Object.values(result.errors ?? {}).flat()[0] ?? result.message ?? "Không tạo được công việc.");
-        done.push({ id: draft.id, code: result.data.code, title: result.data.title });
-        setState(draft.id, { publishing: false });
-      } catch (e) {
-        setState(draft.id, { publishing: false, error: e.message });
-      }
+      const item = await publishDraft(draft);
+      if (item) done.push(item);
     }
-    setPublishing(false);
-    if (!done.length) return;
-    setCreated((current) => [...current, ...done]);
-    const doneIds = new Set(done.map((item) => item.id));
-    onChange((current) => ({ ...current, drafts: current.drafts.filter((draft) => !doneIds.has(draft.id)) }));
-    setSelected((current) => new Set([...current].filter((id) => !doneIds.has(id))));
-    onSuccess(`Đã tạo ${done.length} công việc.`);
+    finishPublishing(done);
+  };
+
+  const publishOne = async (draft) => {
+    setPublishing(true);
+    await persist(draft.id);
+    const item = await publishDraft(draft);
+    finishPublishing(item ? [item] : []);
   };
 
   const analysis = batch.analysis ?? {};
@@ -518,6 +536,8 @@ function BatchView({ batch, refs, confirm, onChange, onDeleted, onError, onSucce
             onDuplicate={() => addDraft({ ...draft.payload, title: `${draft.payload.title} (bản sao)` })}
             onRemove={() => removeDraft(draft)}
             onOpenForm={() => onOpenForm(draft)}
+            publishing={publishing}
+            onPublish={() => publishOne(draft)}
           />
         ))}
       </section>
@@ -533,7 +553,7 @@ function BatchView({ batch, refs, confirm, onChange, onDeleted, onError, onSucce
   );
 }
 
-function DraftCard({ index, draft, refs, sources, state, problems, selected, onSelect, onEdit, onDuplicate, onRemove, onOpenForm }) {
+function DraftCard({ index, draft, refs, sources, state, problems, selected, publishing, onSelect, onEdit, onDuplicate, onRemove, onOpenForm, onPublish }) {
   const payload = draft.payload;
   const [showDescription, setShowDescription] = useState(false);
   const editing = useMemo(() => ({ employee_ids: payload.employee_ids, department_ids: payload.department_ids }), [payload.employee_ids, payload.department_ids]);
@@ -615,9 +635,20 @@ function DraftCard({ index, draft, refs, sources, state, problems, selected, onS
         </button>
         {showDescription && <RichTextEditor value={payload.description ?? ""} onChange={(description) => onEdit({ description })} />}
       </div>
-      {(problems.length > 0 || state.error) && (
-        <p className="ai-problem"><TriangleAlert size={13} /> {state.error ?? problems.join(" · ")}</p>
-      )}
+      <footer className="ai-draft-foot">
+        {(problems.length > 0 || state.error) && (
+          <p className="ai-problem"><TriangleAlert size={13} /> {state.error ?? problems.join(" · ")}</p>
+        )}
+        <button
+          type="button"
+          className="primary-btn"
+          disabled={publishing || problems.length > 0}
+          title={problems.length ? problems.join(" · ") : "Tạo công việc này ngay, người thực hiện và người duyệt nhận thông báo"}
+          onClick={onPublish}
+        >
+          {state.publishing ? <><LoaderCircle size={14} className="spin" /> Đang tạo...</> : <><Send size={14} /> Tạo công việc</>}
+        </button>
+      </footer>
     </article>
   );
 }
