@@ -45,9 +45,10 @@ class DemoRoster
         'Tổ Văn phòng' => "Kế toán, thủ quỹ, văn thư, y tế học đường, thư viện, thiết bị.\nPhụ trách tài chính – ngân sách, hồ sơ công văn đi/đến, sức khỏe và bảo hiểm y tế học sinh, thư viện, kiểm kê tài sản – thiết bị.",
     ];
 
-    public const STAFF = [
-        ['Trịnh Thu Trang', 'trang.tt', '0900000001'],
-        ['Lê Thị Kim Oanh', 'oanh.ltk', '0900000002'],
+    // name, handle, phone, unit, subject, homeroom — council secretaries are teachers too
+    public const SECRETARIES = [
+        ['Trịnh Thu Trang', 'trang.tt', '0900000001', 'Nhóm Ngữ văn', 'Ngữ văn', false],
+        ['Lê Thị Kim Oanh', 'oanh.ltk', '0900000002', 'Tổ Khối 4', 'Giáo dục tiểu học', true],
     ];
 
     // name, unit, subject, extra roles [role, unit], employment status, homeroom, flags
@@ -139,7 +140,7 @@ class DemoRoster
             return self::$people;
         }
         $people = [];
-        $used = array_column(self::STAFF, 1);
+        $used = array_column(self::SECRETARIES, 1);
         foreach (self::TEACHERS as $index => [$name, $unit, $subject, $roles, $status, $homeroom, $flags]) {
             $handle = self::handle($name);
             for ($n = 2; in_array($handle, $used, true); $n++) {
@@ -152,6 +153,12 @@ class DemoRoster
                 'phone' => '09'.str_pad((string) ((12345678 + $index * 7919) % 100000000), 8, '0', STR_PAD_LEFT),
             ];
         }
+        foreach (self::SECRETARIES as $index => [$name, $handle, $phone, $unit, $subject, $homeroom]) {
+            $people[$handle] = [
+                'handle' => $handle, 'name' => $name, 'code' => self::secretaryCode($index), 'unit' => $unit, 'tổ' => self::rootOf($unit),
+                'subject' => $subject, 'roles' => [[Role::THU_KY, null]], 'status' => 'working', 'homeroom' => $homeroom, 'flags' => [], 'phone' => $phone,
+            ];
+        }
 
         return self::$people = $people;
     }
@@ -162,7 +169,7 @@ class DemoRoster
             return self::$staff;
         }
         $staff = [];
-        $used = [...array_column(self::STAFF, 1), ...array_keys(self::people())];
+        $used = [...array_column(self::SECRETARIES, 1), ...array_keys(self::people())];
         foreach (self::EMPLOYEES as $index => [$name, $position, $roles, $status, $flags]) {
             $handle = self::handle($name);
             for ($n = 2; in_array($handle, $used, true); $n++) {
@@ -177,6 +184,11 @@ class DemoRoster
         }
 
         return self::$staff = $staff;
+    }
+
+    public static function secretaryCode(int $index): string
+    {
+        return sprintf('NS%03d', count(self::TEACHERS) + count(self::EMPLOYEES) + $index + 1);
     }
 
     public static function boardMembers(): array

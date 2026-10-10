@@ -30,11 +30,6 @@ class DemoSeeder extends Seeder
             $units = $this->seedUnits();
             $roles = Role::pluck('id', 'code');
 
-            foreach (DemoRoster::STAFF as [$name, $handle, $phone]) {
-                $user = $this->account($name, $handle, $phone, true);
-                $this->assignRole($user, $roles[Role::THU_KY], null, $admin);
-            }
-
             $index = 0;
             foreach (DemoRoster::people() as $handle => $person) {
                 $user = $this->account($person['name'], $handle, $person['phone'], ! in_array('locked', $person['flags'], true));
