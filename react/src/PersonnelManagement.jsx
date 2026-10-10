@@ -26,6 +26,7 @@ import PersonnelDrawer, { EMPLOYMENT_LABELS } from "./PersonnelDrawer";
 import OrgStructure from "./OrgStructure";
 import "./PersonnelManagement.css";
 import Avatar from "./Avatar";
+import { PageButtons } from "./TablePagination";
 
 const LEADER_ROLES = ["hieu_truong", "pho_hieu_truong", "ban_giam_hieu", "thu_ky", "to_truong", "to_pho", "nhom_truong"];
 
@@ -456,11 +457,7 @@ export default function PersonnelManagement({ view = "people" }) {
                 <button disabled={safePage === 1} onClick={() => setPage((p) => p - 1)}>
                   <ChevronLeft size={16} />
                 </button>
-                {Array.from({ length: totalPages }, (_, index) => (
-                  <button key={index} className={safePage === index + 1 ? "active" : ""} onClick={() => setPage(index + 1)}>
-                    {index + 1}
-                  </button>
-                ))}
+                <PageButtons page={safePage} totalPages={totalPages} onPage={setPage} />
                 <button disabled={safePage === totalPages} onClick={() => setPage((p) => p + 1)}>
                   <ChevronRight size={16} />
                 </button>

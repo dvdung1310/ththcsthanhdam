@@ -59,6 +59,7 @@ import "./TaskAvatars.css";
 import "./TaskDrawerLayout.css";
 import "./TaskAiWorkspace.css";
 import { apiFetch, apiJson } from "./api";
+import { PageButtons } from "./TablePagination";
 import { uploadProblem } from "./uploadLimits";
 import { ColumnPicker, NameStack, useScrollEdges, useTaskColumns } from "./TaskTable";
 import PeoplePicker, { roleChips, useOutsideClose } from "./PeoplePicker";
@@ -1107,15 +1108,7 @@ export default function TaskManagement({ canAssign, canUpdate, canAi = false, se
             <button disabled={page === 1} onClick={() => setPage(page - 1)}>
               <ChevronLeft size={16} />
             </button>
-            {Array.from({ length: meta.last_page }, (_, i) => (
-              <button
-                className={page === i + 1 ? "active" : ""}
-                key={i}
-                onClick={() => setPage(i + 1)}
-              >
-                {i + 1}
-              </button>
-            ))}
+            <PageButtons page={page} totalPages={meta.last_page} onPage={setPage} />
             <button
               disabled={page === meta.last_page}
               onClick={() => setPage(page + 1)}

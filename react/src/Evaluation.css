@@ -3549,6 +3549,22 @@
   padding: 0;
 }
 
+@media (max-width: 680px) {
+  .ev-summary-foot {
+    padding: 8px 12px;
+    flex-wrap: wrap;
+  }
+
+  .ev-summary-foot-tools {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+  }
+
+  .ev-sheet-title {
+    flex-basis: 100%;
+  }
+}
+
 .ev-summary-grid.dense tbody td {
   height: auto;
   padding-top: 5px;

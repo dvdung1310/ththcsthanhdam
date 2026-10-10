@@ -681,7 +681,7 @@ export default function DataLibrary({ view = "library", folderId = null, selectI
                     />
                   </th>
                   <SortHeader column="name" label="Tên" sort={sort} onSort={(value) => { setSort(value); setPage(1); }} />
-                  <SortHeader column="size" label="Kích thước" sort={sort} onSort={(value) => { setSort(value); setPage(1); }} />
+                  <SortHeader column="size" label="Kích thước" className="dl-size" sort={sort} onSort={(value) => { setSort(value); setPage(1); }} />
                   <th className="dl-col-optional">Chủ sở hữu</th>
                   <SortHeader column="updated" label="Cập nhật" className="dl-col-optional" sort={sort} onSort={(value) => { setSort(value); setPage(1); }} />
                   <th aria-label="Thao tác" />
@@ -724,7 +724,7 @@ export default function DataLibrary({ view = "library", folderId = null, selectI
                         )}
                         {isFolder && !node.abilities.can_upload && <Lock size={12} className="dl-readonly" aria-label="Chỉ xem" />}
                       </td>
-                      <td className="dl-muted">{isFolder ? `${node.children_count ?? 0} mục` : formatBytes(node.size)}</td>
+                      <td className="dl-muted dl-size">{isFolder ? `${node.children_count ?? 0} mục` : formatBytes(node.size)}</td>
                       <td className="dl-col-optional dl-muted">
                         {node.owner ? (
                           <span className="dl-owner" title={node.owner.name}>

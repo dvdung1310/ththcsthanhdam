@@ -407,6 +407,22 @@
   .tso-columns {
     gap: 4px;
   }
+
+  .tso-columns > button {
+    min-width: 0;
+    padding: 6px 2px;
+  }
+
+  .tso-columns > button > b,
+  .tso-column-label b {
+    font-size: 11px;
+  }
+
+  .tso-column-label small {
+    font-size: 10px;
+    text-align: center;
+    white-space: normal;
+  }
 }
 
 .tso-skeleton .tso-cards article,

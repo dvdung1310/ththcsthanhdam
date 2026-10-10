@@ -6,6 +6,7 @@ import './theme.css'
 import App from './App.jsx'
 import { ConfirmProvider } from './ConfirmDialog.jsx'
 import { RouterErrorPage } from './AppError.jsx'
+import PwaUpdater from './PwaUpdater.jsx'
 
 const router = createBrowserRouter([
   {
@@ -22,5 +23,6 @@ const router = createBrowserRouter([
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <RouterProvider router={router} />
+    <PwaUpdater />
   </StrictMode>,
 )

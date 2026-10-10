@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
 import {
   Activity,
@@ -29,6 +29,7 @@ import {
   UserRoundCog,
   Users,
   X,
+  WifiOff,
 } from "lucide-react";
 import "./App.css";
 import "./TeacherManagement.css";
@@ -61,6 +62,8 @@ import "./NotificationTaskStates.css";
 import LeaveTracking from "./LeaveTracking";
 import TaskAiWorkspace from "./TaskAiWorkspace";
 import Avatar from "./Avatar";
+import { releaseDevice, syncPushSubscription } from "./deviceNotifications";
+import NotificationPrompt from "./NotificationPrompt";
 
 const navTree = [
   { key: "dashboard", label: "Tổng quan", icon: LayoutDashboard, path: "/", permission: "dashboard.view" },
@@ -364,6 +367,8 @@ function App() {
   const [query, setQuery] = useState("");
   const [authUser, setAuthUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [authOffline, setAuthOffline] = useState(false);
+  const retryAuth = useRef(null);
   const [selectedTask, setSelectedTask] = useState(null);
   const [pendingTaskCount, setPendingTaskCount] = useState(0);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -384,6 +389,23 @@ function App() {
     const title = pageLabel ? `${pageLabel} · ${APP_NAME}` : APP_NAME;
     document.title = authUser && unreadCount ? `(${unreadCount}) ${title}` : title;
   }, [pageLabel, unreadCount, authUser]);
+
+  useEffect(() => {
+    if (!authUser) return undefined;
+    syncPushSubscription().catch(() => null);
+    const open = (url) => {
+      const target = new URL(url || "/", window.location.origin);
+      if (target.origin === window.location.origin) navigate(`${target.pathname}${target.search}`);
+    };
+    const fromWorker = (event) => event.data?.type === "OPEN_URL" && open(event.data.url);
+    const fromPage = (event) => open(event.detail);
+    navigator.serviceWorker?.addEventListener("message", fromWorker);
+    window.addEventListener("device-notification:open", fromPage);
+    return () => {
+      navigator.serviceWorker?.removeEventListener("message", fromWorker);
+      window.removeEventListener("device-notification:open", fromPage);
+    };
+  }, [authUser?.id]);
 
   useEffect(() => {
     const openFilteredTasks = (event) => {
@@ -430,6 +452,7 @@ function App() {
         setAuthLoading(false);
         return;
       }
+      setAuthLoading(true);
       try {
         const response = await apiFetch("/api/auth/me", {
           headers: { Accept: "application/json" },
@@ -437,17 +460,27 @@ function App() {
         const payload = await response.json();
         if (response.ok) setAuthUser(payload.user);
         else setToken(null);
+        setAuthOffline(false);
+      } catch {
+        setAuthOffline(true);
       } finally {
         setAuthLoading(false);
       }
     };
     verify();
     const expired = () => setAuthUser(null);
+    const online = () => verify();
     window.addEventListener("auth:expired", expired);
-    return () => window.removeEventListener("auth:expired", expired);
+    window.addEventListener("online", online);
+    retryAuth.current = verify;
+    return () => {
+      window.removeEventListener("auth:expired", expired);
+      window.removeEventListener("online", online);
+    };
   }, []);
 
   const logout = async () => {
+    await releaseDevice();
     await apiFetch("/api/auth/logout", {
       method: "POST",
       headers: { Accept: "application/json" },
@@ -461,6 +494,15 @@ function App() {
       <div className="auth-loading">
         <ShieldCheck size={34} />
         <span>Đang xác thực tài khoản...</span>
+      </div>
+    );
+  if (!authUser && authOffline)
+    return (
+      <div className="auth-loading auth-offline">
+        <WifiOff size={34} />
+        <b>Không kết nối được máy chủ</b>
+        <span>Kiểm tra mạng rồi thử lại. Ứng dụng sẽ tự kết nối lại khi có mạng.</span>
+        <button type="button" className="primary-btn" onClick={() => retryAuth.current?.()}>Thử lại</button>
       </div>
     );
   if (!authUser)
@@ -488,6 +530,7 @@ function App() {
 
   return (
     <div className="app-shell">
+      <NotificationPrompt key={authUser.id} />
       {apiLoadingCount > 0 && (
         <div className="global-api-loading" role="status">
           <span />

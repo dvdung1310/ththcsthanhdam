@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Bell, CheckCheck, ClipboardCheck, X } from 'lucide-react'
+import { Bell, BellRing, CheckCheck, ClipboardCheck, Smartphone, X } from 'lucide-react'
 import { apiFetch } from './api'
 import { createRealtimeConnection } from './realtime'
+import { enableNotifications, isIos, isStandalone, notificationsSupported, permission, showDeviceNotification } from './deviceNotifications'
 import './NotificationCenter.css'
 
 function relativeTime(value) {
@@ -21,6 +22,8 @@ export default function NotificationCenter({ user, onOpenTask, onOpenLink, onUnr
   const toastTimer = useRef(null)
   const latestNotificationId = useRef(null)
   const centerRef = useRef(null)
+  const [invite, setInvite] = useState(() => notificationsSupported() && permission() === 'default')
+  const iosHint = isIos() && !isStandalone()
 
   useEffect(() => {
     if (!open) return undefined
@@ -68,6 +71,7 @@ export default function NotificationCenter({ user, onOpenTask, onOpenLink, onUnr
     if (!user?.id) return undefined
     const echo = createRealtimeConnection()
     echo.private(`users.${user.id}`).listen('.task.assigned', (event) => {
+      showDeviceNotification({ title: `Công việc mới: ${event.code}`, body: event.title, url: `/tasks/${event.code}`, tag: `task-${event.id}` })
       setToast(event)
       clearTimeout(toastTimer.current)
       toastTimer.current = setTimeout(() => setToast(null), 6000)
@@ -75,6 +79,7 @@ export default function NotificationCenter({ user, onOpenTask, onOpenLink, onUnr
       window.dispatchEvent(new Event('tasks:changed'))
     })
     echo.private(`users.${user.id}`).listen('.task.workflow', (event) => {
+      showDeviceNotification({ title: `${event.code} · ${event.title}`, body: event.message, url: `/tasks/${event.code}`, tag: `task-${event.id}` })
       setToast(event)
       clearTimeout(toastTimer.current)
       toastTimer.current = setTimeout(() => setToast(null), 6000)
@@ -96,6 +101,12 @@ export default function NotificationCenter({ user, onOpenTask, onOpenLink, onUnr
     setOpen(false)
   }
 
+  const acceptInvite = async () => {
+    await enableNotifications()
+    setInvite(false)
+  }
+  const declineInvite = () => setInvite(false)
+
   const markAllRead = async () => {
     await apiFetch('/api/notifications/read-all', { method: 'POST', headers: { Accept: 'application/json' } }).catch(() => null)
     await loadNotifications()
@@ -107,6 +118,18 @@ export default function NotificationCenter({ user, onOpenTask, onOpenLink, onUnr
     </button>
     {open && <div className="notification-dropdown">
       <header><div><strong>Thông báo</strong><small>{unread} thông báo chưa đọc</small></div>{unread > 0 && <button onClick={markAllRead}><CheckCheck size={15} /> Đọc tất cả</button>}</header>
+      {invite && <div className="notification-invite">
+        <BellRing size={18} />
+        <div>
+          <b>Nhận thông báo trên thiết bị</b>
+          <small>{iosHint ? 'Trên iPhone/iPad: bấm Chia sẻ → “Thêm vào Màn hình chính”, mở ứng dụng từ đó rồi bật thông báo.' : 'Biết ngay khi được giao việc hoặc có kết quả duyệt, kể cả khi không mở trang này.'}</small>
+          <span>
+            {!iosHint && <button type="button" className="primary-btn" onClick={acceptInvite}>Bật thông báo</button>}
+            <button type="button" className="secondary-btn" onClick={declineInvite}>Để sau</button>
+          </span>
+        </div>
+      </div>}
+      {!invite && iosHint && permission() !== 'granted' && <div className="notification-invite subtle"><Smartphone size={16} /><small>Muốn nhận thông báo trên iPhone/iPad? Thêm ứng dụng vào Màn hình chính.</small></div>}
       <div className="notification-list">
         {items.length === 0 ? <div className="notification-empty"><Bell size={30} /><span>Bạn chưa có thông báo nào</span></div> : items.map((item) => <button key={item.id} className={`notification-item ${item.read_at ? '' : 'unread'} ${item.data?.action === 'approved' ? 'notification-approved' : item.data?.action === 'revision_required' ? 'notification-revision' : ''}`} onClick={() => markRead(item)}>
           <span className="notification-icon"><ClipboardCheck size={18} /></span>
