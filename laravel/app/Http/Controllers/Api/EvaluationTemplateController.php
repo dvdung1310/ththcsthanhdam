@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Evaluation;
 use App\Models\EvaluationCriterion;
+use App\Models\EvaluationPeriod;
 use App\Models\EvaluationTemplate;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -17,9 +19,12 @@ class EvaluationTemplateController extends Controller
 
     public function index(): JsonResponse
     {
-        $templates = EvaluationTemplate::with(['criteria', 'periods', ...self::PEOPLE])->orderByDesc('is_active')->orderByDesc('updated_at')->get();
+        $templates = EvaluationTemplate::with(['criteria', ...self::PEOPLE])->orderByDesc('is_active')->orderByDesc('updated_at')->get();
 
-        return response()->json(['data' => $templates->map(fn (EvaluationTemplate $template) => $this->summary($template))->values()]);
+        return response()->json([
+            'data' => $templates->map(fn (EvaluationTemplate $template) => $this->summary($template))->values(),
+            'audiences' => collect(EvaluationTemplate::AUDIENCES)->map(fn ($label, $value) => ['value' => $value, 'label' => $label, 'scorer_label' => EvaluationTemplate::SCORER_LABELS[$value]])->values(),
+        ]);
     }
 
     public function show(EvaluationTemplate $template): JsonResponse
@@ -33,12 +38,14 @@ class EvaluationTemplateController extends Controller
             'name' => ['required', 'string', 'max:255', Rule::unique('evaluation_templates', 'name')],
             'description' => ['nullable', 'string', 'max:2000'],
             'copy_from_id' => ['nullable', 'integer', 'exists:evaluation_templates,id'],
+            'audience' => ['nullable', Rule::in(array_keys(EvaluationTemplate::AUDIENCES))],
         ], ['name.unique' => 'Đã có bộ tiêu chí mang tên này.']);
         $source = isset($data['copy_from_id']) ? EvaluationTemplate::with('criteria')->find($data['copy_from_id']) : null;
+        $data['audience'] = $data['audience'] ?? $source?->audience ?? EvaluationTemplate::TEACHER;
 
         $template = DB::transaction(function () use ($data, $source, $request) {
             $template = EvaluationTemplate::create([
-                'name' => trim($data['name']), 'description' => $data['description'] ?? $source?->description,
+                'name' => trim($data['name']), 'audience' => $data['audience'], 'description' => $data['description'] ?? $source?->description,
                 'is_active' => false, 'grades' => $source?->grades ?? [], 'created_by' => $request->user()->id, 'updated_by' => $request->user()->id,
             ]);
             if ($source) {
@@ -61,7 +68,7 @@ class EvaluationTemplateController extends Controller
     public function update(Request $request, EvaluationTemplate $template): JsonResponse
     {
         $actor = $request->user();
-        $locked = $template->periods()->exists();
+        $locked = $this->used($template);
         $rules = [
             'name' => ['required', 'string', 'max:255', Rule::unique('evaluation_templates', 'name')->ignore($template->id)],
             'description' => ['nullable', 'string', 'max:2000'],
@@ -74,6 +81,7 @@ class EvaluationTemplateController extends Controller
                 'grades.*.homeroom_min' => ['required', 'numeric', 'min:0'],
                 'grades.*.regular_min' => ['required', 'numeric', 'min:0'],
                 'grades.*.clean_required' => ['boolean'],
+                'grades.*.requires_no_zero' => ['boolean'],
                 'grades.*.condition' => ['nullable', 'string', 'max:500'],
                 'sections' => ['present', 'array', 'max:20'],
                 'sections.*.code' => ['required', 'string', 'max:10'],
@@ -87,6 +95,7 @@ class EvaluationTemplateController extends Controller
                 'sections.*.criteria.*.guidance' => ['nullable', 'string', 'max:10000'],
                 'sections.*.criteria.*.max_score' => ['required', 'numeric', 'min:0', 'max:1000'],
                 'sections.*.criteria.*.requires_evidence' => ['boolean'],
+                'sections.*.criteria.*.tracks_leave' => ['boolean'],
             ];
         }
         $data = $request->validate($rules, [
@@ -120,17 +129,17 @@ class EvaluationTemplateController extends Controller
         $problems = $this->problems($template->load('criteria'));
         abort_if($problems, 422, 'Chưa áp dụng được: '.implode(' ', $problems));
         DB::transaction(function () use ($template, $request) {
-            DB::table('evaluation_templates')->where('id', '!=', $template->id)->update(['is_active' => false]);
+            DB::table('evaluation_templates')->where('audience', $template->audience)->where('id', '!=', $template->id)->update(['is_active' => false]);
             DB::table('evaluation_templates')->where('id', $template->id)->update(['is_active' => true, 'activated_by' => $request->user()->id, 'activated_at' => now()]);
         });
 
-        return response()->json(['message' => "Đã áp dụng “{$template->name}” cho các kỳ đánh giá mở từ bây giờ.", 'data' => $this->detail($template->fresh())]);
+        return response()->json(['message' => "Đã áp dụng “{$template->name}” cho phiếu ".($template->audience === EvaluationTemplate::LEADERSHIP ? 'Ban giám hiệu' : mb_strtolower(EvaluationTemplate::AUDIENCES[$template->audience]))." từ các kỳ mở sau.", 'data' => $this->detail($template->fresh())]);
     }
 
     public function destroy(EvaluationTemplate $template): JsonResponse
     {
         abort_if($template->is_active, 422, 'Không thể xóa bộ tiêu chí đang áp dụng.');
-        abort_if($template->periods()->exists(), 422, 'Bộ tiêu chí đã dùng cho kỳ đánh giá nên không xóa được.');
+        abort_if($this->used($template), 422, 'Bộ tiêu chí đã dùng cho kỳ đánh giá nên không xóa được.');
         DB::transaction(function () use ($template) {
             $template->criteria()->whereNotNull('parent_id')->delete();
             $template->criteria()->delete();
@@ -146,7 +155,8 @@ class EvaluationTemplateController extends Controller
             'template_id' => $template->id, 'parent_id' => $parent?->id, 'code' => trim($row['code']), 'title' => trim($row['title']),
             'guidance' => $parent ? (trim((string) ($row['guidance'] ?? '')) ?: null) : null,
             'max_score' => $row['max_score'], 'kind' => $kind, 'homeroom_only' => $homeroomOnly,
-            'requires_evidence' => $parent ? (bool) ($row['requires_evidence'] ?? false) : false, 'position' => $position,
+            'requires_evidence' => $parent ? (bool) ($row['requires_evidence'] ?? false) : false,
+            'tracks_leave' => $parent ? (bool) ($row['tracks_leave'] ?? false) : false, 'position' => $position,
         ]);
     }
 
@@ -174,13 +184,15 @@ class EvaluationTemplateController extends Controller
 
     private function summary(EvaluationTemplate $template): array
     {
-        $template->loadMissing(['criteria', 'periods', ...self::PEOPLE]);
+        $template->loadMissing(['criteria', ...self::PEOPLE]);
         $sections = $template->criteria->whereNull('parent_id');
         $score = $sections->where('kind', EvaluationCriterion::SCORE);
-        $periods = $template->periods->sortBy(fn ($period) => $period->year * 100 + $period->month)->values();
+        $periods = $this->usedPeriods($template);
 
         return [
             'id' => $template->id, 'name' => $template->name, 'description' => $template->description, 'is_active' => $template->is_active,
+            'audience' => $template->audience, 'audience_label' => EvaluationTemplate::AUDIENCES[$template->audience] ?? $template->audience,
+            'scorer_label' => EvaluationTemplate::SCORER_LABELS[$template->audience] ?? 'Tổ chấm',
             'sections_count' => $sections->count(),
             'criteria_count' => $template->criteria->whereNotNull('parent_id')->count(),
             'totals' => [
@@ -198,13 +210,13 @@ class EvaluationTemplateController extends Controller
 
     private function detail(EvaluationTemplate $template): array
     {
-        $template->load(['criteria', 'periods', ...self::PEOPLE]);
+        $template->load(['criteria', ...self::PEOPLE]);
         $criteria = $template->criteria;
         $sections = $criteria->whereNull('parent_id')->sortBy('position')->values();
 
         return [
             ...$this->summary($template),
-            'locked' => $template->periods->isNotEmpty(),
+            'locked' => $this->used($template),
             'grades' => $template->grades ?? [],
             'problems' => $this->problems($template),
             'sections' => $sections->map(fn (EvaluationCriterion $section) => [
@@ -212,10 +224,23 @@ class EvaluationTemplateController extends Controller
                 'kind' => $section->kind, 'homeroom_only' => $section->homeroom_only,
                 'criteria' => $criteria->where('parent_id', $section->id)->sortBy('position')->values()->map(fn (EvaluationCriterion $criterion) => [
                     'id' => $criterion->id, 'code' => $criterion->code, 'title' => $criterion->title, 'guidance' => $criterion->guidance,
-                    'max_score' => (float) $criterion->max_score, 'requires_evidence' => $criterion->requires_evidence,
+                    'max_score' => (float) $criterion->max_score, 'requires_evidence' => $criterion->requires_evidence, 'tracks_leave' => $criterion->tracks_leave,
                 ]),
             ]),
         ];
+    }
+
+    private function usedPeriods(EvaluationTemplate $template)
+    {
+        return EvaluationPeriod::where('template_id', $template->id)
+            ->orWhereIn('id', Evaluation::where('template_id', $template->id)->select('period_id'))
+            ->orderBy('year')->orderBy('month')->get();
+    }
+
+    private function used(EvaluationTemplate $template): bool
+    {
+        return Evaluation::where('template_id', $template->id)->exists()
+            || ($template->audience === EvaluationTemplate::TEACHER && EvaluationPeriod::where('template_id', $template->id)->exists());
     }
 
     private function person(?User $user): ?array

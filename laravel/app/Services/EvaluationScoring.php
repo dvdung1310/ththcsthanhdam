@@ -37,10 +37,20 @@ class EvaluationScoring
         return ['sections' => $bySection, 'base' => round($base, 2), 'bonus' => round($bonus, 2), 'total' => round($base + $bonus, 2)];
     }
 
-    public function grade(array $grades, float $total, bool $isHomeroom, bool $hasViolation): ?array
+    public function hasZero(Evaluation $evaluation, Collection $criteria, string $column): bool
+    {
+        $scores = $evaluation->scores->keyBy('criterion_id');
+        $sections = $criteria->whereNull('parent_id')->where('kind', EvaluationCriterion::SCORE)
+            ->reject(fn ($section) => $section->homeroom_only && ! $evaluation->is_homeroom);
+
+        return $criteria->whereIn('parent_id', $sections->pluck('id'))
+            ->contains(fn ($criterion) => (float) $criterion->max_score > 0 && (float) ($this->value($scores->get($criterion->id), $column) ?? 0) <= 0);
+    }
+
+    public function grade(array $grades, float $total, bool $isHomeroom, bool $hasViolation, bool $hasZero = false): ?array
     {
         foreach ($grades as $grade) {
-            if (($grade['clean_required'] ?? false) && $hasViolation) {
+            if ((($grade['clean_required'] ?? false) && $hasViolation) || (($grade['requires_no_zero'] ?? false) && $hasZero)) {
                 continue;
             }
             $minimum = (float) ($isHomeroom ? $grade['homeroom_min'] : $grade['regular_min']);

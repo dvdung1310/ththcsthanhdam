@@ -25,7 +25,7 @@ class Role extends Model
 
     public const PROFILE_ROLES = [self::GIAO_VIEN, self::NHAN_VIEN];
 
-    public const NOT_EVALUATED = [self::ADMIN, self::HIEU_TRUONG, self::PHO_HIEU_TRUONG, self::BAN_GIAM_HIEU, self::THU_KY];
+    public const NOT_EVALUATED = [self::ADMIN];
 
     public const SCHOOL_LEADERS = [self::HIEU_TRUONG, self::PHO_HIEU_TRUONG, self::BAN_GIAM_HIEU, self::THU_KY];
 

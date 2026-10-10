@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useBlocker, useParams } from "react-router";
 import {
   ArrowLeft,
@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ClipboardCopy,
+  CalendarOff,
   CloudOff,
   LoaderCircle,
   Plus,
@@ -22,13 +23,18 @@ import { apiFetch, apiJson } from "./api";
 import { uploadProblem } from "./uploadLimits";
 import { useConfirm } from "./ConfirmDialog";
 import FilePreview from "./FilePreview";
+import EvaluationScorerPicker from "./EvaluationScorerPicker";
 import { formatBytes } from "./fileUtils";
-import { SCORE_PATTERN, STATUS_TONES, computeTotals, formatDay, formatMoment, formatScore, maxBase, normalizeScore, parseScore, scoreError, suggestGrade } from "./evaluationUtils";
+import { SCORE_PATTERN, STATUS_TONES, computeTotals, formatDay, formatMoment, formatScore, hasZeroCriterion, maxBase, normalizeScore, parseScore, scoreError, suggestGrade } from "./evaluationUtils";
 import "./Evaluation.css";
 import Avatar from "./Avatar";
 
 const TASK_STATUS = { not_started: "Chưa thực hiện", in_progress: "Đang thực hiện", waiting_approval: "Chờ duyệt", completed: "Hoàn thành" };
 const AUTOSAVE_DELAY = 1500;
+const SheetContext = createContext({ scorer: "Tổ chấm", teacherSheet: true, leave: null });
+const SESSION_NAMES = { am: "sáng", pm: "chiều" };
+const shortDay = (value) => value.slice(8, 10) + "/" + value.slice(5, 7);
+const lower = (label) => (label.startsWith("BGH") ? label : label.toLowerCase());
 const CLEAN = { self: false, unit: false, review: false };
 const toInput = (value) => (value === null || value === undefined ? "" : String(value).replace(".", ","));
 
@@ -79,6 +85,8 @@ export default function EvaluationSheet() {
   const [success, setSuccess] = useState("");
   const [preview, setPreview] = useState(null);
   const [returning, setReturning] = useState(false);
+  const [assigning, setAssigning] = useState(false);
+  const [assignSaving, setAssignSaving] = useState(false);
 
   const reset = useCallback((detail) => {
     setData(detail);
@@ -135,7 +143,8 @@ export default function EvaluationSheet() {
 
   const resultColumn = showUnit ? "unit" : "self";
   const resultTotal = totals?.[resultColumn]?.total ?? 0;
-  const suggested = data && !form?.no_grade ? suggestGrade(data.grades, resultTotal, isHomeroom, form?.has_violation) : null;
+  const suggested = data && !form?.no_grade ? suggestGrade(data.grades, resultTotal, isHomeroom, form?.has_violation, hasZeroCriterion(data.sections, rows, resultColumn, isHomeroom)) : null;
+  const sheetContext = useMemo(() => ({ scorer: data?.scorer_label ?? "Tổ chấm", teacherSheet: (data?.audience ?? "teacher") === "teacher", leave: data?.leave ?? null }), [data]);
 
   const touch = (group) => {
     setDirty((current) => ({ ...current, [group]: true }));
@@ -283,6 +292,20 @@ export default function EvaluationSheet() {
     }
   };
 
+  const assignScorers = async (userIds) => {
+    setAssignSaving(true);
+    try {
+      const result = await apiJson(`/api/evaluations/${data.id}/scorers`, { method: "PUT", body: { user_ids: userIds } });
+      setData((current) => ({ ...current, assigned_scorers: result.data.assigned_scorers, default_scorers: result.data.default_scorers, abilities: result.data.abilities }));
+      setSuccess(result.message);
+      setAssigning(false);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setAssignSaving(false);
+    }
+  };
+
   const saveSelf = async (submit = false) => {
     if (guardInvalid("self")) return;
     if (submit) {
@@ -329,7 +352,7 @@ export default function EvaluationSheet() {
         tone: empty.length ? "danger" : undefined,
         title: "Hoàn tất chấm phiếu?",
         message: [
-          empty.length ? `${empty.length} tiêu chí chưa có điểm tổ chấm và sẽ tính là 0.` : null,
+          empty.length ? `${empty.length} tiêu chí chưa có điểm ${lower(sheetContext.scorer)} và sẽ tính là 0.` : null,
           unexplained.length ? `${unexplained.length} tiêu chí bị trừ điểm nhưng chưa ghi lý do.` : null,
         ].filter(Boolean).join(" "),
         confirmText: "Hoàn tất",
@@ -436,6 +459,7 @@ export default function EvaluationSheet() {
   const backTo = abilities.is_own ? "/evaluations" : `/evaluations?tab=board&period=${data.period.id}`;
 
   return (
+    <SheetContext.Provider value={sheetContext}>
     <div className="ev-page ev-sheet-page">
       {success && (
         <div className="success-toast" role="status">
@@ -457,6 +481,7 @@ export default function EvaluationSheet() {
           </span>
           <div className="ev-sheet-meta">
             <h2>Đánh giá thi đua {data.period.label}</h2>
+            {data.audience_label && data.audience !== "teacher" && <span className="ev-chip purple">Phiếu {data.audience === "staff" ? "nhân viên" : data.audience_label}</span>}
             <span className={`ev-chip ${STATUS_TONES[data.status]}`}>{data.status_label}</span>
             {data.period.self_due_on && <small>Hạn tự chấm {formatDay(data.period.self_due_on)}</small>}
           </div>
@@ -473,7 +498,7 @@ export default function EvaluationSheet() {
             <button
               className="primary-btn"
               disabled={saving || !["unit_scored", "published"].includes(data.status)}
-              title={["unit_scored", "published"].includes(data.status) ? undefined : "Tổ cần hoàn tất chấm trước khi duyệt"}
+              title={["unit_scored", "published"].includes(data.status) ? undefined : `Cần hoàn tất ${lower(sheetContext.scorer)} trước khi duyệt`}
               onClick={approve}
             ><CheckCircle2 size={15} /> {data.reviewed_at ? "Duyệt lại" : "Duyệt phiếu"}</button>
           )}
@@ -488,7 +513,7 @@ export default function EvaluationSheet() {
         </div>
       )}
       {abilities.is_own && !data.show_result && data.status !== "draft" && (
-        <div className="ev-notice">Phiếu đã nộp. Điểm tổ chấm và xếp loại sẽ hiển thị khi nhà trường gửi kết quả dự kiến.</div>
+        <div className="ev-notice">Phiếu đã nộp. Điểm {lower(sheetContext.scorer)} và xếp loại sẽ hiển thị khi nhà trường gửi kết quả dự kiến.</div>
       )}
       {abilities.is_own && data.period.status === "disclosed" && (
         <div className="ev-notice warn">Đây là kết quả dự kiến. Nếu chưa đồng ý ở tiêu chí nào, hãy gửi giải trình ở cuối phiếu trước khi nhà trường công bố.</div>
@@ -556,6 +581,7 @@ export default function EvaluationSheet() {
             form={form}
             reviewMode={reviewMode}
             onField={(field, value) => setField(field, value, "review")}
+            onAssign={() => setAssigning(true)}
           />
         </aside>
       </div>
@@ -572,11 +598,25 @@ export default function EvaluationSheet() {
         />
       )}
       {preview && <FilePreview files={preview.files} startIndex={preview.index} onClose={() => setPreview(null)} />}
+      {assigning && (
+        <EvaluationScorerPicker
+          title={`Người chấm cột “${sheetContext.scorer}”`}
+          subject={`Phiếu của ${data.teacher.name} · ${data.period.label}`}
+          candidates={data.scorer_candidates ?? []}
+          selected={(data.assigned_scorers ?? []).map((user) => user.id)}
+          defaultScorers={data.default_scorers}
+          saving={assignSaving}
+          onSave={assignScorers}
+          onClose={() => setAssigning(false)}
+        />
+      )}
     </div>
+    </SheetContext.Provider>
   );
 }
 
 function SectionCard({ section, rows, totals, isHomeroom, canToggleHomeroom, onToggleHomeroom, selfMode, unitMode, reviewMode, showUnit, canAddEvidence, onCell, onUpload, onRemoveEvidence, onOpenEvidence, onCopySelf }) {
+  const { scorer } = useContext(SheetContext);
   const disabled = section.homeroom_only && !isHomeroom;
   const bonus = section.kind === "bonus";
   return (
@@ -596,7 +636,7 @@ function SectionCard({ section, rows, totals, isHomeroom, canToggleHomeroom, onT
           </label>
         )}
         {onCopySelf && !disabled && section.code === "I" && (
-          <button type="button" className="dl-link-btn ev-copy" onClick={onCopySelf} title="Chép điểm tự chấm sang các ô tổ chấm còn trống">
+          <button type="button" className="dl-link-btn ev-copy" onClick={onCopySelf} title={`Chép điểm tự chấm sang các ô ${lower(scorer)} còn trống`}>
             <ClipboardCopy size={13} /> Chép điểm tự chấm
           </button>
         )}
@@ -608,7 +648,7 @@ function SectionCard({ section, rows, totals, isHomeroom, canToggleHomeroom, onT
           <div className="ev-criteria-head">
             <span>Tiêu chí</span>
             <span>Tự chấm</span>
-            {showUnit && <span>Tổ chấm</span>}
+            {showUnit && <span>{scorer}</span>}
           </div>
           {section.criteria.map((criterion) => (
             <CriterionRow
@@ -735,6 +775,7 @@ function NoteField({ label, value, editable, placeholder, onChange, autoFocus })
 }
 
 function CriterionRow({ criterion, row, bonus, selfMode, unitMode, reviewMode, showUnit, canAddEvidence, onCell, onUpload, onRemoveEvidence, onOpenEvidence }) {
+  const { scorer, leave } = useContext(SheetContext);
   const [open, setOpen] = useState(false);
   const fileInput = useRef(null);
   const lines = (criterion.guidance ?? "").split("\n").filter(Boolean);
@@ -745,8 +786,8 @@ function CriterionRow({ criterion, row, bonus, selfMode, unitMode, reviewMode, s
     return value !== null && !Number.isNaN(value) && (bonus ? value > 0 : value < criterion.max_score);
   };
   const columns = [
-    { column: "self", label: "Giáo viên", editable: selfMode, value: row.self_note ?? "", score: row.self_score },
-    ...(showUnit ? [{ column: "unit", label: "Tổ chấm", editable: unitMode, value: row.unit_note ?? "", score: row.unit_score }] : []),
+    { column: "self", label: "Cá nhân", editable: selfMode, value: row.self_note ?? "", score: row.self_score },
+    ...(showUnit ? [{ column: "unit", label: scorer, editable: unitMode, value: row.unit_note ?? "", score: row.unit_score }] : []),
   ];
   const notes = columns
     .map((note) => ({ ...note, opened: !!opened[note.column], visible: !!note.value.trim() || (note.editable && (needsNote(note.score) || opened[note.column])) }))
@@ -766,12 +807,13 @@ function CriterionRow({ criterion, row, bonus, selfMode, unitMode, reviewMode, s
             )}
             {notes.filter((note) => !note.visible).map((note) => (
               <button key={note.column} type="button" className="ev-add-note" onClick={() => setOpened((current) => ({ ...current, [note.column]: true }))}>
-                <Plus size={12} /> {labelled ? `Ghi chú ${note.label.toLowerCase()}` : "Ghi chú"}
+                <Plus size={12} /> {labelled ? `Ghi chú ${lower(note.label)}` : "Ghi chú"}
               </button>
             ))}
           </div>
         )}
         {open && <ul className="ev-guidance">{lines.map((line, index) => <li key={index}>{line}</li>)}</ul>}
+        {criterion.tracks_leave && leave && <LeaveHint leave={leave} max={criterion.max_score} />}
         {criterion.requires_evidence && (
           <div className="ev-evidence">
             {criterion.evidence.map((file, index) => (
@@ -827,9 +869,10 @@ function CriterionRow({ criterion, row, bonus, selfMode, unitMode, reviewMode, s
   );
 }
 
-function Summary({ data, totals, isHomeroom, showUnit, suggested, resultColumn, form, reviewMode, onField }) {
+function Summary({ data, totals, isHomeroom, showUnit, suggested, resultColumn, form, reviewMode, onField, onAssign }) {
+  const { scorer, teacherSheet } = useContext(SheetContext);
   const base = maxBase(data.sections, isHomeroom);
-  const columns = [["self", "Tự chấm"], ...(showUnit ? [["unit", "Tổ chấm"]] : [])];
+  const columns = [["self", "Tự chấm"], ...(showUnit ? [["unit", scorer]] : [])];
   const chosen = data.grades.find((grade) => grade.code === form.grade);
   const gradeLabel = form.no_grade ? "Không xếp loại" : chosen?.name ?? suggested?.name ?? "Chưa đạt khung xếp loại";
   return (
@@ -876,9 +919,9 @@ function Summary({ data, totals, isHomeroom, showUnit, suggested, resultColumn, 
       <div className={`ev-grade ${form.no_grade ? "none" : ""}`}>
         <small>{data.status === "published" ? "Xếp loại" : resultColumn === "self" ? "Xếp loại dự kiến (theo tự chấm)" : "Xếp loại dự kiến"}</small>
         <b>{data.status === "published" && !reviewMode ? data.grade_name ?? (data.no_grade_reason ? "Không xếp loại" : "—") : gradeLabel}</b>
-        <span>Khung {isHomeroom ? "GVCN (100 điểm)" : "không chủ nhiệm (80 điểm)"}</span>
+        <span>{teacherSheet ? `Khung ${isHomeroom ? "GVCN" : "không chủ nhiệm"} (${base} điểm)` : `Khung ${base} điểm cơ bản`}</span>
         {data.no_grade_reason && !reviewMode && <em>{data.no_grade_reason}</em>}
-        {data.has_violation && !reviewMode && <em>Có vi phạm QCCM/đạo đức nhà giáo</em>}
+        {data.has_violation && !reviewMode && <em>{teacherSheet ? "Có vi phạm QCCM/đạo đức nhà giáo" : "Có vi phạm đã được cấp có thẩm quyền kết luận"}</em>}
       </div>
 
       {reviewMode && (
@@ -886,7 +929,7 @@ function Summary({ data, totals, isHomeroom, showUnit, suggested, resultColumn, 
           <h4>Duyệt kết quả</h4>
           <label className="ev-check">
             <input type="checkbox" checked={form.has_violation} onChange={(e) => onField("has_violation", e.target.checked)} />
-            Có vi phạm QCCM / đạo đức nhà giáo
+            {teacherSheet ? "Có vi phạm QCCM / đạo đức nhà giáo" : "Có vi phạm đã được cấp có thẩm quyền kết luận"}
           </label>
           <label className="ev-check">
             <input type="checkbox" checked={form.no_grade} onChange={(e) => onField("no_grade", e.target.checked)} />
@@ -906,8 +949,26 @@ function Summary({ data, totals, isHomeroom, showUnit, suggested, resultColumn, 
       )}
 
       <dl className="ev-trail">
+        {!data.abilities.is_own && (
+          <>
+            <dt>Người chấm</dt>
+            <dd className="ev-assign-line">
+              {data.assigned_scorers?.length ? (
+                <>
+                  <span>{data.assigned_scorers.map((user) => user.name).join(", ")}</span>
+                  <span className="ev-chip purple">Chỉ định riêng</span>
+                </>
+              ) : (
+                <span>{data.default_scorers?.length ? data.default_scorers.join(", ") : "Chưa có"} <small className="ev-muted">(mặc định)</small></span>
+              )}
+              {data.abilities.can_assign_scorers && (
+                <button type="button" className="ev-assign-btn" onClick={onAssign}>Đổi</button>
+              )}
+            </dd>
+          </>
+        )}
         {data.submitted_at && <><dt>Nộp phiếu</dt><dd>{formatMoment(data.submitted_at)}</dd></>}
-        {data.unit_scored_by && <><dt>Tổ chấm</dt><dd>{data.unit_scored_by} · {formatMoment(data.unit_scored_at)}</dd></>}
+        {data.unit_scored_by && <><dt>{scorer}</dt><dd>{data.unit_scored_by} · {formatMoment(data.unit_scored_at)}</dd></>}
         {data.reviewed_by && <><dt>Duyệt</dt><dd>{data.reviewed_by} · {formatMoment(data.reviewed_at)}</dd></>}
       </dl>
     </div>
@@ -948,7 +1009,7 @@ function Comments({ data, onChanged, onError }) {
       </ul>
       {data.abilities.can_comment && (
         <form onSubmit={send}>
-          <textarea rows={2} value={text} onChange={(e) => setText(e.target.value)} placeholder={data.abilities.is_own ? "Gửi giải trình hoặc trao đổi với người chấm..." : "Trao đổi với giáo viên..."} />
+          <textarea rows={2} value={text} onChange={(e) => setText(e.target.value)} placeholder={data.abilities.is_own ? "Gửi giải trình hoặc trao đổi với người chấm..." : `Trao đổi với ${data.teacher.name}...`} />
           <button className="primary-btn" disabled={sending || !text.trim()}>{sending ? "Đang gửi..." : "Gửi"}</button>
         </form>
       )}
@@ -961,17 +1022,51 @@ function ReturnDialog({ onClose, onSubmit }) {
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <form className="ev-dialog" onSubmit={(e) => { e.preventDefault(); if (message.trim()) onSubmit(message.trim()); }}>
-        <h3>Trả phiếu về cho giáo viên</h3>
+        <h3>Trả phiếu về cho người tự đánh giá</h3>
         <label>
           Lý do / nội dung cần bổ sung
           <textarea rows={4} autoFocus value={message} onChange={(e) => setMessage(e.target.value)} placeholder="VD: Bổ sung minh chứng cho điểm cộng mục VI.2" />
         </label>
-        <p className="ev-dialog-note">Phiếu quay về trạng thái “Chưa nộp” để giáo viên sửa và nộp lại. Giáo viên nhận được thông báo kèm lý do.</p>
+        <p className="ev-dialog-note">Phiếu quay về trạng thái “Chưa nộp” để người được đánh giá sửa và nộp lại, kèm thông báo lý do.</p>
         <footer>
           <button type="button" className="secondary-btn" onClick={onClose}>Hủy</button>
           <button className="primary-btn" disabled={!message.trim()}>Trả phiếu</button>
         </footer>
       </form>
+    </div>
+  );
+}
+
+function LeaveHint({ leave, max }) {
+  const total = Math.min(leave.suggested_deduction, max);
+  const empty = !leave.records.length;
+  return (
+    <div className={`ev-leave-hint ${empty ? "empty" : ""}`}>
+      <b><CalendarOff size={13} /> Theo dõi nghỉ tháng này</b>
+      {empty ? (
+        <small>Chưa có ngày nghỉ nào được ghi nhận.</small>
+      ) : (
+        <>
+          <ul>
+            {leave.records.map((record) => (
+              <li key={record.id}>
+                <span className={`ev-leave-type ${record.type}`}>{record.type_label}{record.regime_kind ? ` · ${record.regime_kind}` : ""}</span>
+                {record.starts_on === record.ends_on ? `${record.start_session === record.end_session ? `${SESSION_NAMES[record.start_session]} ` : ""}${shortDay(record.starts_on)}` : `${SESSION_NAMES[record.start_session]} ${shortDay(record.starts_on)} → ${SESSION_NAMES[record.end_session]} ${shortDay(record.ends_on)}`}
+                <em>{record.sessions} buổi</em>
+              </li>
+            ))}
+          </ul>
+          <p>
+            {leave.details.length ? (
+              <>Gợi ý trừ <b>{formatScore(total)}đ</b>: {leave.details.map((d) => d.label).join(" + ")}{leave.suggested_deduction > max ? ` (tối đa ${formatScore(max)}đ)` : ""}.</>
+            ) : (
+              <>Nghỉ chế độ không trừ điểm.</>
+            )}
+          </p>
+        </>
+      )}
+      {leave.year.warnings.map((warning) => <p key={warning} className="warn"><TriangleAlert size={12} /> {warning}</p>)}
+      <small>Năm học {leave.year.label}: đã nghỉ {formatScore(leave.year.days)} ngày ({leave.year.sessions} buổi, không tính nghỉ chế độ). Chỉ là gợi ý, điểm vẫn do người chấm quyết định.</small>
     </div>
   );
 }
@@ -983,6 +1078,7 @@ function noteHeader(section) {
 }
 
 function PrintSheet({ data, rows, form, totals, suggested, showUnit }) {
+  const { scorer, teacherSheet } = useContext(SheetContext);
   const isHomeroom = form.is_homeroom;
   const sections = data.sections.filter((section) => !section.homeroom_only || isHomeroom);
   const value = (criterionId, column) => {
@@ -1024,7 +1120,7 @@ function PrintSheet({ data, rows, form, totals, suggested, showUnit }) {
               <th>Tiêu chuẩn đánh giá</th>
               <th>Nội dung và cách tính điểm</th>
               <th>Cá nhân tự chấm</th>
-              <th>Tổ chấm</th>
+              <th>{scorer}</th>
               <th>{noteHeader(section)}</th>
             </tr>
           </thead>
@@ -1053,12 +1149,12 @@ function PrintSheet({ data, rows, form, totals, suggested, showUnit }) {
       ))}
       <p>
         Tổng điểm tháng: cá nhân tự chấm <b>{formatScore(totals.self.total)}</b>
-        {showUnit && <> — tổ chấm <b>{formatScore(totals.unit?.total)}</b></>}
+        {showUnit && <> — {lower(scorer)} <b>{formatScore(totals.unit?.total)}</b></>}
       </p>
       <p>Xếp loại thi đua: <b>{grade ?? "……………"}</b></p>
       <div className="ev-print-signs">
         <div><b>HIỆU TRƯỞNG/CHỦ TỊCH HỘI ĐỒNG</b><small>(Ký, ghi rõ họ tên)</small></div>
-        <div><b>TM. TỔ CHUYÊN MÔN</b><b>TỔ TRƯỞNG</b></div>
+        {teacherSheet && <div><b>TM. TỔ CHUYÊN MÔN</b><b>TỔ TRƯỞNG</b></div>}
         <div><b>CÁ NHÂN TỰ ĐÁNH GIÁ</b><span>{data.teacher.name}</span></div>
       </div>
     </div>

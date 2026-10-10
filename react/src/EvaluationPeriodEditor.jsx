@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
-import { ArrowLeft, Building2, ChevronRight, ListChecks, Lock, Search, TriangleAlert, UserX, Users } from "lucide-react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
+import { ArrowLeft, Building2, Check, ChevronRight, ListChecks, Lock, Search, ShieldCheck, TriangleAlert, UserX, Users } from "lucide-react";
 import { apiJson } from "./api";
 import { useConfirm } from "./ConfirmDialog";
 import { STATUS_TONES } from "./evaluationUtils";
 import "./Evaluation.css";
 import Avatar from "./Avatar";
+import EvaluationScorerPicker from "./EvaluationScorerPicker";
 
 const pad = (n) => String(n).padStart(2, "0");
+const AUDIENCE_SHORT = { teacher: "GV", staff: "NV", leadership: "BGH" };
 
 function nextOpenMonth(periods) {
   const now = new Date();
@@ -30,10 +32,15 @@ export default function EvaluationPeriodEditor() {
   const { periodId } = useParams();
   const editing = Boolean(periodId);
   const navigate = useNavigate();
+  const [query] = useSearchParams();
   const confirm = useConfirm();
   const [roster, setRoster] = useState(null);
   const [form, setForm] = useState(null);
   const [selected, setSelected] = useState(new Set());
+  const [scorers, setScorers] = useState(new Set());
+  const [audience, setAudience] = useState("");
+  const [sheetScorers, setSheetScorers] = useState({});
+  const [assigning, setAssigning] = useState(null);
   const [scope, setScope] = useState("all");
   const [search, setSearch] = useState("");
   const [show, setShow] = useState("all");
@@ -47,11 +54,15 @@ export default function EvaluationPeriodEditor() {
         const result = await apiJson(`/api/evaluation-periods/roster${editing ? `?period_id=${periodId}` : ""}`);
         setRoster(result);
         setSelected(new Set(result.data.filter((row) => (editing ? row.evaluation : row.eligible)).map((row) => row.teacher_id)));
+        setScorers(new Set(editing ? result.scorer_ids : result.scorer_candidates.filter((candidate) => candidate.suggested).map((candidate) => candidate.id)));
+        setSheetScorers(Object.fromEntries(result.data.filter((row) => row.evaluation?.scorer_ids?.length).map((row) => [row.teacher_id, row.evaluation.scorer_ids])));
         if (editing) {
           setForm({ self_due_on: result.period.self_due_on ?? "", unit_due_on: result.period.unit_due_on ?? "" });
         } else {
           const periods = (await apiJson("/api/evaluation-periods")).data;
-          const next = nextOpenMonth(periods);
+          const wanted = Number(query.get("year")) && Number(query.get("month")) ? new Date(Number(query.get("year")), Number(query.get("month")) - 1, 1) : null;
+          const taken = wanted && periods.some((p) => p.year === wanted.getFullYear() && p.month === wanted.getMonth() + 1);
+          const next = wanted && !taken ? wanted : nextOpenMonth(periods);
           const prefix = `${next.getFullYear()}-${pad(next.getMonth() + 1)}`;
           setForm({ year: next.getFullYear(), month: next.getMonth() + 1, self_due_on: `${prefix}-25`, unit_due_on: `${prefix}-28` });
         }
@@ -98,8 +109,18 @@ export default function EvaluationPeriodEditor() {
   const scopeRows = scope === "excluded" ? excluded : scopeNode ? scopeNode.all : members;
   const scopeLabel = scope === "excluded" ? "Không thuộc diện đánh giá" : scopeNode?.name ?? "Toàn trường";
   const keyword = search.trim().toLowerCase();
+  const audiencesPresent = ["teacher", "staff", "leadership"].filter((value) => members.some((row) => row.audience === value));
+  const needsBoard = rows.some((row) => selected.has(row.teacher_id) && row.audience !== "teacher");
+  const toggleScorer = (id) =>
+    setScorers((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   const visible = scopeRows.filter(
     (row) =>
+      (!audience || row.audience === audience) &&
       (!keyword || `${row.name} ${row.code ?? ""}`.toLowerCase().includes(keyword)) &&
       (show === "all" || (show === "selected") === selected.has(row.teacher_id)),
   );
@@ -131,7 +152,11 @@ export default function EvaluationPeriodEditor() {
 
   const submit = async () => {
     if (!selected.size) {
-      setError("Chọn ít nhất một giáo viên.");
+      setError("Chọn ít nhất một nhân sự.");
+      return;
+    }
+    if (needsBoard && !scorers.size) {
+      setError("Kỳ có phiếu Nhân viên hoặc Ban giám hiệu: chọn ít nhất một người chấm cột “BGH đánh giá”.");
       return;
     }
     const losing = removed.filter((row) => row.evaluation.has_data);
@@ -139,7 +164,7 @@ export default function EvaluationPeriodEditor() {
       const ok = await confirm({
         tone: "danger",
         title: `Gỡ ${removed.length} phiếu khỏi kỳ?`,
-        message: `Phiếu của ${losing.map((row) => row.name).join(", ")} đã có dữ liệu tự chấm và sẽ bị xóa vĩnh viễn. Giáo viên sẽ nhận thông báo không thuộc diện đánh giá kỳ này.`,
+        message: `Phiếu của ${losing.map((row) => row.name).join(", ")} đã có dữ liệu tự chấm và sẽ bị xóa vĩnh viễn. Người bị gỡ sẽ nhận thông báo không thuộc diện đánh giá kỳ này.`,
         confirmText: "Gỡ phiếu",
       });
       if (!ok) return;
@@ -147,7 +172,15 @@ export default function EvaluationPeriodEditor() {
     setSaving(true);
     setError("");
     try {
-      const body = { self_due_on: form.self_due_on || null, unit_due_on: form.unit_due_on || null, teacher_ids: [...selected] };
+      const body = {
+        self_due_on: form.self_due_on || null,
+        unit_due_on: form.unit_due_on || null,
+        teacher_ids: [...selected],
+        scorer_ids: [...scorers],
+        sheet_scorers: rows
+          .filter((row) => selected.has(row.teacher_id) && (sheetScorers[row.teacher_id]?.length || row.evaluation?.scorer_ids?.length))
+          .map((row) => ({ teacher_id: row.teacher_id, user_ids: sheetScorers[row.teacher_id] ?? [] })),
+      };
       const result = editing
         ? await apiJson(`/api/evaluation-periods/${periodId}`, { method: "PUT", body })
         : await apiJson("/api/evaluation-periods", { method: "POST", body: { ...body, year: Number(form.year), month: Number(form.month) } });
@@ -171,6 +204,11 @@ export default function EvaluationPeriodEditor() {
   }
 
   const head = groupState(visible);
+  const candidateById = Object.fromEntries((roster.assignable_scorers ?? []).map((candidate) => [candidate.id, candidate]));
+  const defaultFor = (row) =>
+    row.audience === "teacher"
+      ? ["Tổ trưởng, tổ phó, nhóm trưởng của đơn vị"]
+      : roster.scorer_candidates.filter((candidate) => scorers.has(candidate.id) && candidate.employee_id !== row.teacher_id).map((candidate) => candidate.name);
 
   return (
     <div className="ev-page ev-period-page">
@@ -179,7 +217,7 @@ export default function EvaluationPeriodEditor() {
         <div><h2>{title}</h2></div>
         <div className="ev-tpl-actions">
           <span className="ev-dialog-count">
-            Đã chọn <b>{selected.size}</b> giáo viên{editing && changes ? ` · ${changes} phiếu` : ""}
+            Đã chọn <b>{selected.size}</b> người{editing && changes ? ` · ${changes} phiếu` : ""}
           </span>
           <button className="secondary-btn" onClick={() => navigate(backTo)} disabled={saving}>Hủy</button>
           <button className="primary-btn" onClick={submit} disabled={saving || locked || !selected.size}>
@@ -217,17 +255,50 @@ export default function EvaluationPeriodEditor() {
           <input type="date" value={form.self_due_on} disabled={locked} onChange={(e) => setForm({ ...form, self_due_on: e.target.value })} />
         </label>
         <label>
-          Hạn tổ chấm
+          Hạn chấm phiếu
           <input type="date" value={form.unit_due_on} disabled={locked} onChange={(e) => setForm({ ...form, unit_due_on: e.target.value })} />
         </label>
         <div className="ev-period-template">
           <ListChecks size={16} />
           <span>
-            {editing ? "Bộ tiêu chí của kỳ" : "Bộ tiêu chí áp dụng"}
-            {roster.template ? <Link to={`/evaluations/templates/${roster.template.id}`}>{roster.template.name}</Link> : <b>Chưa có</b>}
+            {editing ? "Bộ tiêu chí cho phiếu mới" : "Bộ tiêu chí áp dụng"}
+            {roster.templates
+              .filter((item) => audiencesPresent.includes(item.audience))
+              .map((item) => (
+                <em key={item.audience}>
+                  {AUDIENCE_SHORT[item.audience]}: {item.active ? <Link to={`/evaluations/templates/${item.active.id}`}>{item.active.name}</Link> : <b className="ev-text-red">Chưa có</b>}
+                </em>
+              ))}
           </span>
         </div>
       </section>
+
+      {(needsBoard || scorers.size > 0) && (
+        <section className={`ev-card ev-period-scorers ${needsBoard && !scorers.size ? "missing" : ""}`}>
+          <header>
+            <ShieldCheck size={16} />
+            <span>
+              <b>Người chấm cột “BGH đánh giá”</b>
+              <small>Áp dụng cho phiếu Nhân viên và Ban giám hiệu. Không ai chấm phiếu của chính mình — người khác trong danh sách sẽ chấm.</small>
+            </span>
+          </header>
+          <div className="ev-scorer-list">
+            {roster.scorer_candidates.map((candidate) => {
+              const active = scorers.has(candidate.id);
+              return (
+                <button key={candidate.id} type="button" disabled={locked} className={`ev-scorer ${active ? "active" : ""}`} onClick={() => toggleScorer(candidate.id)} aria-pressed={active}>
+                  <Avatar src={candidate.avatar_url} name={candidate.name} size={28} />
+                  <span>
+                    <b>{candidate.name}</b>
+                    <small>{candidate.roles.slice(0, 2).join(" · ")}</small>
+                  </span>
+                  {active && <Check size={15} />}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       <div className="ev-period-panes">
         <aside className="ev-card ev-unit-pane">
@@ -258,6 +329,13 @@ export default function EvaluationPeriodEditor() {
               <Search size={15} />
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Tìm theo tên hoặc mã nhân sự..." />
             </label>
+            {audiencesPresent.length > 1 && (
+              <div className="ev-segment" role="group" aria-label="Đối tượng">
+                {[["", "Tất cả"], ...audiencesPresent.map((value) => [value, AUDIENCE_SHORT[value]])].map(([value, label]) => (
+                  <button key={value} type="button" className={audience === value ? "active" : ""} onClick={() => setAudience(value)}>{label}</button>
+                ))}
+              </div>
+            )}
             {scope !== "excluded" && (
               <div className="ev-segment" role="group" aria-label="Lọc">
                 {[["all", "Tất cả"], ["selected", "Đã chọn"], ["unselected", "Chưa chọn"]].map(([value, label]) => (
@@ -277,10 +355,11 @@ export default function EvaluationPeriodEditor() {
                   <th className="check">
                     <TriCheckbox checked={head.all} indeterminate={head.some} disabled={!head.pickable.length} onChange={() => setMany(visible, !head.all)} label="Chọn tất cả đang hiển thị" />
                   </th>
-                  <th>Giáo viên</th>
+                  <th>Nhân sự</th>
                   <th>Mã</th>
                   <th>Đơn vị</th>
                   <th>Vai trò</th>
+                  <th>Người chấm</th>
                   <th>{editing ? "Phiếu" : "Ghi chú"}</th>
                 </tr>
               </thead>
@@ -296,7 +375,7 @@ export default function EvaluationPeriodEditor() {
                         <span className="ev-person">
                           {row.avatar_url ? <img src={row.avatar_url} alt="" /> : <Avatar name={row.name} />}
                           <span>
-                            <b>{row.name}</b>
+                            <b>{row.name}{row.audience !== "teacher" && <em className="ev-tag audience">{AUDIENCE_SHORT[row.audience]}</em>}</b>
                             {row.other_units?.length > 0 && <small>Cũng thuộc: {row.other_units.join(", ")}</small>}
                           </span>
                         </span>
@@ -313,9 +392,23 @@ export default function EvaluationPeriodEditor() {
                               </span>
                             ))
                           ) : (
-                            <span className="ev-muted">Giáo viên</span>
+                            <span className="ev-muted">{row.audience === "staff" ? "Nhân viên" : "Giáo viên"}</span>
                           )}
                         </span>
+                      </td>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        {selected.has(row.teacher_id) ? (
+                          <span className="ev-assign-line">
+                            {sheetScorers[row.teacher_id]?.length ? (
+                              <span className="ev-chip purple" title="Chỉ định riêng">{sheetScorers[row.teacher_id].map((id) => candidateById[id]?.name ?? "?").join(", ")}</span>
+                            ) : (
+                              <span className="ev-muted">Mặc định</span>
+                            )}
+                            <button type="button" className="ev-assign-btn" disabled={locked} onClick={() => setAssigning(row)}>Đổi</button>
+                          </span>
+                        ) : (
+                          <span className="ev-muted">—</span>
+                        )}
                       </td>
                       <td>
                         {row.evaluation ? (
@@ -331,10 +424,24 @@ export default function EvaluationPeriodEditor() {
                 })}
               </tbody>
             </table>
-            {!visible.length && <div className="empty-state"><Search size={26} /><b>Không có giáo viên phù hợp</b></div>}
+            {!visible.length && <div className="empty-state"><Search size={26} /><b>Không có nhân sự phù hợp</b></div>}
           </div>
         </section>
       </div>
+      {assigning && (
+        <EvaluationScorerPicker
+          title="Người chấm riêng cho phiếu"
+          subject={`${assigning.name}${editing ? "" : " · áp dụng khi mở kỳ"}`}
+          candidates={(roster.assignable_scorers ?? []).filter((candidate) => candidate.employee_id !== assigning.teacher_id)}
+          selected={sheetScorers[assigning.teacher_id] ?? []}
+          defaultScorers={defaultFor(assigning)}
+          onSave={(ids) => {
+            setSheetScorers((current) => ({ ...current, [assigning.teacher_id]: ids }));
+            setAssigning(null);
+          }}
+          onClose={() => setAssigning(null)}
+        />
+      )}
     </div>
   );
 }

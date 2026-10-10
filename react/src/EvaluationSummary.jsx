@@ -19,6 +19,7 @@ const byName = (a, b) => collator.compare(givenName(a.name), givenName(b.name)) 
 
 const SERVER_FILTERS = ["homeroom", "grades", "gscope", "violation", "min", "max", "status", "top"];
 const HOMEROOM = [["", "Tất cả"], ["yes", "Chủ nhiệm"], ["no", "Không CN"]];
+const AUDIENCE_NOUNS = { teacher: "giáo viên", staff: "nhân viên", leadership: "thành viên BGH" };
 const VIOLATION = [["", "Tất cả"], ["yes", "Có vi phạm"], ["no", "Không vi phạm"]];
 const STATUS = [["", "Tất cả"], ["working", "Đang làm việc"], ["on_leave", "Nghỉ phép"], ["suspended", "Tạm nghỉ"]];
 const TOPS = [["", "Tất cả"], ["3", "Top 3"], ["10", "Top 10"], ["20", "Top 20"]];
@@ -64,7 +65,9 @@ export default function EvaluationSummary() {
   const team = Number(params.get("team")) || null;
   const group = Number(params.get("group")) || null;
   const search = params.get("q") ?? "";
-  const homeroom = params.get("homeroom") ?? "";
+  const audience = params.get("audience") ?? "teacher";
+  const teacherView = audience === "teacher";
+  const homeroom = teacherView ? params.get("homeroom") ?? "" : "";
   const gradeFilter = (params.get("grades") ?? "").split(",").filter(Boolean);
   const gradeScope = params.get("gscope") ?? "any";
   const violation = params.get("violation") ?? "";
@@ -87,11 +90,11 @@ export default function EvaluationSummary() {
 
   const query = useMemo(() => {
     const result = new URLSearchParams();
-    [["school_year", year], ["from", from], ["to", to], ["team", team], ["group", group], ["q", search.trim()], ["homeroom", homeroom],
+    [["school_year", year], ["from", from], ["to", to], ["audience", audience === "teacher" ? "" : audience], ["team", team], ["group", group], ["q", search.trim()], ["homeroom", homeroom],
       ["grades", gradeFilter.join(",")], ["grade_scope", gradeFilter.length ? gradeScope : ""], ["violation", violation], ["min", min], ["max", max], ["status", status], ["top", top]]
       .forEach(([key, value]) => value && result.set(key, String(value)));
     return result.toString();
-  }, [year, from, to, team, group, search, homeroom, gradeFilter.join(","), gradeScope, violation, min, max, status, top]);
+  }, [year, from, to, audience, team, group, search, homeroom, gradeFilter.join(","), gradeScope, violation, min, max, status, top]);
 
   useEffect(() => {
     let active = true;
@@ -214,6 +217,15 @@ export default function EvaluationSummary() {
             ]}
           />
           <MonthRangePicker periods={yearPeriods} allYears={allYears} schoolYear={yearStart} from={from} to={to} onChange={(range) => update(range)} />
+          {(summary?.audiences ?? []).some((item) => item.value !== "teacher" && item.has_data) && (
+            <div className="ev-segmented" role="tablist" aria-label="Đối tượng">
+              {summary.audiences.map((item) => (
+                <button key={item.value} type="button" role="tab" aria-selected={audience === item.value} className={audience === item.value ? "active" : ""} onClick={() => update({ audience: item.value === "teacher" ? "" : item.value, homeroom: "", grades: "", gscope: "" })}>
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="ev-summary-actions">
             <InfoPopover label="Giới thiệu bảng tổng hợp">
               Tổng hợp và xếp hạng kết quả các tháng <b>đã công bố</b> để Hội đồng thi đua tham khảo khi bình xét theo đợt và cuối năm. Hệ thống không tự xếp danh hiệu.
@@ -231,11 +243,13 @@ export default function EvaluationSummary() {
             <input value={keyword} onChange={(e) => typeSearch(e.target.value)} placeholder="Tìm tên hoặc mã nhân sự..." />
           </label>
           <UnitPicker teams={teams} groups={summary?.facets?.groups ?? []} team={team} group={group} onChange={(next) => update(next)} />
-          <div className="ev-segmented" role="group" aria-label="Chủ nhiệm">
-            {HOMEROOM.map(([value, label]) => (
-              <button key={value} type="button" className={homeroom === value ? "active" : ""} onClick={() => update({ homeroom: value })}>{label}</button>
-            ))}
-          </div>
+          {teacherView && (
+            <div className="ev-segmented" role="group" aria-label="Chủ nhiệm">
+              {HOMEROOM.map(([value, label]) => (
+                <button key={value} type="button" className={homeroom === value ? "active" : ""} onClick={() => update({ homeroom: value })}>{label}</button>
+              ))}
+            </div>
+          )}
           <div className="ev-more" ref={moreRef}>
             <button type="button" className={`ev-more-btn ${moreOpen || moreCount ? "active" : ""}`} data-picker-trigger aria-expanded={moreOpen} onClick={() => setMoreOpen(!moreOpen)}>
               <SlidersHorizontal size={15} /> Bộ lọc khác {moreCount > 0 && <em>{moreCount}</em>}
@@ -323,14 +337,14 @@ export default function EvaluationSummary() {
         ) : !periods.length ? (
           <div className="empty-state"><BarChart3 size={30} /><b>Chưa có kỳ đánh giá nào trong khoảng này</b></div>
         ) : !visible.length ? (
-          <div className="empty-state"><Search size={30} /><b>Không có giáo viên phù hợp</b></div>
+          <div className="empty-state"><Search size={30} /><b>Không có {AUDIENCE_NOUNS[audience] ?? "nhân sự"} phù hợp</b></div>
         ) : (
           <div ref={wrapRef} className={`ev-table-wrap ev-summary-wrap ${loading ? "loading" : ""}`} style={tableHeight ? { maxHeight: tableHeight } : undefined}>
             <table className={`ev-table ev-summary-grid ${dense ? "dense" : ""}`}>
               <thead>
                 <tr>
                   {header("rank", "Hạng", "center rank-col")}
-                  {header("name", "Giáo viên", "sticky")}
+                  {header("name", teacherView ? "Giáo viên" : "Nhân sự", "sticky")}
                   {header("team", "Tổ / nhóm")}
                   {allYears
                     ? yearColumns.map((column) => (
@@ -404,8 +418,8 @@ export default function EvaluationSummary() {
         )}
         <div ref={footRef} className="ev-summary-foot">
           {overview && (
-            <span className="ev-summary-stats" title={`${overview.teachers} giáo viên · Điểm TB ${formatScore(overview.average)} · ${overview.top_grade_teachers} có tháng ${overview.top_grade ?? ""} · ${overview.violation_teachers} có vi phạm · ${overview.unscored} chưa có điểm · ${officialCount}/${periods.length} tháng đã công bố`}>
-              <b>{overview.teachers}</b> GV · TB <b>{formatScore(overview.average)}</b> · <b>{overview.top_grade_teachers}</b> có {overview.top_grade ?? "hạng cao"} ·{" "}
+            <span className="ev-summary-stats" title={`${overview.teachers} ${AUDIENCE_NOUNS[audience] ?? "người"} · Điểm TB ${formatScore(overview.average)} · ${overview.top_grade_teachers} có tháng ${overview.top_grade ?? ""} · ${overview.violation_teachers} có vi phạm · ${overview.unscored} chưa có điểm · ${officialCount}/${periods.length} tháng đã công bố`}>
+              <b>{overview.teachers}</b> {teacherView ? "GV" : "người"} · TB <b>{formatScore(overview.average)}</b> · <b>{overview.top_grade_teachers}</b> có {overview.top_grade ?? "hạng cao"} ·{" "}
               <b className={overview.violation_teachers ? "ev-text-red" : ""}>{overview.violation_teachers}</b> vi phạm · <b>{overview.unscored}</b> chưa chấm
               <span className="ev-muted"> · {allYears ? `${yearColumns.length} năm học, ` : ""}{officialCount}/{periods.length} tháng đã công bố</span>
             </span>
@@ -422,7 +436,7 @@ export default function EvaluationSummary() {
               <br />
               “—”: không có phiếu tháng đó · KXL: không xếp loại · ⚠: có tháng vi phạm hoặc không xếp loại.
             </InfoPopover>
-            <TablePagination pager={pager} noun="giáo viên" sizes={[20, 50, 100]} showRange={false} />
+            <TablePagination pager={pager} noun={AUDIENCE_NOUNS[audience] ?? "người"} sizes={[20, 50, 100]} showRange={false} />
           </div>
         </div>
       </section>

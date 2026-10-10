@@ -23,7 +23,7 @@ class UnitController extends Controller
 
         return response()->json([
             'units' => Department::ordered($unitIds, false)->map(fn ($unit) => [...$unit, 'members' => $members($unit['id'])])->values(),
-            'can_configure' => $unitIds === null && $request->user()->hasPermission('personnel.manage'),
+            'can_configure' => $unitIds === null && $request->user()->hasPermission('units.manage'),
         ]);
     }
 

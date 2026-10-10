@@ -12,7 +12,7 @@ class Evaluation extends Model
     public const PUBLISHED = 'published';
 
     protected $fillable = [
-        'period_id', 'teacher_id', 'is_homeroom', 'duties', 'results', 'status', 'total_score', 'grade',
+        'period_id', 'teacher_id', 'audience', 'template_id', 'is_homeroom', 'duties', 'results', 'status', 'total_score', 'grade',
         'has_violation', 'no_grade_reason', 'submitted_at', 'unit_scored_by', 'unit_scored_at', 'reviewed_by', 'reviewed_at',
     ];
 
@@ -26,6 +26,13 @@ class Evaluation extends Model
 
     public function period() { return $this->belongsTo(EvaluationPeriod::class, 'period_id'); }
     public function teacher() { return $this->belongsTo(Employee::class, 'teacher_id'); }
+    public function template() { return $this->belongsTo(EvaluationTemplate::class, 'template_id'); }
+    public function assignedScorers() { return $this->belongsToMany(User::class, 'evaluation_scorers')->withTimestamps(); }
+
+    public function scoredByLeadership(): bool
+    {
+        return $this->audience !== EvaluationTemplate::TEACHER;
+    }
     public function scores() { return $this->hasMany(EvaluationScore::class); }
     public function comments() { return $this->hasMany(EvaluationComment::class)->orderBy('id'); }
     public function unitScorer() { return $this->belongsTo(User::class, 'unit_scored_by'); }

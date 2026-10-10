@@ -158,6 +158,11 @@ class DemoRoster
         return self::$staff = $staff;
     }
 
+    public static function boardMembers(): array
+    {
+        return array_keys(array_filter(self::people(), fn ($person) => in_array([Role::BAN_GIAM_HIEU, null], $person['roles'], true)));
+    }
+
     public static function vicePrincipals(): array
     {
         return array_keys(array_filter(self::people(), fn ($person) => in_array([Role::PHO_HIEU_TRUONG, null], $person['roles'], true)));

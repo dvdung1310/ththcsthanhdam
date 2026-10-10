@@ -54,9 +54,15 @@ export function computeTotals(sections, rows, column, isHomeroom) {
   return { sections: bySection, invalid, base: round(base), bonus: round(bonus), total: round(base + bonus) };
 }
 
-export function suggestGrade(grades, total, isHomeroom, hasViolation) {
+export function hasZeroCriterion(sections, rows, column, isHomeroom) {
+  return sections
+    .filter((section) => section.kind !== "bonus" && (!section.homeroom_only || isHomeroom))
+    .some((section) => section.criteria.some((criterion) => criterion.max_score > 0 && !(parseScore(rows[criterion.id]?.[`${column}_score`]) > 0)));
+}
+
+export function suggestGrade(grades, total, isHomeroom, hasViolation, hasZero = false) {
   for (const grade of grades ?? []) {
-    if (grade.clean_required && hasViolation) continue;
+    if ((grade.clean_required && hasViolation) || (grade.requires_no_zero && hasZero)) continue;
     if (total >= (isHomeroom ? grade.homeroom_min : grade.regular_min)) return grade;
   }
   return null;
@@ -87,9 +93,9 @@ export const GRADE_TONES = ["green", "blue", "violet", "orange", "muted", "muted
 export const formatPercent = (value) => (value == null ? "—" : `${formatScore(value)}%`);
 
 export function gradeCode(label) {
-  const text = (label ?? "").replace(/\s*\(.*\)\s*$/, "").trim();
+  const text = (label ?? "").replace(/\s*\(.*\)\s*$/, "").replace(/^mức\s+(?=xuất sắc)/i, "").trim();
   if (/^xuất sắc$/i.test(text)) return "XS";
-  const level = /^loại\s+(.+)$/i.exec(text);
+  const level = /^(?:loại|mức)\s+(.+)$/i.exec(text);
   if (level) return level[1];
   return text.split(/\s+/).map((word) => word.charAt(0).toUpperCase()).join("") || text;
 }

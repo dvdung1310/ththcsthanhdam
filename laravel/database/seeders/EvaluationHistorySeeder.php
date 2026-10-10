@@ -13,6 +13,7 @@ use App\Models\StoredFile;
 use App\Models\Employee;
 use App\Models\User;
 use App\Services\EvaluationScoring;
+use App\Services\LeaveSummary;
 use Carbon\CarbonImmutable;
 use Database\Seeders\Demo\DemoRoster;
 use Illuminate\Database\Seeder;
@@ -31,6 +32,18 @@ class EvaluationHistorySeeder extends Seeder
         'III' => ['Dự giờ chưa đủ số tiết quy định.', 'Chấm trả bài kiểm tra muộn.', 'Tiết dạy được góp ý chưa đạt yêu cầu.'],
         'IV' => ['Chưa nhận xét sổ đầu bài tuần {w}.', 'Lớp vi phạm nền nếp 2 lần trong tuần {w}.', 'Báo cáo sĩ số lớp muộn.'],
         'V' => ['Không tham gia trực ngày {d}/{m}.', 'Nộp báo cáo hoạt động ngoài giờ muộn.'],
+    ];
+
+    private const OFFICE_NOTES = [
+        'I' => ['Đi muộn giao ban ngày {d}/{m}.', 'Không mặc áo trắng thứ Hai ngày {d}/{m}.'],
+        'II' => ['Báo cáo quyết toán tháng {m} nộp muộn 1 ngày.', 'Chứng từ thiếu chữ ký, phải bổ sung.', 'Sổ theo dõi tài sản chưa cập nhật tuần {w}.'],
+        'III' => ['Không tham gia trực ngày {d}/{m}.', 'Báo cáo số liệu gửi Phòng GD&ĐT muộn.'],
+    ];
+
+    private const LEADERSHIP_NOTES = [
+        'I' => ['Đến muộn buổi chào cờ ngày {d}/{m}.'],
+        'II' => ['Kế hoạch chỉ đạo chuyên môn tháng {m} ban hành muộn.', 'Biên bản kiểm tra nội bộ chưa hoàn thiện.'],
+        'III' => ['Trực lãnh đạo ngày {d}/{m} về sớm.', 'Báo cáo tổng hợp gửi Phòng GD&ĐT muộn 1 ngày.'],
     ];
 
     private const EXPLANATIONS = [
@@ -55,20 +68,23 @@ class EvaluationHistorySeeder extends Seeder
     private Collection $criteria;
     private Collection $sections;
     private array $grades;
+    private array $sets = [];
+    private string $audience = EvaluationTemplate::TEACHER;
 
-    public function __construct(private EvaluationScoring $scoring) {}
+    public function __construct(private EvaluationScoring $scoring, private LeaveSummary $leave) {}
 
     public function run(): void
     {
-        $template = EvaluationTemplate::where('is_active', true)->first();
-        if (! $template) {
-            $this->command?->warn('Chưa có bộ tiêu chí đang áp dụng, bỏ qua dữ liệu đánh giá mẫu.');
+        foreach (EvaluationTemplate::where('is_active', true)->get() as $active) {
+            $criteria = EvaluationCriterion::where('template_id', $active->id)->orderBy('position')->get();
+            $this->sets[$active->audience] = [$active, $criteria, $criteria->whereNull('parent_id')->sortBy('position')->values(), $active->grades ?? []];
+        }
+        if (! isset($this->sets[EvaluationTemplate::TEACHER])) {
+            $this->command?->warn('Chưa có bộ tiêu chí giáo viên đang áp dụng, bỏ qua dữ liệu đánh giá mẫu.');
 
             return;
         }
-        $this->criteria = EvaluationCriterion::where('template_id', $template->id)->orderBy('position')->get();
-        $this->sections = $this->criteria->whereNull('parent_id')->sortBy('position')->values();
-        $this->grades = $template->grades ?? [];
+        $template = $this->sets[EvaluationTemplate::TEACHER][0];
         $this->buildProfiles();
         $teachers = Employee::with('user', 'departments')->whereIn('employee_code', array_keys($this->profiles))->get()->keyBy('employee_code');
 
@@ -98,20 +114,23 @@ class EvaluationHistorySeeder extends Seeder
             'published_at' => $status === EvaluationPeriod::PUBLISHED ? $next->day(5)->setTime(16, 0) : null,
         ]);
         $this->stamp('evaluation_periods', $period->id, $month->setTime(8, 0));
+        $period->scorers()->sync(collect(DemoRoster::boardMembers())->map(fn ($handle) => $this->user($handle)->id)->all());
 
         $position = 0;
-        foreach ($this->profiles as $code => [$deduction, $bonusChance, $homeroom, $absentWithin, $joinedAgo]) {
+        foreach ($this->profiles as $code => [$deduction, $bonusChance, $homeroom, $absentWithin, $joinedAgo, $audience]) {
             $teacher = $teachers->get($code);
-            if (! $teacher || ($absentWithin !== null && $ago <= $absentWithin) || ($joinedAgo !== null && $ago > $joinedAgo)) {
+            if (! $teacher || ! isset($this->sets[$audience]) || ($absentWithin !== null && $ago <= $absentWithin) || ($joinedAgo !== null && $ago > $joinedAgo)) {
                 continue;
             }
+            $this->use($audience);
             mt_srand(crc32($code.$month->format('Y-m')));
             $stage = $ago > 0 ? 'scored' : ['draft', 'partial', 'submitted', 'scored', 'reviewed'][$position % 5];
             $position++;
             $this->seedSheet($period, $teacher, $month, $ago, $stage, $deduction, $bonusChance, $homeroom);
         }
 
-        $explainers = array_keys(array_filter($this->profiles, fn ($profile) => $profile[0] >= 2.5 && $profile[3] === null));
+        $this->use(EvaluationTemplate::TEACHER);
+        $explainers = array_keys(array_filter($this->profiles, fn ($profile) => $profile[0] >= 2.5 && $profile[3] === null && $profile[5] === EvaluationTemplate::TEACHER));
         if ($ago === 1) {
             foreach (array_slice($explainers, 0, 3) as $index => $code) {
                 $this->explain($period, $code, self::EXPLANATIONS[$index][0], self::EXPLANATIONS[$index][1]);
@@ -130,10 +149,10 @@ class EvaluationHistorySeeder extends Seeder
         $lastDay = $month->daysInMonth;
         $submittedAt = $this->past($month->day(min($lastDay, mt_rand(18, $deduction > 6 ? 27 : 25)))->setTime(mt_rand(7, 21), mt_rand(0, 59)));
         $unitScoredAt = $this->past($month->day(min($lastDay, mt_rand(27, 28)))->setTime(mt_rand(8, 17), mt_rand(0, 59)));
-        $leader = $this->leaderFor($teacher);
+        $leader = $this->audience === EvaluationTemplate::TEACHER ? $this->leaderFor($teacher) : $this->boardScorerFor($teacher);
 
         $evaluation = Evaluation::create([
-            'period_id' => $period->id, 'teacher_id' => $teacher->id, 'is_homeroom' => $homeroom,
+            'period_id' => $period->id, 'teacher_id' => $teacher->id, 'audience' => $this->audience, 'template_id' => $this->sets[$this->audience][0]->id, 'is_homeroom' => $homeroom,
             'duties' => $stage === 'draft' ? null : $this->duties($teacher, $homeroom),
             'results' => in_array($stage, ['draft', 'partial'], true) ? null : 'Hoàn thành nhiệm vụ được giao trong tháng.',
             'status' => match ($stage) {
@@ -152,7 +171,7 @@ class EvaluationHistorySeeder extends Seeder
             return;
         }
 
-        [$self, $unit] = $this->scores($month, $deduction, $bonusChance, $homeroom, $violation);
+        [$self, $unit] = $this->scores($month, $deduction, $bonusChance, $homeroom, $violation, $this->leave->forMonth($teacher->id, $month->year, $month->month));
         $now = now();
         $rows = [];
         foreach ($this->applicable($homeroom) as $index => $criterion) {
@@ -178,22 +197,31 @@ class EvaluationHistorySeeder extends Seeder
         $total = $this->scoring->totals($evaluation, $this->criteria, 'unit')['total'];
         $published = $period->status === EvaluationPeriod::PUBLISHED;
         $reviewed = $published || $stage === 'reviewed' || ($period->status === EvaluationPeriod::DISCLOSED && mt_rand(0, 1) === 1);
-        $grade = $noGrade ? null : ($this->scoring->grade($this->grades, $total, $homeroom, $violation)['code'] ?? null);
+        $grade = $noGrade ? null : ($this->scoring->grade($this->grades, $total, $homeroom, $violation, $this->scoring->hasZero($evaluation, $this->criteria, 'unit'))['code'] ?? null);
+        $reviewer = $teacher->user_id === $this->user(DemoRoster::principal())->id ? $this->boardScorerFor($teacher) : $this->user(DemoRoster::principal());
         $evaluation->update([
             'total_score' => $total,
             'grade' => $published ? $grade : null,
-            'reviewed_by' => $reviewed ? $this->user(DemoRoster::principal())->id : null,
+            'reviewed_by' => $reviewed ? $reviewer->id : null,
             'reviewed_at' => $reviewed ? $this->past($published ? $month->addMonth()->day(4)->setTime(10, 0) : $unitScoredAt->addDay()) : null,
         ]);
         $this->attachEvidence($evaluation, $ago);
     }
 
-    private function scores(CarbonImmutable $month, float $deduction, float $bonusChance, bool $homeroom, bool $violation): array
+    private function scores(CarbonImmutable $month, float $deduction, float $bonusChance, bool $homeroom, bool $violation, array $leave): array
     {
         $criteria = $this->applicable($homeroom);
         $base = $criteria->filter(fn ($c) => $this->section($c)->kind !== EvaluationCriterion::BONUS)->values();
         $bonus = $criteria->filter(fn ($c) => $this->section($c)->kind === EvaluationCriterion::BONUS)->values();
         $self = $criteria->mapWithKeys(fn ($c) => [$c->id => ['score' => $this->section($c)->kind === EvaluationCriterion::BONUS ? 0.0 : (float) $c->max_score, 'note' => null]])->all();
+        $attendance = $base->firstWhere('tracks_leave', true);
+        if ($attendance && $leave['suggested_deduction'] > 0) {
+            $self[$attendance->id] = [
+                'score' => max(0.0, (float) $attendance->max_score - $leave['suggested_deduction']),
+                'note' => implode('; ', array_column($leave['details'], 'label')).' (theo dữ liệu theo dõi nghỉ).',
+            ];
+            $base = $base->reject(fn ($c) => $c->id === $attendance->id)->values();
+        }
 
         $target = max(0, $deduction + (mt_rand(-10, 10) / 10) * min(3, $deduction) + ($violation ? 6 : 0));
         $target = round($target * 2) / 2;
@@ -290,13 +318,26 @@ class EvaluationHistorySeeder extends Seeder
 
     private function note(string $sectionCode, CarbonImmutable $month): string
     {
-        $pool = self::DEDUCTION_NOTES[$sectionCode] ?? ['Chưa hoàn thành đúng yêu cầu.'];
+        $notes = match ($this->audience) {
+            EvaluationTemplate::STAFF => self::OFFICE_NOTES,
+            EvaluationTemplate::LEADERSHIP => self::LEADERSHIP_NOTES,
+            default => self::DEDUCTION_NOTES,
+        };
+        $pool = $notes[$sectionCode] ?? ['Chưa hoàn thành đúng yêu cầu.'];
 
         return strtr($pool[mt_rand(0, count($pool) - 1)], ['{d}' => mt_rand(2, 26), '{m}' => $month->month, '{w}' => mt_rand(1, 4)]);
     }
 
     private function duties(Employee $teacher, bool $homeroom): string
     {
+        if ($this->audience === EvaluationTemplate::STAFF) {
+            $position = collect(DemoRoster::staff())->firstWhere('code', $teacher->employee_code)['position'] ?? 'văn phòng';
+
+            return "- Thực hiện nhiệm vụ {$position} theo phân công.\n- Tham gia trực và các hoạt động chung của nhà trường.";
+        }
+        if ($this->audience === EvaluationTemplate::LEADERSHIP) {
+            return "- Chỉ đạo, kiểm tra các mảng công tác được phân công.\n- Trực lãnh đạo theo lịch, dự giờ và tham gia sinh hoạt chuyên môn.";
+        }
         $subject = DB::table('employee_subject')->join('subjects', 'subjects.id', '=', 'employee_subject.subject_id')->where('employee_id', $teacher->id)->value('subjects.name') ?? 'chuyên môn';
 
         return "- Giảng dạy môn {$subject} theo phân công.\n- Sinh hoạt chuyên môn tổ, dự giờ đồng nghiệp."
@@ -314,12 +355,28 @@ class EvaluationHistorySeeder extends Seeder
         return $this->user($leader);
     }
 
+    private function use(string $audience): void
+    {
+        [, $this->criteria, $this->sections, $this->grades] = $this->sets[$audience];
+        $this->audience = $audience;
+    }
+
+    private function boardScorerFor(Employee $employee): User
+    {
+        $principal = $this->user(DemoRoster::principal());
+
+        return $employee->user_id === $principal->id ? $this->user(DemoRoster::vicePrincipals()[0]) : $principal;
+    }
+
     private function buildProfiles(): void
     {
-        foreach (DemoRoster::people() as $handle => $person) {
-            if (array_intersect(array_column($person['roles'], 0), Role::NOT_EVALUATED)) {
+        foreach ([...DemoRoster::people(), ...DemoRoster::staff()] as $handle => $person) {
+            $roles = array_column($person['roles'], 0);
+            if (array_intersect($roles, Role::NOT_EVALUATED)) {
                 continue;
             }
+            $audience = in_array(Role::BAN_GIAM_HIEU, $roles, true) ? EvaluationTemplate::LEADERSHIP
+                : (array_key_exists('position', $person) ? EvaluationTemplate::STAFF : EvaluationTemplate::TEACHER);
             mt_srand(crc32('profile'.$person['code']));
             $roll = mt_rand(1, 100);
             $deduction = match (true) {
@@ -331,9 +388,9 @@ class EvaluationHistorySeeder extends Seeder
             $bonus = round(max(0.05, 0.75 - $deduction * 0.08), 2);
             $absent = match ($person['status']) { 'on_leave' => mt_rand(1, 3), 'suspended' => 4, default => null };
             $joined = in_array('new', $person['flags'], true) ? 5 : null;
-            $this->profiles[$person['code']] = [$deduction, $bonus, $person['homeroom'], $absent, $joined];
+            $this->profiles[$person['code']] = [$deduction, $bonus, (bool) ($person['homeroom'] ?? false), $absent, $joined, $audience];
         }
-        $ranked = collect($this->profiles)->filter(fn ($profile) => $profile[3] === null || $profile[3] < 5)->sortByDesc(fn ($profile) => $profile[0])->keys()->values();
+        $ranked = collect($this->profiles)->filter(fn ($profile) => $profile[5] === EvaluationTemplate::TEACHER && ($profile[3] === null || $profile[3] < 5))->sortByDesc(fn ($profile) => $profile[0])->keys()->values();
         $this->violations = [[$ranked[0], 5], [$ranked[1] ?? $ranked[0], 9]];
         $suspended = collect(DemoRoster::people())->firstWhere('status', 'suspended');
         if ($suspended) {

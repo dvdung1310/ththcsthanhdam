@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Evaluation;
 use App\Models\EvaluationCriterion;
 use App\Models\EvaluationPeriod;
+use App\Models\EvaluationTemplate;
 use App\Models\Employee;
 use App\Models\User;
 use App\Services\EvaluationDirectory;
@@ -44,7 +45,7 @@ class EvaluationSummaryController extends Controller
 
     public function teacher(Request $request, Employee $teacher): JsonResponse
     {
-        $summary = $this->build($this->filters($request) + ['teacher_id' => $teacher->id]);
+        $summary = $this->build(['audience' => null] + $this->filters($request) + ['teacher_id' => $teacher->id]);
 
         return response()->json([...$summary, 'teacher' => $summary['teachers'][0] ?? null, 'teachers' => null]);
     }
@@ -130,8 +131,13 @@ class EvaluationSummaryController extends Controller
             'max' => ['nullable', 'numeric'],
             'status' => ['nullable', 'in:working,on_leave,suspended'],
             'top' => ['nullable', 'integer', 'in:3,10,20'],
+            'audience' => ['nullable', 'in:'.implode(',', array_keys(EvaluationTemplate::AUDIENCES))],
         ]);
         $data['grades'] = array_values(array_filter(explode(',', $data['grades'] ?? '')));
+        $data['audience'] ??= EvaluationTemplate::TEACHER;
+        if ($data['audience'] !== EvaluationTemplate::TEACHER) {
+            unset($data['homeroom']);
+        }
 
         return $data;
     }
@@ -150,21 +156,26 @@ class EvaluationSummaryController extends Controller
             ->values();
         $periods = $yearPeriods->filter(fn (EvaluationPeriod $p) => (! $from || $this->key($p) >= $from) && (! $to || $this->key($p) <= $to))->values();
 
-        [$grades, $gradeKeys, $mixed] = $this->mergeGrades($periods);
-        $maxBase = $this->maxBases($periods);
-
+        $audience = $filters['audience'] ?? null;
         $evaluations = Evaluation::with(['teacher.user', 'teacher.departments'])
             ->whereIn('period_id', $periods->pluck('id'))
+            ->when($audience, fn ($q, $value) => $q->where('audience', $value))
             ->when($filters['teacher_id'] ?? null, fn ($q, $id) => $q->where('teacher_id', $id))
             ->get();
+        $templates = EvaluationTemplate::whereIn('id', $evaluations->map(fn (Evaluation $e) => $e->template_id ?? $periods->firstWhere('id', $e->period_id)?->template_id)->unique()->filter())->get()
+            ->whenEmpty(fn () => EvaluationTemplate::where('is_active', true)->where('audience', $audience ?? EvaluationTemplate::TEACHER)->get());
+        [$grades, $gradeKeys, $mixed] = $this->mergeGrades($templates);
+        $maxBase = $this->maxBases($templates);
+        $templateById = $templates->keyBy('id');
+        $presentAudiences = Evaluation::whereIn('period_id', $yearPeriods->pluck('id'))->distinct()->pluck('audience');
         $periodById = $periods->keyBy('id');
 
         $homeroom = match ($filters['homeroom'] ?? null) { 'yes' => true, 'no' => false, default => null };
-        $teachers = $evaluations->groupBy('teacher_id')->map(function (Collection $sheets) use ($periodById, $gradeKeys, $maxBase, $grades, $homeroom) {
+        $teachers = $evaluations->groupBy('teacher_id')->map(function (Collection $sheets) use ($periodById, $gradeKeys, $maxBase, $grades, $homeroom, $templateById) {
             $teacher = $sheets->first()->teacher;
             $cells = [];
             foreach ($sheets as $sheet) {
-                $cells[$sheet->period_id] = $this->cell($sheet, $periodById[$sheet->period_id], $gradeKeys, $maxBase);
+                $cells[$sheet->period_id] = $this->cell($sheet, $periodById[$sheet->period_id], $gradeKeys, $maxBase, $templateById);
             }
 
             $latest = $sheets->sortByDesc(fn (Evaluation $sheet) => $this->key($periodById[$sheet->period_id]))->first();
@@ -189,6 +200,9 @@ class EvaluationSummaryController extends Controller
             'all_years' => $allYears,
             'year_columns' => $periods->groupBy(fn (EvaluationPeriod $p) => self::schoolYear($p->year, $p->month))->sortKeys()
                 ->map(fn (Collection $items, int $y) => ['value' => $y, 'label' => $y.'–'.($y + 1), 'months' => $items->count(), 'official' => $items->where('status', EvaluationPeriod::PUBLISHED)->count()])->values(),
+            'audience' => $audience,
+            'audiences' => collect(EvaluationTemplate::AUDIENCES)->map(fn ($label, $value) => ['value' => $value, 'label' => $label, 'has_data' => $presentAudiences->contains($value)])->values(),
+            'scorer_label' => EvaluationTemplate::SCORER_LABELS[$audience ?? EvaluationTemplate::TEACHER],
             'mixed_scale' => collect($maxBase)->map(fn (array $base) => $base['homeroom'].'/'.$base['regular'])->unique()->count() > 1,
             'range_label' => $this->rangeLabel($year, $periods),
             'periods' => $periods->map(fn (EvaluationPeriod $p) => [
@@ -203,19 +217,20 @@ class EvaluationSummaryController extends Controller
         ];
     }
 
-    private function cell(Evaluation $sheet, EvaluationPeriod $period, array $gradeKeys, array $maxBase): array
+    private function cell(Evaluation $sheet, EvaluationPeriod $period, array $gradeKeys, array $maxBase, Collection $templates): array
     {
         if ($period->status !== EvaluationPeriod::PUBLISHED) {
             return ['evaluation_id' => $sheet->id, 'official' => false, 'pending_label' => self::PENDING_LABELS[$period->status] ?? $period->status, 'is_homeroom' => (bool) $sheet->is_homeroom];
         }
-        $max = $maxBase[$period->id][$sheet->is_homeroom ? 'homeroom' : 'regular'] ?: null;
+        $templateId = $sheet->template_id ?? $period->template_id;
+        $max = ($maxBase[$templateId] ?? [])[$sheet->is_homeroom ? 'homeroom' : 'regular'] ?? null ?: null;
         $total = $sheet->total_score === null ? null : (float) $sheet->total_score;
-        $gradeKey = $sheet->grade ? ($gradeKeys[$period->template_id][$sheet->grade] ?? null) : null;
+        $gradeKey = $sheet->grade ? ($gradeKeys[$templateId][$sheet->grade] ?? null) : null;
 
         return [
             'evaluation_id' => $sheet->id, 'official' => true,
             'total' => $total, 'max' => $max,
-            'grade_key' => $gradeKey, 'grade_name' => $gradeKey ? $this->gradeName($period, $sheet->grade) : null,
+            'grade_key' => $gradeKey, 'grade_name' => $gradeKey ? $this->gradeName($templates->get($templateId), $sheet->grade) : null,
             'no_grade_reason' => $sheet->no_grade_reason, 'has_violation' => (bool) $sheet->has_violation, 'is_homeroom' => (bool) $sheet->is_homeroom,
         ];
     }
@@ -234,13 +249,13 @@ class EvaluationSummaryController extends Controller
         ];
     }
 
-    private function mergeGrades(Collection $periods): array
+    private function mergeGrades(Collection $templates): array
     {
         $columns = [];
         $keys = [];
         $mixed = false;
         $first = true;
-        foreach ($periods->pluck('template')->filter()->unique('id') as $template) {
+        foreach ($templates as $template) {
             foreach ($template->grades ?? [] as $grade) {
                 $name = $this->normalize($grade['name'] ?? '');
                 $index = collect($columns)->search(fn (array $c) => in_array($grade['code'], $c['codes'], true));
@@ -262,14 +277,14 @@ class EvaluationSummaryController extends Controller
         return [array_map(fn (array $c) => ['key' => $c['key'], 'name' => $c['name'], 'short' => $c['short']], $columns), $keys, $mixed];
     }
 
-    private function maxBases(Collection $periods): array
+    private function maxBases(Collection $templates): array
     {
-        $sections = EvaluationCriterion::whereIn('template_id', $periods->pluck('template_id')->unique())->whereNull('parent_id')->get()->groupBy('template_id');
+        $sections = EvaluationCriterion::whereIn('template_id', $templates->pluck('id'))->whereNull('parent_id')->get()->groupBy('template_id');
 
-        return $periods->mapWithKeys(function (EvaluationPeriod $p) use ($sections) {
-            $base = ($sections[$p->template_id] ?? collect())->where('kind', '!=', EvaluationCriterion::BONUS);
+        return $templates->mapWithKeys(function (EvaluationTemplate $template) use ($sections) {
+            $base = ($sections[$template->id] ?? collect())->where('kind', '!=', EvaluationCriterion::BONUS);
 
-            return [$p->id => [
+            return [$template->id => [
                 'homeroom' => (float) $base->sum('max_score'),
                 'regular' => (float) $base->where('homeroom_only', false)->sum('max_score'),
             ]];
@@ -349,7 +364,9 @@ class EvaluationSummaryController extends Controller
     {
         $frame = match ($filters['homeroom'] ?? null) { 'yes' => ' Chỉ tính các tháng chủ nhiệm.', 'no' => ' Chỉ tính các tháng không chủ nhiệm.', default => '' };
 
-        return 'Chỉ tính các tháng đã công bố.'.$frame.' Ô "—": không có phiếu tháng đó; KXL: không xếp loại; Điểm TB: trung bình tổng điểm các tháng được chấm. Bảng xếp hạng chỉ để tham khảo, hệ thống không tự xếp danh hiệu.';
+        $audience = EvaluationTemplate::AUDIENCES[$filters['audience'] ?? EvaluationTemplate::TEACHER] ?? '';
+
+        return 'Đối tượng: '.$audience.'. Chỉ tính các tháng đã công bố.'.$frame.' Ô "—": không có phiếu tháng đó; KXL: không xếp loại; Điểm TB: trung bình tổng điểm các tháng được chấm. Bảng xếp hạng chỉ để tham khảo, hệ thống không tự xếp danh hiệu.';
     }
 
     private function cellText(?array $cell): string
@@ -381,9 +398,9 @@ class EvaluationSummaryController extends Controller
         return $label.' · Từ tháng '.$periods->first()->month.'/'.$periods->first()->year.' đến tháng '.$periods->last()->month.'/'.$periods->last()->year;
     }
 
-    private function gradeName(EvaluationPeriod $period, string $code): string
+    private function gradeName(?EvaluationTemplate $template, string $code): string
     {
-        return collect($period->template->grades ?? [])->firstWhere('code', $code)['name'] ?? $code;
+        return collect($template?->grades ?? [])->firstWhere('code', $code)['name'] ?? $code;
     }
 
     private function short(string $name): string

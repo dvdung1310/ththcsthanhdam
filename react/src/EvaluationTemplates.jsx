@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router";
-import { ArrowDown, ArrowLeft, ArrowUp, ChevronRight, Paperclip, Pencil, Search, CheckCircle2, ChevronDown, Copy, FilePlus2, ListChecks, Lock, Plus, Save, ShieldCheck, Trash2, TriangleAlert, X } from "lucide-react";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
+import { ArrowDown, ArrowLeft, ArrowUp, CalendarOff, ChevronRight, Paperclip, Pencil, Search, CheckCircle2, ChevronDown, Copy, FilePlus2, ListChecks, Lock, Plus, Save, ShieldCheck, Trash2, TriangleAlert, X } from "lucide-react";
 import { apiJson } from "./api";
 import { useConfirm } from "./ConfirmDialog";
 import { formatMoment, formatScore, parseScore } from "./evaluationUtils";
@@ -11,10 +11,18 @@ import Avatar from "./Avatar";
 let keySeed = 0;
 const newKey = () => `k${++keySeed}`;
 const toInput = (value) => (value === null || value === undefined ? "" : String(value).replace(".", ","));
+const AUDIENCES = [
+  ["teacher", "Giáo viên"],
+  ["staff", "Nhân viên"],
+  ["leadership", "Ban giám hiệu"],
+];
+const AUDIENCE_LABELS = Object.fromEntries(AUDIENCES);
+const AUDIENCE_NOUNS = { teacher: "giáo viên", staff: "nhân viên", leadership: "Ban giám hiệu" };
 
 function toDraft(template) {
   return {
     name: template.name,
+    audience: template.audience ?? "teacher",
     description: template.description ?? "",
     grades: template.grades.map((grade) => ({ ...grade, key: newKey(), homeroom_min: toInput(grade.homeroom_min), regular_min: toInput(grade.regular_min) })),
     sections: template.sections.map((section) => ({
@@ -58,8 +66,9 @@ function toPayload(draft) {
       code: codes[index],
       name: grade.name.trim(),
       homeroom_min: number(grade.homeroom_min),
-      regular_min: number(grade.regular_min),
+      regular_min: draft.audience === "teacher" ? number(grade.regular_min) : number(grade.homeroom_min),
       clean_required: !!grade.clean_required,
+      requires_no_zero: !!grade.requires_no_zero,
       condition: grade.condition?.trim() || null,
     })),
     sections: draft.sections.map((section) => ({
@@ -67,13 +76,14 @@ function toPayload(draft) {
       title: section.title.trim(),
       max_score: number(section.max_score),
       kind: section.kind,
-      homeroom_only: !!section.homeroom_only,
+      homeroom_only: draft.audience === "teacher" && !!section.homeroom_only,
       criteria: section.criteria.map((criterion) => ({
         code: criterion.code.trim(),
         title: criterion.title.trim(),
         guidance: criterion.guidance.trim() || null,
         max_score: number(criterion.max_score),
         requires_evidence: !!criterion.requires_evidence,
+        tracks_leave: section.kind !== "bonus" && !!criterion.tracks_leave,
       })),
     })),
   };
@@ -175,6 +185,8 @@ function PersonStamp({ person, at, fallback = "Hệ thống" }) {
 function TemplateList() {
   const navigate = useNavigate();
   const [toast] = useToast();
+  const [params, setParams] = useSearchParams();
+  const audience = AUDIENCE_LABELS[params.get("audience")] ? params.get("audience") : "teacher";
   const [templates, setTemplates] = useState(null);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
@@ -187,7 +199,7 @@ function TemplateList() {
 
   const keyword = search.trim().toLowerCase();
   const filtered = (templates ?? []).filter(
-    (item) => (!status || templateStatus(item) === status) && (!keyword || `${item.name} ${item.description ?? ""}`.toLowerCase().includes(keyword)),
+    (item) => item.audience === audience && (!status || templateStatus(item) === status) && (!keyword || `${item.name} ${item.description ?? ""}`.toLowerCase().includes(keyword)),
   );
   const pager = usePagination(filtered);
   const rows = pager.rows;
@@ -196,9 +208,21 @@ function TemplateList() {
     <div className="ev-page">
       {toast}
       <section className="ev-hero">
-        <p>Bộ tiêu chí đang áp dụng được dùng cho các kỳ mở sau. Kỳ đã mở luôn giữ bộ tiêu chí của nó.</p>
+        <p>Mỗi đối tượng (giáo viên, nhân viên, Ban giám hiệu) có một bộ tiêu chí đang áp dụng riêng, dùng cho các kỳ mở sau. Phiếu đã tạo luôn giữ bộ tiêu chí của nó.</p>
         <button className="primary-btn" onClick={() => setCreateDialog({ copyFrom: "" })}><FilePlus2 size={16} /> Tạo bộ tiêu chí</button>
       </section>
+      <div className="ev-segmented ev-tpl-audiences" role="tablist" aria-label="Đối tượng">
+        {AUDIENCES.map(([value, label]) => {
+          const count = (templates ?? []).filter((item) => item.audience === value).length;
+          const active = (templates ?? []).find((item) => item.audience === value && item.is_active);
+          return (
+            <button key={value} type="button" role="tab" aria-selected={audience === value} className={audience === value ? "active" : ""} onClick={() => { setParams(value === "teacher" ? {} : { audience: value }, { replace: true }); pager.reset(); }}>
+              {label} <em>{count}</em>
+              {!active && templates && <TriangleAlert size={12} className="ev-text-red" />}
+            </button>
+          );
+        })}
+      </div>
       {error && <div className="api-error"><TriangleAlert size={16} />{error}</div>}
       <section className="ev-card">
         <div className="ev-filters ev-tpl-filters">
@@ -238,8 +262,8 @@ function TemplateList() {
                     <td><StatusChips template={item} /></td>
                     <td>{item.sections_count} mục<small className="ev-sub">{item.criteria_count} tiêu chí</small></td>
                     <td>
-                      {formatScore(item.totals.homeroom)} / {formatScore(item.totals.regular)}
-                      <small className="ev-sub">GVCN / không CN · +{formatScore(item.totals.bonus)} cộng</small>
+                      {item.audience === "teacher" ? `${formatScore(item.totals.homeroom)} / ${formatScore(item.totals.regular)}` : formatScore(item.totals.regular)}
+                      <small className="ev-sub">{item.audience === "teacher" ? "GVCN / không CN · " : "Cơ bản · "}+{formatScore(item.totals.bonus)} cộng</small>
                     </td>
                     <td>
                       {item.periods.length ? (
@@ -263,8 +287,8 @@ function TemplateList() {
       </section>
       {createDialog && (
         <CreateDialog
-          dialog={createDialog}
-          templates={templates ?? []}
+          dialog={{ ...createDialog, audience }}
+          templates={(templates ?? []).filter((item) => item.audience === audience)}
           onClose={() => setCreateDialog(null)}
           onCreated={(result) => navigate(`/evaluations/templates/${result.data.id}`, { state: { edit: true, message: result.message } })}
         />
@@ -349,7 +373,7 @@ function TemplateDetail({ id }) {
   const activate = async () => {
     const ok = await confirm({
       title: `Áp dụng “${template.name}”?`,
-      message: "Các kỳ đánh giá mở từ bây giờ sẽ dùng bộ tiêu chí này. Các kỳ đã mở vẫn giữ bộ tiêu chí cũ.",
+      message: `Phiếu ${AUDIENCE_NOUNS[template.audience]} tạo từ bây giờ sẽ dùng bộ tiêu chí này. Phiếu đã tạo vẫn giữ bộ tiêu chí cũ.`,
       confirmText: "Áp dụng",
     });
     if (!ok) return;
@@ -365,7 +389,7 @@ function TemplateDetail({ id }) {
     if (!ok) return;
     try {
       const result = await apiJson(`/api/evaluation-templates/${template.id}`, { method: "DELETE" });
-      navigate("/evaluations/templates", { replace: true, state: { message: result.message } });
+      navigate(`/evaluations/templates${template.audience === "teacher" ? "" : `?audience=${template.audience}`}`, { replace: true, state: { message: result.message } });
     } catch (e) {
       setError(e.message);
     }
@@ -400,14 +424,15 @@ function TemplateDetail({ id }) {
     <div className="ev-page">
       {toast}
       <section className="ev-tpl-title">
-        <Link className="ev-back" to="/evaluations/templates"><ArrowLeft size={16} /> Bộ tiêu chí</Link>
+        <Link className="ev-back" to={`/evaluations/templates${template.audience === "teacher" ? "" : `?audience=${template.audience}`}`}><ArrowLeft size={16} /> Bộ tiêu chí</Link>
         <div>
           <h2>{template.name}</h2>
+          <span className="ev-chip purple">{template.audience_label}</span>
           <StatusChips template={template} />
         </div>
         {!editing && (
           <div className="ev-tpl-actions">
-            <button className="secondary-btn" onClick={() => setCreateDialog({ copyFrom: template.id, name: `${template.name} (bản sao)` })}><Copy size={15} /> Nhân bản</button>
+            <button className="secondary-btn" onClick={() => setCreateDialog({ copyFrom: template.id, name: `${template.name} (bản sao)`, audience: template.audience })}><Copy size={15} /> Nhân bản</button>
             {!template.is_active && !locked && <button className="secondary-btn danger" onClick={remove}><Trash2 size={15} /> Xóa</button>}
             {!template.is_active && !template.problems.length && <button className="secondary-btn" onClick={activate}><ShieldCheck size={15} /> Áp dụng</button>}
             <button className="primary-btn" onClick={() => setMode("edit")}><Pencil size={15} /> {locked ? "Sửa tên & mô tả" : "Chỉnh sửa"}</button>
@@ -455,7 +480,7 @@ function TemplateDetail({ id }) {
 
           {fullEdit ? (
             <>
-              <GradeEditor draft={draft} locked={false} update={update} totals={analysis.totals} />
+              <GradeEditor draft={draft} locked={false} update={update} totals={analysis.totals} teacher={draft.audience === "teacher"} />
               {draft.sections.map((section, index) => (
                 <div key={section.key} className={`ev-card ev-tpl-section ${section.kind}`}>
                   <div className="ev-tpl-section-head">
@@ -469,10 +494,12 @@ function TemplateDetail({ id }) {
                       {section.kind === "bonus" ? "Cộng tối đa" : "Tối đa"}
                       <input value={section.max_score} inputMode="decimal" onChange={(e) => updateSection(section.key, (s) => ({ ...s, max_score: e.target.value }))} />
                     </label>
-                    <label className="ev-check">
-                      <input type="checkbox" checked={section.homeroom_only} onChange={(e) => updateSection(section.key, (s) => ({ ...s, homeroom_only: e.target.checked }))} />
-                      Chỉ GVCN
-                    </label>
+                    {draft.audience === "teacher" && (
+                      <label className="ev-check">
+                        <input type="checkbox" checked={section.homeroom_only} onChange={(e) => updateSection(section.key, (s) => ({ ...s, homeroom_only: e.target.checked }))} />
+                        Chỉ GVCN
+                      </label>
+                    )}
                     <span className="ev-tpl-tools">
                       <button type="button" title="Lên" disabled={index === 0} onClick={() => update((d) => ({ ...d, sections: move(d.sections, index, -1) }))}><ArrowUp size={14} /></button>
                       <button type="button" title="Xuống" disabled={index === draft.sections.length - 1} onClick={() => update((d) => ({ ...d, sections: move(d.sections, index, 1) }))}><ArrowDown size={14} /></button>
@@ -501,7 +528,7 @@ function TemplateDetail({ id }) {
             </>
           ) : (
             <>
-              <GradeView grades={template.grades} totals={template.totals} />
+              <GradeView grades={template.grades} totals={template.totals} teacher={template.audience === "teacher"} />
               {template.sections.map((section) => <SectionView key={section.id} section={section} />)}
               {!template.sections.length && <div className="ev-card"><div className="empty-state"><ListChecks size={28} /><b>Chưa có mục nào</b><span>Bấm “Chỉnh sửa” để thêm mục và tiêu chí.</span></div></div>}
             </>
@@ -512,11 +539,15 @@ function TemplateDetail({ id }) {
           <div className="ev-card ev-summary-card ev-tpl-info">
             <h3>Thông tin</h3>
             <dl>
+              <dt>Đối tượng</dt>
+              <dd>{template.audience_label} <small>Cột chấm thứ hai: {template.scorer_label}</small></dd>
               <dt>Trạng thái</dt>
               <dd><StatusChips template={template} /></dd>
               <dt>Điểm tối đa</dt>
               <dd>
-                {formatScore((editing ? analysis : template).totals.homeroom)} GVCN · {formatScore((editing ? analysis : template).totals.regular)} không CN
+                {template.audience === "teacher"
+                  ? `${formatScore((editing ? analysis : template).totals.homeroom)} GVCN · ${formatScore((editing ? analysis : template).totals.regular)} không CN`
+                  : `${formatScore((editing ? analysis : template).totals.regular)} điểm cơ bản`}
                 <small>Điểm cộng tối đa +{formatScore((editing ? analysis : template).totals.bonus)}</small>
               </dd>
               <dt>Cấu trúc</dt>
@@ -569,20 +600,29 @@ function TemplateDetail({ id }) {
   );
 }
 
-function GradeView({ grades, totals }) {
+function GradeView({ grades, totals, teacher }) {
   return (
     <div className="ev-card ev-tpl-grades">
       <header>
         <h3>Khung xếp loại</h3>
-        <small>Hệ thống chọn mức đầu tiên từ trên xuống mà tổng điểm đạt ngưỡng (GVCN tối đa {formatScore(totals.homeroom)}, không chủ nhiệm {formatScore(totals.regular)}).</small>
+        <small>
+          Hệ thống chọn mức đầu tiên từ trên xuống mà tổng điểm đạt ngưỡng
+          {teacher ? ` (GVCN tối đa ${formatScore(totals.homeroom)}, không chủ nhiệm ${formatScore(totals.regular)}).` : ` (tối đa ${formatScore(totals.regular)} điểm cơ bản).`}
+        </small>
       </header>
       {grades.length ? (
         <table>
           <thead>
             <tr>
               <th>Xếp loại</th>
-              <th>Ngưỡng GVCN</th>
-              <th>Ngưỡng không CN</th>
+              {teacher ? (
+                <>
+                  <th>Ngưỡng GVCN</th>
+                  <th>Ngưỡng không CN</th>
+                </>
+              ) : (
+                <th>Ngưỡng</th>
+              )}
               <th>Điều kiện</th>
             </tr>
           </thead>
@@ -591,10 +631,11 @@ function GradeView({ grades, totals }) {
               <tr key={grade.code}>
                 <td><b>{grade.name}</b></td>
                 <td>Từ {formatScore(grade.homeroom_min)}</td>
-                <td>Từ {formatScore(grade.regular_min)}</td>
+                {teacher && <td>Từ {formatScore(grade.regular_min)}</td>}
                 <td>
                   {grade.condition || "—"}
-                  {grade.clean_required && <small className="ev-sub">Bắt buộc không vi phạm QCCM, đạo đức nhà giáo</small>}
+                  {grade.clean_required && <small className="ev-sub">{teacher ? "Bắt buộc không vi phạm QCCM, đạo đức nhà giáo" : "Bắt buộc không có vi phạm đã được kết luận"}</small>}
+                  {grade.requires_no_zero && <small className="ev-sub">Không có tiêu chí bị 0 điểm</small>}
                 </td>
               </tr>
             ))}
@@ -632,6 +673,7 @@ function CriterionView({ criterion, bonus }) {
         <b>{criterion.code}. {criterion.title}</b>
         <small>{bonus ? `Cộng tối đa ${formatScore(criterion.max_score)}` : `${formatScore(criterion.max_score)} điểm`}</small>
         {criterion.requires_evidence && <span className="ev-chip blue"><Paperclip size={11} /> Cần minh chứng</span>}
+        {criterion.tracks_leave && <span className="ev-chip teal"><CalendarOff size={11} /> Gợi ý từ theo dõi nghỉ</span>}
         {lines.length > 0 && (
           <button type="button" className={`ev-guide-toggle ${open ? "open" : ""}`} onClick={() => setOpen(!open)}>
             Cách tính điểm <ChevronDown size={13} />
@@ -643,21 +685,31 @@ function CriterionView({ criterion, bonus }) {
   );
 }
 
-function GradeEditor({ draft, locked, update, totals }) {
+function GradeEditor({ draft, locked, update, totals, teacher }) {
   const setGrade = (key, field, value) => update((d) => ({ ...d, grades: d.grades.map((g) => (g.key === key ? { ...g, [field]: value } : g)) }));
   return (
     <div className="ev-card ev-tpl-grades">
       <header>
         <h3>Khung xếp loại</h3>
-        <small>Xếp từ cao xuống thấp. Hệ thống chọn mức đầu tiên mà tổng điểm đạt ngưỡng (GVCN tối đa {formatScore(totals.homeroom)}, không chủ nhiệm {formatScore(totals.regular)}).</small>
+        <small>
+          Xếp từ cao xuống thấp. Hệ thống chọn mức đầu tiên mà tổng điểm đạt ngưỡng
+          {teacher ? ` (GVCN tối đa ${formatScore(totals.homeroom)}, không chủ nhiệm ${formatScore(totals.regular)}).` : ` (tối đa ${formatScore(totals.regular)} điểm cơ bản).`}
+        </small>
       </header>
       <table>
         <thead>
           <tr>
             <th>Xếp loại</th>
-            <th>Ngưỡng GVCN</th>
-            <th>Ngưỡng không CN</th>
+            {teacher ? (
+              <>
+                <th>Ngưỡng GVCN</th>
+                <th>Ngưỡng không CN</th>
+              </>
+            ) : (
+              <th>Ngưỡng</th>
+            )}
             <th>Không vi phạm</th>
+            <th>Không tiêu chí 0đ</th>
             <th>Điều kiện</th>
             {!locked && <th aria-label="Thao tác" />}
           </tr>
@@ -667,8 +719,9 @@ function GradeEditor({ draft, locked, update, totals }) {
             <tr key={grade.key}>
               <td><input value={grade.name} disabled={locked} placeholder="VD: Loại A (Tốt)" onChange={(e) => setGrade(grade.key, "name", e.target.value)} /></td>
               <td><input className="num" inputMode="decimal" value={grade.homeroom_min} disabled={locked} onChange={(e) => setGrade(grade.key, "homeroom_min", e.target.value)} /></td>
-              <td><input className="num" inputMode="decimal" value={grade.regular_min} disabled={locked} onChange={(e) => setGrade(grade.key, "regular_min", e.target.value)} /></td>
-              <td className="center"><input type="checkbox" checked={!!grade.clean_required} disabled={locked} onChange={(e) => setGrade(grade.key, "clean_required", e.target.checked)} title="Bắt buộc không vi phạm QCCM, đạo đức nhà giáo" /></td>
+              {teacher && <td><input className="num" inputMode="decimal" value={grade.regular_min} disabled={locked} onChange={(e) => setGrade(grade.key, "regular_min", e.target.value)} /></td>}
+              <td className="center"><input type="checkbox" checked={!!grade.clean_required} disabled={locked} onChange={(e) => setGrade(grade.key, "clean_required", e.target.checked)} title="Bắt buộc không có vi phạm" /></td>
+              <td className="center"><input type="checkbox" checked={!!grade.requires_no_zero} disabled={locked} onChange={(e) => setGrade(grade.key, "requires_no_zero", e.target.checked)} title="Không xếp mức này nếu có tiêu chí bị 0 điểm" /></td>
               <td><input value={grade.condition ?? ""} disabled={locked} placeholder="Điều kiện bắt buộc" onChange={(e) => setGrade(grade.key, "condition", e.target.value)} /></td>
               {!locked && (
                 <td className="ev-tpl-tools">
@@ -685,7 +738,7 @@ function GradeEditor({ draft, locked, update, totals }) {
         <button
           type="button"
           className="ev-tpl-add"
-          onClick={() => update((d) => ({ ...d, grades: [...d.grades, { key: newKey(), code: "", name: "", homeroom_min: "", regular_min: "", clean_required: false, condition: "" }] }))}
+          onClick={() => update((d) => ({ ...d, grades: [...d.grades, { key: newKey(), code: "", name: "", homeroom_min: "", regular_min: "", clean_required: false, requires_no_zero: false, condition: "" }] }))}
         >
           <Plus size={14} /> Thêm mức xếp loại
         </button>
@@ -705,10 +758,16 @@ function CriterionEditor({ criterion, bonus, locked, first, last, onChange, onMo
           {bonus ? "Cộng tối đa" : "Tối đa"}
           <input value={criterion.max_score} disabled={locked} inputMode="decimal" onChange={(e) => onChange((c) => ({ ...c, max_score: e.target.value }))} />
         </label>
-        <label className="ev-check" title="Giáo viên phải đính kèm minh chứng khi chấm tiêu chí này">
+        <label className="ev-check" title="Người tự đánh giá phải đính kèm minh chứng khi chấm tiêu chí này">
           <input type="checkbox" checked={!!criterion.requires_evidence} disabled={locked} onChange={(e) => onChange((c) => ({ ...c, requires_evidence: e.target.checked }))} />
           Cần minh chứng
         </label>
+        {!bonus && (
+          <label className="ev-check" title="Hiện tóm tắt ngày nghỉ trong tháng và gợi ý điểm trừ ở tiêu chí này">
+            <input type="checkbox" checked={!!criterion.tracks_leave} disabled={locked} onChange={(e) => onChange((c) => ({ ...c, tracks_leave: e.target.checked }))} />
+            Gợi ý từ nghỉ
+          </label>
+        )}
         <button type="button" className={`ev-guide-toggle ${open ? "open" : ""}`} onClick={() => setOpen(!open)}>
           Cách tính điểm <ChevronDown size={13} />
         </button>
@@ -743,7 +802,7 @@ function CreateDialog({ dialog, templates, onClose, onCreated }) {
     setSaving(true);
     setError("");
     try {
-      onCreated(await apiJson("/api/evaluation-templates", { method: "POST", body: { name: name.trim(), copy_from_id: copyFrom ? Number(copyFrom) : null } }));
+      onCreated(await apiJson("/api/evaluation-templates", { method: "POST", body: { name: name.trim(), audience: dialog.audience ?? "teacher", copy_from_id: copyFrom ? Number(copyFrom) : null } }));
     } catch (e) {
       setError(e.message);
       setSaving(false);
@@ -752,7 +811,7 @@ function CreateDialog({ dialog, templates, onClose, onCreated }) {
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <form className="ev-dialog" onSubmit={submit}>
-        <h3>{dialog.copyFrom ? "Nhân bản bộ tiêu chí" : "Tạo bộ tiêu chí"}</h3>
+        <h3>{dialog.copyFrom ? "Nhân bản bộ tiêu chí" : `Tạo bộ tiêu chí ${AUDIENCE_NOUNS[dialog.audience] ?? ""}`}</h3>
         <label>
           Tên bộ tiêu chí
           <input autoFocus value={name} maxLength={255} onChange={(e) => setName(e.target.value)} placeholder="VD: Tiêu chí thi đua điều chỉnh HK2" />
@@ -764,7 +823,7 @@ function CreateDialog({ dialog, templates, onClose, onCreated }) {
             {templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}
           </select>
         </label>
-        <p className="ev-dialog-note">Bộ mới ở trạng thái nháp, chưa ảnh hưởng tới kỳ nào. Sửa xong, bấm “Áp dụng” để các kỳ mở sau dùng bộ này.</p>
+        <p className="ev-dialog-note">Bộ mới ở trạng thái nháp, chưa ảnh hưởng tới kỳ nào. Sửa xong, bấm “Áp dụng” để phiếu tạo sau dùng bộ này.</p>
         {error && <p className="dl-dialog-error">{error}</p>}
         <footer>
           <button type="button" className="secondary-btn" onClick={onClose}>Hủy</button>

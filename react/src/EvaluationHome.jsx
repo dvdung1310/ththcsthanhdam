@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
-import { AlignJustify, ArrowDown, ArrowUp, Award, CalendarDays, Rows3, CalendarPlus, Check, CheckCircle2, ChevronRight, ClipboardList, Trash2, Megaphone, MessageSquare, RotateCcw, Search, Send, Settings2, TriangleAlert, X } from "lucide-react";
+import { AlignJustify, ArrowDown, ArrowUp, Award, Rows3, CalendarPlus, Check, CheckCircle2, ChevronRight, ClipboardList, Trash2, Megaphone, MessageSquare, RotateCcw, Search, Send, Settings2, TriangleAlert, X } from "lucide-react";
 import { apiJson } from "./api";
 import ActionMenu from "./ActionMenu";
 import { useConfirm } from "./ConfirmDialog";
 import TablePagination, { usePagination } from "./TablePagination";
 import { STATUS_TONES, daysPast, formatDay, formatScore, gradeCode, gradeTone, schoolYearLabel, schoolYearOf } from "./evaluationUtils";
 import Dropdown from "./Dropdown";
+import EvaluationPeriodPicker from "./EvaluationPeriodPicker";
 import UnitPicker from "./UnitPicker";
 import InfoPopover from "./InfoPopover";
 import useFitHeight from "./useFitHeight";
@@ -17,9 +18,16 @@ const STATUS_FILTERS = [
   ["", "Tất cả"],
   ["draft", "Chưa nộp"],
   ["submitted", "Đã nộp"],
-  ["unit_scored", "Tổ đã chấm"],
+  ["unit_scored", "Đã chấm"],
   ["published", "Đã công bố"],
 ];
+
+const AUDIENCES = [
+  ["teacher", "Giáo viên", "GV"],
+  ["staff", "Nhân viên", "NV"],
+  ["leadership", "Ban giám hiệu", "BGH"],
+];
+const AUDIENCE_SHORT = Object.fromEntries(AUDIENCES.map(([value, , short]) => [value, short]));
 
 const PERIOD_STEPS = [
   ["open", "Chấm phiếu"],
@@ -44,6 +52,10 @@ export default function EvaluationHome() {
   const tab = params.get("tab") === "board" && canBoard ? "board" : !hasOwn && canBoard ? "board" : "mine";
   const periodId = Number(params.get("period")) || overview?.data[0]?.id || null;
   const period = overview?.data.find((item) => item.id === periodId) ?? null;
+
+  const today = new Date();
+  const currentMissing = Boolean(overview) && !overview.data.some((item) => item.year === today.getFullYear() && item.month === today.getMonth() + 1);
+  const openNew = (year, month) => navigate(`/evaluations/periods/new?year=${year}&month=${month}`);
 
   const setParam = (values) =>
     setParams((current) => {
@@ -98,7 +110,7 @@ export default function EvaluationHome() {
   };
 
   const disclose = async () => {
-    const ok = await confirm({ title: `Gửi kết quả dự kiến ${period.label}?`, message: "Giáo viên sẽ xem được điểm tổ chấm và xếp loại dự kiến của mình, và có thể gửi giải trình trước khi công bố.", confirmText: "Gửi kết quả" });
+    const ok = await confirm({ title: `Gửi kết quả dự kiến ${period.label}?`, message: "Người được đánh giá sẽ xem được điểm chấm và xếp loại dự kiến của mình, và có thể gửi giải trình trước khi công bố.", confirmText: "Gửi kết quả" });
     if (ok) run(() => apiJson(`/api/evaluation-periods/${period.id}/disclose`, { method: "POST" }));
   };
   const publish = async () => {
@@ -116,7 +128,7 @@ export default function EvaluationHome() {
       title: `Công bố kết quả ${period.label}?`,
       message: pending.length
         ? `Còn ${pending.length} phiếu chưa chấm xong: ${names}${pending.length > 10 ? "…" : ""}. Các phiếu này sẽ được công bố theo điểm hiện có. Nếu ai không cần đánh giá kỳ này, hãy trả phiếu về rồi gỡ khỏi kỳ trong “Sửa kỳ” trước. Sau khi công bố, phiếu bị khóa.`
-        : "Sau khi công bố, phiếu bị khóa và giáo viên nhận thông báo kết quả.",
+        : "Sau khi công bố, phiếu bị khóa và người được đánh giá nhận thông báo kết quả.",
       confirmText: "Công bố",
     });
     if (ok) run(() => apiJson(`/api/evaluation-periods/${period.id}/publish`, { method: "POST" }));
@@ -174,15 +186,12 @@ export default function EvaluationHome() {
         <section className="ev-card">
           <div className={`ev-board-head compact ${overview.data.length ? "" : "empty"}`}>
             {overview.data.length > 0 && (
-              <Dropdown
-                label="Kỳ đánh giá"
-                icon={CalendarDays}
-                value={periodId ?? ""}
-                onChange={(value) => (value === "new" ? navigate("/evaluations/periods/new") : setParam({ period: String(value), status: "", flag: "" }))}
-                options={[
-                  ...overview.data.map((item) => ({ value: item.id, label: item.label, hint: item.status_label })),
-                  ...(abilities.can_manage ? [{ divider: true }, { value: "new", label: "＋ Mở kỳ đánh giá mới" }] : []),
-                ]}
+              <EvaluationPeriodPicker
+                periods={overview.data}
+                value={periodId}
+                canManage={abilities.can_manage}
+                onChange={(id) => setParam({ period: String(id), status: "", flag: "" })}
+                onOpenNew={openNew}
               />
             )}
             {period && (
@@ -190,14 +199,22 @@ export default function EvaluationHome() {
                 <PeriodSteps status={period.status} />
                 <div className="ev-period-meta">
                   <DueDate label="Tự chấm" due={period.self_due_on} active={period.status === "open"} />
-                  <DueDate label="Tổ chấm" due={period.unit_due_on} active={period.status === "open"} />
+                  <DueDate label="Chấm" due={period.unit_due_on} active={period.status === "open"} />
                 </div>
               </div>
             )}
             <div className="ev-period-actions">
               {templateInfo}
-              {!overview.data.length && abilities.can_manage && (
-                <button className="primary-btn" onClick={() => navigate("/evaluations/periods/new")}><CalendarPlus size={15} /> Mở kỳ đánh giá</button>
+              {abilities.can_manage && (
+                currentMissing ? (
+                  <button className="primary-btn" onClick={() => openNew(today.getFullYear(), today.getMonth() + 1)}>
+                    <CalendarPlus size={15} /> Mở kỳ Tháng {today.getMonth() + 1}/{today.getFullYear()}
+                  </button>
+                ) : (
+                  <button className="secondary-btn icon-only" onClick={() => navigate("/evaluations/periods/new")} title="Mở kỳ đánh giá mới (tháng tiếp theo chưa mở)" aria-label="Mở kỳ đánh giá mới">
+                    <CalendarPlus size={16} />
+                  </button>
+                )
               )}
               {period && abilities.can_manage && (
                 <>
@@ -224,7 +241,7 @@ export default function EvaluationHome() {
             <div className="empty-state">
               <CalendarPlus size={34} />
               <b>Chưa có kỳ đánh giá nào</b>
-              {abilities.can_manage && <span>Bấm “Mở kỳ đánh giá” để tạo phiếu cho giáo viên.</span>}
+              {abilities.can_manage && <span>Bấm “Mở kỳ đánh giá” để tạo phiếu cho nhân sự.</span>}
             </div>
           ) : (
             <BoardSection board={board?.period?.id === period.id ? board : null} period={period} params={params} setParam={setParam} onOpen={(id) => navigate(`/evaluations/${id}`)} />
@@ -281,7 +298,7 @@ function deadlineNote(row, period) {
     const selfPast = daysPast(period.self_due_on);
     const unitPast = daysPast(period.unit_due_on);
     if (row.status === "draft" && period.self_due_on && selfPast > 0) return { tone: "late", text: `Trễ hạn ${selfPast} ngày` };
-    if (row.status === "submitted" && period.unit_due_on && unitPast > 0) return { tone: "late", text: `Tổ chấm trễ ${unitPast} ngày` };
+    if (row.status === "submitted" && period.unit_due_on && unitPast > 0) return { tone: "late", text: `Chấm trễ ${unitPast} ngày` };
   }
   if (row.submitted_at && period.self_due_on && daysPast(period.self_due_on, row.submitted_at) > 0) return { tone: "warn", text: "Nộp sau hạn" };
   return null;
@@ -484,11 +501,16 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
   const group = Number(params.get("group")) || null;
   const flag = params.get("flag") ?? "";
   const homeroom = params.get("homeroom") ?? "";
+  const audience = params.get("audience") ?? "";
   const search = params.get("q") ?? "";
   const sortParam = params.get("sort") ?? "name";
   const sortKey = sortParam.replace(/^-/, "");
   const descending = sortParam.startsWith("-");
   const rows = board?.data ?? null;
+  const audiences = useMemo(() => AUDIENCES.filter(([value]) => rows?.some((row) => row.audience === value)), [rows]);
+  const shownAudiences = audience ? [audience] : audiences.map(([value]) => value);
+  const teacherOnly = shownAudiences.length === 1 && shownAudiences[0] === "teacher";
+  const scorerLabel = shownAudiences.every((value) => value === "teacher") ? "Tổ chấm" : shownAudiences.every((value) => value !== "teacher") ? "BGH đánh giá" : "Điểm chấm";
 
   const teams = useMemo(() => {
     const map = new Map();
@@ -509,10 +531,11 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
         (!team || row.unit_ids.includes(team)) &&
         (!group || row.unit_ids.includes(group)) &&
         (!flag || matchesAttention(row, flag, period)) &&
-        (!homeroom || row.is_homeroom === (homeroom === "yes")) &&
+        (!audience || row.audience === audience) &&
+        (!homeroom || (row.audience === "teacher" && row.is_homeroom === (homeroom === "yes"))) &&
         (!keyword || `${row.teacher.name} ${row.teacher.code ?? ""}`.toLowerCase().includes(keyword)),
     );
-  }, [rows, team, group, flag, homeroom, search, period]);
+  }, [rows, team, group, flag, homeroom, audience, search, period]);
 
   const counts = useMemo(() => {
     const result = { "": scoped?.length ?? 0 };
@@ -536,7 +559,7 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
   const submitted = scoped?.filter((row) => row.status !== "draft").length ?? 0;
   const scored = scoped?.filter((row) => row.status === "unit_scored" || row.status === "published").length ?? 0;
   const late = scoped?.filter((row) => deadlineNote(row, period)?.tone === "late").length ?? 0;
-  const filtered = Boolean(team || group || flag || homeroom || search);
+  const filtered = Boolean(team || group || flag || homeroom || audience || search);
   const [dense, setDense] = useState(() => localStorage.getItem("thanhdam_board_density") !== "comfortable");
   const setDensity = (value) => {
     localStorage.setItem("thanhdam_board_density", value ? "compact" : "comfortable");
@@ -567,7 +590,7 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
           )}
         </div>
         {total > 0 && (
-          <span className="ev-progress thin" aria-hidden="true" title={`Đã nộp ${submitted}/${total} · Tổ chấm ${scored}/${total}`}>
+          <span className="ev-progress thin" aria-hidden="true" title={`Đã nộp ${submitted}/${total} · Đã chấm ${scored}/${total}`}>
             <i className="scored" style={{ width: `${(scored / total) * 100}%` }} />
             <i className="submitted" style={{ width: `${((submitted - scored) / total) * 100}%` }} />
           </span>
@@ -578,12 +601,21 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
           <Search size={15} />
           <input value={search} onChange={(e) => update({ q: e.target.value })} placeholder="Tìm tên hoặc mã nhân sự..." />
         </label>
+        {audiences.length > 1 && (
+          <div className="ev-segmented" role="group" aria-label="Đối tượng">
+            {[["", "Tất cả"], ...audiences.map(([value, , short]) => [value, short])].map(([value, label]) => (
+              <button key={value} type="button" className={audience === value ? "active" : ""} onClick={() => update({ audience: value, ...(value && value !== "teacher" ? { homeroom: "" } : {}) })}>{label}</button>
+            ))}
+          </div>
+        )}
         {teams.length > 1 && <UnitPicker teams={teams} groups={groups} team={team} group={group} onChange={(next) => update(next)} />}
-        <div className="ev-segmented" role="group" aria-label="Chủ nhiệm">
-          {[["", "Tất cả"], ["yes", "Chủ nhiệm"], ["no", "Không CN"]].map(([value, label]) => (
-            <button key={value} type="button" className={homeroom === value ? "active" : ""} onClick={() => update({ homeroom: value })}>{label}</button>
-          ))}
-        </div>
+        {(teacherOnly || (!audience && audiences.some(([value]) => value === "teacher"))) && (
+          <div className="ev-segmented" role="group" aria-label="Chủ nhiệm">
+            {[["", "Tất cả"], ["yes", "Chủ nhiệm"], ["no", "Không CN"]].map(([value, label]) => (
+              <button key={value} type="button" className={homeroom === value ? "active" : ""} onClick={() => update({ homeroom: value })}>{label}</button>
+            ))}
+          </div>
+        )}
         <Dropdown
           label="Cần chú ý"
           icon={TriangleAlert}
@@ -592,7 +624,7 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
           onChange={(value) => update({ flag: String(value) })}
           options={[{ value: "", label: "Cần chú ý: tất cả" }, { divider: true }, ...ATTENTION_FILTERS.map(([value, label]) => ({ value, label }))]}
         />
-        {filtered && <button className="ev-link-btn" onClick={() => update({ team: "", group: "", flag: "", homeroom: "", q: "" })}>Xóa bộ lọc</button>}
+        {filtered && <button className="ev-link-btn" onClick={() => update({ team: "", group: "", flag: "", homeroom: "", audience: "", q: "" })}>Xóa bộ lọc</button>}
       </div>
 
       {!visible ? (
@@ -604,11 +636,11 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
           <table className={`ev-table ev-board-table ev-summary-grid ${dense ? "dense" : ""}`}>
             <thead>
               <tr>
-                {header("name", "Giáo viên", "sticky")}
+                {header("name", teacherOnly ? "Giáo viên" : "Nhân sự", "sticky")}
                 {header("team", "Tổ / nhóm")}
                 {header("status", "Trạng thái")}
                 {header("self", "Tự chấm", "num")}
-                {header("unit", "Tổ chấm", "num")}
+                {header("unit", scorerLabel, "num")}
                 {header("gap", "Chênh lệch", "num")}
                 <th>Xếp loại</th>
                 <th aria-label="Giải trình" />
@@ -625,7 +657,7 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
                         {row.teacher.avatar_url ? <img src={row.teacher.avatar_url} alt="" /> : <Avatar name={row.teacher.name} />}
                         <span>
                           <b>{row.teacher.name}</b>
-                          <small>{row.teacher.code}{row.is_homeroom && <em className="ev-tag">GVCN</em>}</small>
+                          <small>{row.teacher.code}{row.is_homeroom && <em className="ev-tag">GVCN</em>}{row.audience !== "teacher" && <em className="ev-tag audience">{AUDIENCE_SHORT[row.audience]}</em>}</small>
                         </span>
                       </span>
                     </td>
@@ -636,6 +668,7 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
                     <td>
                       <span className={`ev-chip ${STATUS_TONES[row.status]}`}>{row.status_label}</span>
                       {note && <small className={note.tone === "late" ? "ev-late" : "ev-warn"}>{note.text}</small>}
+                      {!dense && row.assigned_scorers?.length > 0 && <small className="ev-sub" title="Người chấm được chỉ định riêng">Chấm: {row.assigned_scorers.join(", ")}</small>}
                     </td>
                     <td className="num">{formatScore(row.self_total)}</td>
                     <td className="num">{row.unit_in_progress ? <span className="ev-muted">Đang chấm</span> : formatScore(row.unit_total)}</td>
@@ -665,10 +698,10 @@ function BoardSection({ board, period, params, setParam, onOpen }) {
         </div>
       )}
       <div ref={footRef} className="ev-summary-foot">
-        <span className="ev-summary-stats" title={`Đã nộp ${submitted}/${total} · Tổ chấm ${scored}/${total}`}>
-          <b>{visible?.length ?? 0}</b> phiếu · Đã nộp <b>{submitted}/{total}</b> · Tổ chấm <b>{scored}/{total}</b>
+        <span className="ev-summary-stats" title={`Đã nộp ${submitted}/${total} · Đã chấm ${scored}/${total}`}>
+          <b>{visible?.length ?? 0}</b> phiếu · Đã nộp <b>{submitted}/{total}</b> · Đã chấm <b>{scored}/{total}</b>
           {late > 0 && <> · <b className="ev-text-red">{late}</b> trễ hạn</>}
-          {board?.not_included?.length > 0 && <span className="ev-muted" title={board.not_included.join(", ")}> · {board.not_included.length} GV không tham gia kỳ này</span>}
+          {board?.not_included?.length > 0 && <span className="ev-muted" title={board.not_included.join(", ")}> · {board.not_included.length} người không tham gia kỳ này</span>}
         </span>
         <div className="ev-summary-foot-tools">
           <div className="ev-segmented small" role="group" aria-label="Mật độ">
@@ -728,7 +761,7 @@ function DeletePeriodDialog({ period, onClose, onDeleted }) {
         ) : (
           <>
             <p className="ev-dialog-note">
-              Kỳ có {sheets.length} phiếu. Toàn bộ phiếu, điểm, minh chứng và trao đổi của kỳ sẽ bị xóa; giáo viên nhận thông báo kỳ đã được hủy. Sau đó có thể mở lại tháng này từ đầu.
+              Kỳ có {sheets.length} phiếu. Toàn bộ phiếu, điểm, minh chứng và trao đổi của kỳ sẽ bị xóa; người có phiếu nhận thông báo kỳ đã được hủy. Sau đó có thể mở lại tháng này từ đầu.
             </p>
             {needsLabel && (
               <>
